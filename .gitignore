@@ -12,3 +12,5 @@ Cargo.lock
 
 .justfile
 .vscode
+.idea
+.DS_Store

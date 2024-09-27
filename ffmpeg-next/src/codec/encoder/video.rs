@@ -117,14 +117,6 @@ impl Video {
         unsafe { crate::format::Pixel::from((*self.as_ptr()).pix_fmt) }
     }
 
-    // #[inline]
-    // #[cfg(feature = "ff_api_motion_est")]
-    // pub fn set_motion_estimation(&mut self, value: MotionEstimation) {
-    //     unsafe {
-    //         (*self.as_mut_ptr()).me_method = value.into();
-    //     }
-    // }
-
     #[inline]
     pub fn set_max_b_frames(&mut self, value: usize) {
         unsafe {
@@ -287,30 +279,6 @@ impl Video {
             (*self.as_mut_ptr()).me_range = value as c_int;
         }
     }
-
-    // #[inline]
-    // #[cfg(feature = "ff_api_quant_bias")]
-    // pub fn set_intra_quant_bias(&mut self, value: Option<usize>) {
-    //     unsafe {
-    //         if let Some(value) = value {
-    //             (*self.as_mut_ptr()).intra_quant_bias = value as c_int;
-    //         } else {
-    //             (*self.as_mut_ptr()).intra_quant_bias = FF_DEFAULT_QUANT_BIAS;
-    //         }
-    //     }
-    // }
-
-    // #[inline]
-    // #[cfg(feature = "ff_api_quant_bias")]
-    // pub fn set_inter_quant_bias(&mut self, value: Option<usize>) {
-    //     unsafe {
-    //         if let Some(value) = value {
-    //             (*self.as_mut_ptr()).inter_quant_bias = value as c_int;
-    //         } else {
-    //             (*self.as_mut_ptr()).inter_quant_bias = FF_DEFAULT_QUANT_BIAS;
-    //         }
-    //     }
-    // }
 
     #[inline]
     pub fn set_mb_decision(&mut self, value: Decision) {

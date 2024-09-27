@@ -21,9 +21,8 @@ impl Filter {
     pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFilter {
         self.ptr
     }
-}
 
-impl Filter {
+
     pub fn name(&self) -> &str {
         unsafe { from_utf8_unchecked(CStr::from_ptr((*self.as_ptr()).name).to_bytes()) }
     }

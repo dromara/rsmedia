@@ -12,7 +12,7 @@ use crate::ffi;
 use crate::ffi_hwaccel;
 #[cfg(feature = "ndarray")]
 use crate::frame::Frame;
-use crate::frame::{RawFrame, FRAME_PIXEL_FORMAT};
+use crate::frame::RawFrame;
 use crate::hwaccel::{HardwareAccelerationContext, HardwareAccelerationDeviceType};
 use crate::io::{Reader, ReaderBuilder};
 use crate::location::Location;
@@ -352,7 +352,7 @@ impl DecoderSplit {
             decoder.format()
         };
 
-        let is_scaler_needed = !(scaler_input_format == FRAME_PIXEL_FORMAT
+        let is_scaler_needed = !(scaler_input_format == crate::frame::FRAME_PIXEL_FORMAT
             && decoder.width() == resize_width
             && decoder.height() == resize_height);
         let scaler = if is_scaler_needed {
@@ -361,7 +361,7 @@ impl DecoderSplit {
                     scaler_input_format,
                     decoder.width(),
                     decoder.height(),
-                    FRAME_PIXEL_FORMAT,
+                    crate::frame::FRAME_PIXEL_FORMAT,
                     resize_width,
                     resize_height,
                     AvScalerFlags::AREA,

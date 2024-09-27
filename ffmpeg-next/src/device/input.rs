@@ -12,7 +12,7 @@ impl Iterator for AudioIter {
         unsafe {
             // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
             #[allow(clippy::unnecessary_cast)]
-            let ptr =ffi:: av_input_audio_device_next(self.0) as *mut ffi::AVInputFormat;
+            let ptr = ffi::av_input_audio_device_next(self.0) as *mut ffi::AVInputFormat;
 
             if ptr.is_null() && !self.0.is_null() {
                 None

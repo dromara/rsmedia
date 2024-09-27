@@ -3,20 +3,20 @@ use std::ops::{Deref, DerefMut};
 use std::slice;
 
 use super::Frame;
-use color;
-use ffi::*;
+use crate::color;
+use rsmpeg::ffi;
 use libc::c_int;
-use picture;
-use util::chroma;
-use util::format;
-use Rational;
+use crate::picture;
+use crate::util::chroma;
+use crate::util::format;
+use crate::Rational;
 
 #[derive(PartialEq, Eq)]
 pub struct Video(Frame);
 
 impl Video {
     #[inline(always)]
-    pub unsafe fn wrap(ptr: *mut AVFrame) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVFrame) -> Self {
         Video(Frame::wrap(ptr))
     }
 
@@ -26,7 +26,7 @@ impl Video {
         self.set_width(width);
         self.set_height(height);
 
-        av_frame_get_buffer(self.as_mut_ptr(), 32);
+        ffi::av_frame_get_buffer(self.as_mut_ptr(), 32);
     }
 }
 
@@ -52,7 +52,7 @@ impl Video {
             if (*self.as_ptr()).format == -1 {
                 format::Pixel::None
             } else {
-                format::Pixel::from(mem::transmute::<i32, AVPixelFormat>(
+                format::Pixel::from(mem::transmute::<i32, ffi::AVPixelFormat>(
                     (*self.as_ptr()).format,
                 ))
             }
@@ -62,7 +62,7 @@ impl Video {
     #[inline]
     pub fn set_format(&mut self, value: format::Pixel) {
         unsafe {
-            (*self.as_mut_ptr()).format = mem::transmute::<AVPixelFormat, c_int>(value.into());
+            (*self.as_mut_ptr()).format = mem::transmute::<ffi::AVPixelFormat, c_int>(value.into());
         }
     }
 
@@ -176,13 +176,13 @@ impl Video {
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg_7_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn coded_number(&self) -> usize {
         unsafe { (*self.as_ptr()).coded_picture_number as usize }
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg_7_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn display_number(&self) -> usize {
         unsafe { (*self.as_ptr()).display_picture_number as usize }
     }
@@ -345,8 +345,8 @@ impl Clone for Video {
     #[inline]
     fn clone_from(&mut self, source: &Self) {
         unsafe {
-            av_frame_copy(self.as_mut_ptr(), source.as_ptr());
-            av_frame_copy_props(self.as_mut_ptr(), source.as_ptr());
+            ffi::av_frame_copy(self.as_mut_ptr(), source.as_ptr());
+            ffi::av_frame_copy_props(self.as_mut_ptr(), source.as_ptr());
         }
     }
 }

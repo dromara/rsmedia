@@ -2,9 +2,9 @@ use std::mem;
 use std::ops::Deref;
 
 use super::Chapter;
-use ffi::*;
-use format::context::common::Context;
-use {Dictionary, DictionaryMut, Rational};
+use rsmpeg::ffi;
+use crate::format::context::common::Context;
+use {crate::Dictionary, crate::DictionaryMut, crate::Rational};
 
 // WARNING: index refers to the offset in the chapters array (starting from 0)
 // it is not necessarly equal to the id (which may start at 1)
@@ -25,7 +25,7 @@ impl<'a> ChapterMut<'a> {
         }
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVChapter {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVChapter {
         *(*self.context.as_mut_ptr()).chapters.add(self.index)
     }
 }

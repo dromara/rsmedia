@@ -1,5 +1,4 @@
-use ffi::AVFieldOrder::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum FieldOrder {
@@ -11,28 +10,30 @@ pub enum FieldOrder {
     BT,
 }
 
-impl From<AVFieldOrder> for FieldOrder {
-    fn from(value: AVFieldOrder) -> Self {
+impl From<ffi::AVFieldOrder> for FieldOrder {
+    fn from(value: ffi::AVFieldOrder) -> Self {
         match value {
-            AV_FIELD_UNKNOWN => FieldOrder::Unknown,
-            AV_FIELD_PROGRESSIVE => FieldOrder::Progressive,
-            AV_FIELD_TT => FieldOrder::TT,
-            AV_FIELD_BB => FieldOrder::BB,
-            AV_FIELD_TB => FieldOrder::TB,
-            AV_FIELD_BT => FieldOrder::BT,
+            ffi::AV_FIELD_UNKNOWN => FieldOrder::Unknown,
+            ffi::AV_FIELD_PROGRESSIVE => FieldOrder::Progressive,
+            ffi::AV_FIELD_TT => FieldOrder::TT,
+            ffi::AV_FIELD_BB => FieldOrder::BB,
+            ffi::AV_FIELD_TB => FieldOrder::TB,
+            ffi::AV_FIELD_BT => FieldOrder::BT,
+            // non-exhaustive patterns: `6_u32..=u32::MAX` not covered
+            6_u32..=u32::MAX => todo!(),
         }
     }
 }
 
-impl From<FieldOrder> for AVFieldOrder {
-    fn from(value: FieldOrder) -> AVFieldOrder {
+impl From<FieldOrder> for ffi::AVFieldOrder {
+    fn from(value: FieldOrder) -> ffi::AVFieldOrder {
         match value {
-            FieldOrder::Unknown => AV_FIELD_UNKNOWN,
-            FieldOrder::Progressive => AV_FIELD_PROGRESSIVE,
-            FieldOrder::TT => AV_FIELD_TT,
-            FieldOrder::BB => AV_FIELD_BB,
-            FieldOrder::TB => AV_FIELD_TB,
-            FieldOrder::BT => AV_FIELD_BT,
+            FieldOrder::Unknown => ffi::AV_FIELD_UNKNOWN,
+            FieldOrder::Progressive => ffi::AV_FIELD_PROGRESSIVE,
+            FieldOrder::TT => ffi::AV_FIELD_TT,
+            FieldOrder::BB => ffi::AV_FIELD_BB,
+            FieldOrder::TB => ffi::AV_FIELD_TB,
+            FieldOrder::BT => ffi::AV_FIELD_BT,
         }
     }
 }

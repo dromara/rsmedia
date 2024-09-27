@@ -3,22 +3,22 @@ use std::marker::PhantomData;
 use std::str::from_utf8_unchecked;
 
 use super::{Flags, Pad};
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Filter {
-    ptr: *mut AVFilter,
+    ptr: *mut ffi::AVFilter,
 }
 
 impl Filter {
-    pub unsafe fn wrap(ptr: *mut AVFilter) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVFilter) -> Self {
         Filter { ptr }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVFilter {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVFilter {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFilter {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFilter {
         self.ptr
     }
 }
@@ -47,9 +47,9 @@ impl Filter {
             if ptr.is_null() {
                 None
             } else {
-                #[cfg(not(feature = "ffmpeg_6_0"))]
-                let nb_inputs = avfilter_pad_count((*self.as_ptr()).inputs) as isize;
-                #[cfg(feature = "ffmpeg_6_0")]
+                #[cfg(not(feature = "ffmpeg6"))]
+                let nb_inputs = ffi::avfilter_filter_pad_count(self.as_ptr(), 0) as isize;
+                #[cfg(feature = "ffmpeg6")]
                 let nb_inputs = (*self.as_ptr()).nb_inputs as isize;
 
                 Some(PadIter::new((*self.as_ptr()).inputs, nb_inputs))
@@ -64,9 +64,9 @@ impl Filter {
             if ptr.is_null() {
                 None
             } else {
-                #[cfg(not(feature = "ffmpeg_6_0"))]
-                let nb_outputs = avfilter_pad_count((*self.as_ptr()).outputs) as isize;
-                #[cfg(feature = "ffmpeg_6_0")]
+                #[cfg(not(feature = "ffmpeg6"))]
+                let nb_outputs = ffi::avfilter_filter_pad_count(self.as_ptr(), 1) as isize;
+                #[cfg(feature = "ffmpeg6")]
                 let nb_outputs = (*self.as_ptr()).nb_outputs as isize;
 
                 Some(PadIter::new((*self.as_ptr()).outputs, nb_outputs))
@@ -80,7 +80,7 @@ impl Filter {
 }
 
 pub struct PadIter<'a> {
-    ptr: *const AVFilterPad,
+    ptr: *const ffi::AVFilterPad,
     count: isize,
     cur: isize,
 
@@ -88,7 +88,7 @@ pub struct PadIter<'a> {
 }
 
 impl<'a> PadIter<'a> {
-    pub fn new(ptr: *const AVFilterPad, count: isize) -> Self {
+    pub fn new(ptr: *const ffi::AVFilterPad, count: isize) -> Self {
         PadIter {
             ptr,
             count,

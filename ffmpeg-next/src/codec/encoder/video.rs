@@ -1,17 +1,13 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
-use ffi::*;
+use rsmpeg::ffi;
 use libc::{c_float, c_int};
 
 use super::Encoder as Super;
 use super::{Comparison, Decision};
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use super::{MotionEstimation, Prediction};
-use codec::{traits, Context};
-use {color, format, Dictionary, Error, Rational};
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use {frame, packet};
+use crate::codec::{traits, Context};
+use {crate::color, format, crate::Dictionary, crate::Error, crate::Rational};
 
 pub struct Video(pub Super);
 
@@ -19,7 +15,7 @@ impl Video {
     #[inline]
     pub fn open(mut self) -> Result<Encoder, Error> {
         unsafe {
-            match avcodec_open2(self.as_mut_ptr(), ptr::null(), ptr::null_mut()) {
+            match ffi::avcodec_open2(self.as_mut_ptr(), ptr::null(), ptr::null_mut()) {
                 0 => Ok(Encoder(self)),
                 e => Err(Error::from(e)),
             }
@@ -30,7 +26,7 @@ impl Video {
     pub fn open_as<E: traits::Encoder>(mut self, codec: E) -> Result<Encoder, Error> {
         unsafe {
             if let Some(codec) = codec.encoder() {
-                match avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), ptr::null_mut()) {
+                match ffi::avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), ptr::null_mut()) {
                     0 => Ok(Encoder(self)),
                     e => Err(Error::from(e)),
                 }
@@ -44,7 +40,7 @@ impl Video {
     pub fn open_with(mut self, options: Dictionary) -> Result<Encoder, Error> {
         unsafe {
             let mut opts = options.disown();
-            let res = avcodec_open2(self.as_mut_ptr(), ptr::null(), &mut opts);
+            let res = ffi::avcodec_open2(self.as_mut_ptr(), ptr::null(), &mut opts);
 
             Dictionary::own(opts);
 
@@ -64,7 +60,7 @@ impl Video {
         unsafe {
             if let Some(codec) = codec.encoder() {
                 let mut opts = options.disown();
-                let res = avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), &mut opts);
+                let res = ffi::avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), &mut opts);
 
                 Dictionary::own(opts);
 
@@ -110,24 +106,24 @@ impl Video {
     }
 
     #[inline]
-    pub fn set_format(&mut self, value: format::Pixel) {
+    pub fn set_format(&mut self, value: crate::format::Pixel) {
         unsafe {
             (*self.as_mut_ptr()).pix_fmt = value.into();
         }
     }
 
     #[inline]
-    pub fn format(&self) -> format::Pixel {
-        unsafe { format::Pixel::from((*self.as_ptr()).pix_fmt) }
+    pub fn format(&self) -> crate::format::Pixel {
+        unsafe { crate::format::Pixel::from((*self.as_ptr()).pix_fmt) }
     }
 
-    #[inline]
-    #[cfg(feature = "ff_api_motion_est")]
-    pub fn set_motion_estimation(&mut self, value: MotionEstimation) {
-        unsafe {
-            (*self.as_mut_ptr()).me_method = value.into();
-        }
-    }
+    // #[inline]
+    // #[cfg(feature = "ff_api_motion_est")]
+    // pub fn set_motion_estimation(&mut self, value: MotionEstimation) {
+    //     unsafe {
+    //         (*self.as_mut_ptr()).me_method = value.into();
+    //     }
+    // }
 
     #[inline]
     pub fn set_max_b_frames(&mut self, value: usize) {
@@ -200,7 +196,7 @@ impl Video {
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn set_prediction(&mut self, value: Prediction) {
         unsafe {
             (*self.as_mut_ptr()).prediction_method = value.into();
@@ -257,7 +253,7 @@ impl Video {
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn set_pre_me(&mut self, value: MotionEstimation) {
         unsafe {
             (*self.as_mut_ptr()).pre_me = value.into();
@@ -292,29 +288,29 @@ impl Video {
         }
     }
 
-    #[inline]
-    #[cfg(feature = "ff_api_quant_bias")]
-    pub fn set_intra_quant_bias(&mut self, value: Option<usize>) {
-        unsafe {
-            if let Some(value) = value {
-                (*self.as_mut_ptr()).intra_quant_bias = value as c_int;
-            } else {
-                (*self.as_mut_ptr()).intra_quant_bias = FF_DEFAULT_QUANT_BIAS;
-            }
-        }
-    }
+    // #[inline]
+    // #[cfg(feature = "ff_api_quant_bias")]
+    // pub fn set_intra_quant_bias(&mut self, value: Option<usize>) {
+    //     unsafe {
+    //         if let Some(value) = value {
+    //             (*self.as_mut_ptr()).intra_quant_bias = value as c_int;
+    //         } else {
+    //             (*self.as_mut_ptr()).intra_quant_bias = FF_DEFAULT_QUANT_BIAS;
+    //         }
+    //     }
+    // }
 
-    #[inline]
-    #[cfg(feature = "ff_api_quant_bias")]
-    pub fn set_inter_quant_bias(&mut self, value: Option<usize>) {
-        unsafe {
-            if let Some(value) = value {
-                (*self.as_mut_ptr()).inter_quant_bias = value as c_int;
-            } else {
-                (*self.as_mut_ptr()).inter_quant_bias = FF_DEFAULT_QUANT_BIAS;
-            }
-        }
-    }
+    // #[inline]
+    // #[cfg(feature = "ff_api_quant_bias")]
+    // pub fn set_inter_quant_bias(&mut self, value: Option<usize>) {
+    //     unsafe {
+    //         if let Some(value) = value {
+    //             (*self.as_mut_ptr()).inter_quant_bias = value as c_int;
+    //         } else {
+    //             (*self.as_mut_ptr()).inter_quant_bias = FF_DEFAULT_QUANT_BIAS;
+    //         }
+    //     }
+    // }
 
     #[inline]
     pub fn set_mb_decision(&mut self, value: Decision) {
@@ -421,63 +417,6 @@ impl AsMut<Context> for Video {
 pub struct Encoder(pub Video);
 
 impl Encoder {
-    #[deprecated(
-        since = "4.4.0",
-        note = "Underlying API avcodec_encode_video2 has been deprecated since FFmpeg 3.1; \
-        consider switching to send_frame() and receive_packet()"
-    )]
-    #[inline]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
-    pub fn encode<P: packet::Mut>(
-        &mut self,
-        frame: &frame::Video,
-        out: &mut P,
-    ) -> Result<bool, Error> {
-        unsafe {
-            if self.format() != frame.format()
-                || self.width() != frame.width()
-                || self.height() != frame.height()
-            {
-                return Err(Error::InvalidData);
-            }
-
-            let mut got: c_int = 0;
-
-            match avcodec_encode_video2(
-                self.0.as_mut_ptr(),
-                out.as_mut_ptr(),
-                frame.as_ptr(),
-                &mut got,
-            ) {
-                e if e < 0 => Err(Error::from(e)),
-                _ => Ok(got != 0),
-            }
-        }
-    }
-
-    #[deprecated(
-        since = "4.4.0",
-        note = "Underlying API avcodec_encode_video2 has been deprecated since FFmpeg 3.1; \
-        consider switching to send_frame() and receive_packet()"
-    )]
-    #[inline]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
-    pub fn flush<P: packet::Mut>(&mut self, out: &mut P) -> Result<bool, Error> {
-        unsafe {
-            let mut got: c_int = 0;
-
-            match avcodec_encode_video2(
-                self.0.as_mut_ptr(),
-                out.as_mut_ptr(),
-                ptr::null(),
-                &mut got,
-            ) {
-                e if e < 0 => Err(Error::from(e)),
-                _ => Ok(got != 0),
-            }
-        }
-    }
-
     #[inline]
     pub fn frame_size(&self) -> u32 {
         unsafe { (*self.as_ptr()).frame_size as u32 }

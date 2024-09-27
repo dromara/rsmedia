@@ -99,7 +99,7 @@ fn transcoder<P: AsRef<Path> + ?Sized>(
 
     encoder.set_rate(decoder.rate() as i32);
     encoder.set_channel_layout(channel_layout);
-    #[cfg(not(feature = "ffmpeg_7_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     {
         encoder.set_channels(channel_layout.channels());
     }

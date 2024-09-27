@@ -1,5 +1,4 @@
-use ffi::AVMediaType::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Type {
@@ -11,31 +10,33 @@ pub enum Type {
     Attachment,
 }
 
-impl From<AVMediaType> for Type {
+impl From<ffi::AVMediaType> for Type {
     #[inline(always)]
-    fn from(value: AVMediaType) -> Self {
+    fn from(value: ffi::AVMediaType) -> Self {
         match value {
-            AVMEDIA_TYPE_UNKNOWN => Type::Unknown,
-            AVMEDIA_TYPE_VIDEO => Type::Video,
-            AVMEDIA_TYPE_AUDIO => Type::Audio,
-            AVMEDIA_TYPE_DATA => Type::Data,
-            AVMEDIA_TYPE_SUBTITLE => Type::Subtitle,
-            AVMEDIA_TYPE_ATTACHMENT => Type::Attachment,
-            AVMEDIA_TYPE_NB => Type::Unknown,
+            ffi::AVMEDIA_TYPE_UNKNOWN => Type::Unknown,
+            ffi::AVMEDIA_TYPE_VIDEO => Type::Video,
+            ffi::AVMEDIA_TYPE_AUDIO => Type::Audio,
+            ffi::AVMEDIA_TYPE_DATA => Type::Data,
+            ffi::AVMEDIA_TYPE_SUBTITLE => Type::Subtitle,
+            ffi::AVMEDIA_TYPE_ATTACHMENT => Type::Attachment,
+            ffi::AVMEDIA_TYPE_NB => Type::Unknown,
+            //  non-exhaustive patterns: `i32::MIN..=-2_i32` and `6_i32..=i32::MAX` not covered
+            i32::MIN..=-2_i32 | 6_i32..=i32::MAX => todo!(),
         }
     }
 }
 
-impl From<Type> for AVMediaType {
+impl From<Type> for ffi::AVMediaType {
     #[inline(always)]
-    fn from(value: Type) -> AVMediaType {
+    fn from(value: Type) -> ffi::AVMediaType {
         match value {
-            Type::Unknown => AVMEDIA_TYPE_UNKNOWN,
-            Type::Video => AVMEDIA_TYPE_VIDEO,
-            Type::Audio => AVMEDIA_TYPE_AUDIO,
-            Type::Data => AVMEDIA_TYPE_DATA,
-            Type::Subtitle => AVMEDIA_TYPE_SUBTITLE,
-            Type::Attachment => AVMEDIA_TYPE_ATTACHMENT,
+            Type::Unknown => ffi::AVMEDIA_TYPE_UNKNOWN,
+            Type::Video => ffi::AVMEDIA_TYPE_VIDEO,
+            Type::Audio => ffi::AVMEDIA_TYPE_AUDIO,
+            Type::Data => ffi::AVMEDIA_TYPE_DATA,
+            Type::Subtitle => ffi::AVMEDIA_TYPE_SUBTITLE,
+            Type::Attachment => ffi::AVMEDIA_TYPE_ATTACHMENT,
         }
     }
 }

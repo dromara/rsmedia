@@ -1,11 +1,11 @@
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub struct Config {
     pub kind: Type,
     pub count: usize,
-    #[cfg(not(feature = "ffmpeg_6_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub safe: bool,
 }
 
@@ -24,10 +24,9 @@ impl Config {
         }
     }
 
-    #[cfg(not(feature = "ffmpeg_6_0"))]
+    #[cfg(not(feature = "ffmpeg6"))]
     pub fn safe(value: bool) -> Self {
         Config {
-            safe: value,
             ..Default::default()
         }
     }
@@ -38,7 +37,7 @@ impl Default for Config {
         Config {
             kind: Type::None,
             count: 0,
-            #[cfg(not(feature = "ffmpeg_6_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             safe: false,
         }
     }
@@ -53,10 +52,9 @@ pub enum Type {
 
 impl From<c_int> for Type {
     fn from(value: c_int) -> Type {
-        match value {
-            FF_THREAD_FRAME => Type::Frame,
-            FF_THREAD_SLICE => Type::Slice,
-
+        match value as u32 {
+            ffi::FF_THREAD_FRAME => Type::Frame,
+            ffi::FF_THREAD_SLICE => Type::Slice,
             _ => Type::None,
         }
     }
@@ -66,8 +64,8 @@ impl From<Type> for c_int {
     fn from(value: Type) -> c_int {
         match value {
             Type::None => 0,
-            Type::Frame => FF_THREAD_FRAME,
-            Type::Slice => FF_THREAD_SLICE,
+            Type::Frame => ffi::FF_THREAD_FRAME as i32,
+            Type::Slice => ffi::FF_THREAD_SLICE as i32,
         }
     }
 }

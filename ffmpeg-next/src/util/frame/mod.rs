@@ -10,8 +10,8 @@ pub use self::audio::Audio;
 pub mod flag;
 pub use self::flag::Flags;
 
-use ffi::*;
-use {Dictionary, DictionaryRef};
+use rsmpeg::ffi;
+use {crate::Dictionary, crate::DictionaryRef};
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Packet {
@@ -19,14 +19,13 @@ pub struct Packet {
     pub position: i64,
     pub size: usize,
 
-    #[cfg(not(feature = "ffmpeg_5_0"))]
     pub pts: i64,
     pub dts: i64,
 }
 
 #[derive(PartialEq, Eq)]
 pub struct Frame {
-    ptr: *mut AVFrame,
+    ptr: *mut ffi::AVFrame,
 
     _own: bool,
 }
@@ -36,25 +35,25 @@ unsafe impl Sync for Frame {}
 
 impl Frame {
     #[inline(always)]
-    pub unsafe fn wrap(ptr: *mut AVFrame) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVFrame) -> Self {
         Frame { ptr, _own: false }
     }
 
     #[inline(always)]
     pub unsafe fn empty() -> Self {
         Frame {
-            ptr: av_frame_alloc(),
+            ptr: ffi::av_frame_alloc(),
             _own: true,
         }
     }
 
     #[inline(always)]
-    pub unsafe fn as_ptr(&self) -> *const AVFrame {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVFrame {
         self.ptr as *const _
     }
 
     #[inline(always)]
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFrame {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFrame {
         self.ptr
     }
 
@@ -79,16 +78,15 @@ impl Frame {
     pub fn packet(&self) -> Packet {
         unsafe {
             Packet {
-                #[cfg(not(feature = "ffmpeg_7_0"))]
+                #[cfg(not(feature = "ffmpeg7"))]
                 duration: (*self.as_ptr()).pkt_duration,
-                #[cfg(feature = "ffmpeg_7_0")]
+                #[cfg(feature = "ffmpeg7")]
                 duration: (*self.as_ptr()).duration,
 
                 position: (*self.as_ptr()).pkt_pos,
                 size: (*self.as_ptr()).pkt_size as usize,
 
-                #[cfg(not(feature = "ffmpeg_5_0"))]
-                pts: (*self.as_ptr()).pkt_pts,
+                pts: (*self.as_ptr()).pts,
                 dts: (*self.as_ptr()).pkt_dts,
             }
         }
@@ -98,7 +96,7 @@ impl Frame {
     pub fn pts(&self) -> Option<i64> {
         unsafe {
             match (*self.as_ptr()).pts {
-                AV_NOPTS_VALUE => None,
+                ffi::AV_NOPTS_VALUE => None,
                 pts => Some(pts),
             }
         }
@@ -107,7 +105,7 @@ impl Frame {
     #[inline]
     pub fn set_pts(&mut self, value: Option<i64>) {
         unsafe {
-            (*self.as_mut_ptr()).pts = value.unwrap_or(AV_NOPTS_VALUE);
+            (*self.as_mut_ptr()).pts = value.unwrap_or(ffi::AV_NOPTS_VALUE);
         }
     }
 
@@ -115,7 +113,7 @@ impl Frame {
     pub fn timestamp(&self) -> Option<i64> {
         unsafe {
             match (*self.as_ptr()).best_effort_timestamp {
-                AV_NOPTS_VALUE => None,
+                ffi::AV_NOPTS_VALUE => None,
                 t => Some(t),
             }
         }
@@ -144,7 +142,7 @@ impl Frame {
     #[inline]
     pub fn side_data(&self, kind: side_data::Type) -> Option<SideData> {
         unsafe {
-            let ptr = av_frame_get_side_data(self.as_ptr(), kind.into());
+            let ptr = ffi::av_frame_get_side_data(self.as_ptr(), kind.into());
 
             if ptr.is_null() {
                 None
@@ -157,7 +155,7 @@ impl Frame {
     #[inline]
     pub fn new_side_data(&mut self, kind: side_data::Type, size: usize) -> Option<SideData> {
         unsafe {
-            let ptr = av_frame_new_side_data(self.as_mut_ptr(), kind.into(), size as _);
+            let ptr = ffi::av_frame_new_side_data(self.as_mut_ptr(), kind.into(), size as _);
 
             if ptr.is_null() {
                 None
@@ -170,7 +168,7 @@ impl Frame {
     #[inline]
     pub fn remove_side_data(&mut self, kind: side_data::Type) {
         unsafe {
-            av_frame_remove_side_data(self.as_mut_ptr(), kind.into());
+            ffi::av_frame_remove_side_data(self.as_mut_ptr(), kind.into());
         }
     }
 }
@@ -179,7 +177,7 @@ impl Drop for Frame {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            av_frame_free(&mut self.as_mut_ptr());
+            ffi::av_frame_free(&mut self.as_mut_ptr());
         }
     }
 }

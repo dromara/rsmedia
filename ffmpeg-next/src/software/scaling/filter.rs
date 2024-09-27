@@ -1,16 +1,16 @@
 use super::Vector;
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Filter {
-    ptr: *mut SwsFilter,
+    ptr: *mut ffi::SwsFilter,
 }
 
 impl Filter {
-    pub unsafe fn as_ptr(&self) -> *const SwsFilter {
+    pub unsafe fn as_ptr(&self) -> *const ffi::SwsFilter {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut SwsFilter {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::SwsFilter {
         self.ptr
     }
 }
@@ -26,7 +26,7 @@ impl Filter {
     ) -> Self {
         unsafe {
             Filter {
-                ptr: sws_getDefaultFilter(
+                ptr: ffi::sws_getDefaultFilter(
                     luma_g_blur,
                     chroma_g_blur,
                     luma_sharpen,
@@ -85,7 +85,7 @@ impl Default for Filter {
 impl Drop for Filter {
     fn drop(&mut self) {
         unsafe {
-            sws_freeFilter(self.as_mut_ptr());
+            ffi::sws_freeFilter(self.as_mut_ptr());
         }
     }
 }

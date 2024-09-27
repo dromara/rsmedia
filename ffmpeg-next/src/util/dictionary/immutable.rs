@@ -5,23 +5,23 @@ use std::ptr;
 use std::str::from_utf8_unchecked;
 
 use super::{Iter, Owned};
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Ref<'a> {
-    ptr: *const AVDictionary,
+    ptr: *const ffi::AVDictionary,
 
     _marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Ref<'a> {
-    pub unsafe fn wrap(ptr: *const AVDictionary) -> Self {
+    pub unsafe fn wrap(ptr: *const ffi::AVDictionary) -> Self {
         Ref {
             ptr,
             _marker: PhantomData,
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVDictionary {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVDictionary {
         self.ptr
     }
 }
@@ -30,7 +30,7 @@ impl<'a> Ref<'a> {
     pub fn get(&'a self, key: &str) -> Option<&'a str> {
         unsafe {
             let key = CString::new(key).unwrap();
-            let entry = av_dict_get(self.as_ptr(), key.as_ptr(), ptr::null_mut(), 0);
+            let entry = ffi::av_dict_get(self.as_ptr(), key.as_ptr(), ptr::null_mut(), 0);
 
             if entry.is_null() {
                 None

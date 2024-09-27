@@ -5,23 +5,24 @@ use std::ptr;
 use std::str::from_utf8_unchecked;
 
 use super::Flags;
-use ffi::*;
-use {codec, media};
+use {crate::codec, crate::media};
+
+use rsmpeg::ffi;
 
 pub struct Output {
-    ptr: *mut AVOutputFormat,
+    ptr: *mut ffi::AVOutputFormat,
 }
 
 impl Output {
-    pub unsafe fn wrap(ptr: *mut AVOutputFormat) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVOutputFormat) -> Self {
         Output { ptr }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVOutputFormat {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVOutputFormat {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVOutputFormat {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVOutputFormat {
         self.ptr
     }
 }
@@ -68,7 +69,7 @@ impl Output {
         let path = CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap();
 
         unsafe {
-            codec::Id::from(av_guess_codec(
+            codec::Id::from(ffi::av_guess_codec(
                 self.as_ptr() as *mut _,
                 ptr::null(),
                 path.as_ptr(),

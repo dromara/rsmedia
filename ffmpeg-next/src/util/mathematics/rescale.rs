@@ -1,7 +1,7 @@
-use ffi::*;
-use {Rational, Rounding};
+use rsmpeg::ffi;
+use {crate::Rational, crate::Rounding};
 
-pub const TIME_BASE: Rational = Rational(AV_TIME_BASE_Q.num, AV_TIME_BASE_Q.den);
+pub const TIME_BASE: Rational = Rational(ffi::AV_TIME_BASE_Q.num, ffi::AV_TIME_BASE_Q.den);
 
 pub trait Rescale {
     fn rescale<S, D>(&self, source: S, destination: D) -> i64
@@ -22,7 +22,7 @@ impl<T: Into<i64> + Clone> Rescale for T {
         D: Into<Rational>,
     {
         unsafe {
-            av_rescale_q(
+            ffi::av_rescale_q(
                 self.clone().into(),
                 source.into().into(),
                 destination.into().into(),
@@ -36,7 +36,7 @@ impl<T: Into<i64> + Clone> Rescale for T {
         D: Into<Rational>,
     {
         unsafe {
-            av_rescale_q_rnd(
+            ffi::av_rescale_q_rnd(
                 self.clone().into(),
                 source.into().into(),
                 destination.into().into(),

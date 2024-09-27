@@ -8,7 +8,6 @@ pub mod packet;
 
 pub mod subtitle;
 
-#[cfg(not(feature = "ffmpeg_5_0"))]
 pub mod picture;
 
 pub mod discard;
@@ -34,7 +33,6 @@ pub mod audio_service;
 pub mod field_order;
 
 pub mod compliance;
-pub use self::compliance::Compliance;
 
 pub mod debug;
 pub use self::debug::Debug;
@@ -51,16 +49,16 @@ pub mod traits;
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use ffi::*;
+use rsmpeg::ffi;
 
 pub fn version() -> u32 {
-    unsafe { avcodec_version() }
+    unsafe { ffi::avcodec_version() }
 }
 
 pub fn configuration() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(avcodec_configuration()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avcodec_configuration()).to_bytes()) }
 }
 
 pub fn license() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(avcodec_license()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avcodec_license()).to_bytes()) }
 }

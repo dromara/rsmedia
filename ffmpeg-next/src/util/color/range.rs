@@ -1,8 +1,7 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use ffi::AVColorRange::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Range {
@@ -17,30 +16,31 @@ impl Range {
             return None;
         }
         unsafe {
-            let ptr = av_color_range_name((*self).into());
+            let ptr = ffi::av_color_range_name((*self).into());
             ptr.as_ref()
                 .map(|ptr| from_utf8_unchecked(CStr::from_ptr(ptr).to_bytes()))
         }
     }
 }
 
-impl From<AVColorRange> for Range {
-    fn from(value: AVColorRange) -> Self {
+impl From<ffi::AVColorRange> for Range {
+    fn from(value: ffi::AVColorRange) -> Self {
         match value {
-            AVCOL_RANGE_UNSPECIFIED => Range::Unspecified,
-            AVCOL_RANGE_MPEG => Range::MPEG,
-            AVCOL_RANGE_JPEG => Range::JPEG,
-            AVCOL_RANGE_NB => Range::Unspecified,
+            ffi::AVCOL_RANGE_UNSPECIFIED => Range::Unspecified,
+            ffi::AVCOL_RANGE_MPEG => Range::MPEG,
+            ffi::AVCOL_RANGE_JPEG => Range::JPEG,
+            ffi::AVCOL_RANGE_NB => Range::Unspecified,
+            4_u32..=u32::MAX => todo!(),
         }
     }
 }
 
-impl From<Range> for AVColorRange {
-    fn from(value: Range) -> AVColorRange {
+impl From<Range> for ffi::AVColorRange {
+    fn from(value: Range) -> ffi::AVColorRange {
         match value {
-            Range::Unspecified => AVCOL_RANGE_UNSPECIFIED,
-            Range::MPEG => AVCOL_RANGE_MPEG,
-            Range::JPEG => AVCOL_RANGE_JPEG,
+            Range::Unspecified => ffi::AVCOL_RANGE_UNSPECIFIED,
+            Range::MPEG => ffi::AVCOL_RANGE_MPEG,
+            Range::JPEG => ffi::AVCOL_RANGE_JPEG,
         }
     }
 }

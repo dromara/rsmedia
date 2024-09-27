@@ -1,7 +1,7 @@
 use super::Context;
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
-use {Error, Frame, Rational};
+use {crate::Error, crate::Frame, crate::Rational};
 
 pub struct Sink<'a> {
     ctx: &'a mut Context,
@@ -16,7 +16,7 @@ impl<'a> Sink<'a> {
 impl<'a> Sink<'a> {
     pub fn frame(&mut self, frame: &mut Frame) -> Result<(), Error> {
         unsafe {
-            match av_buffersink_get_frame(self.ctx.as_mut_ptr(), frame.as_mut_ptr()) {
+            match ffi::av_buffersink_get_frame(self.ctx.as_mut_ptr(), frame.as_mut_ptr()) {
                 n if n >= 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -25,7 +25,7 @@ impl<'a> Sink<'a> {
 
     pub fn samples(&mut self, frame: &mut Frame, samples: usize) -> Result<(), Error> {
         unsafe {
-            match av_buffersink_get_samples(
+            match ffi::av_buffersink_get_samples(
                 self.ctx.as_mut_ptr(),
                 frame.as_mut_ptr(),
                 samples as c_int,
@@ -38,11 +38,11 @@ impl<'a> Sink<'a> {
 
     pub fn set_frame_size(&mut self, value: u32) {
         unsafe {
-            av_buffersink_set_frame_size(self.ctx.as_mut_ptr(), value);
+            ffi::av_buffersink_set_frame_size(self.ctx.as_mut_ptr(), value);
         }
     }
 
     pub fn time_base(&self) -> Rational {
-        unsafe { av_buffersink_get_time_base(self.ctx.as_ptr()) }.into()
+        unsafe { ffi::av_buffersink_get_time_base(self.ctx.as_ptr()) }.into()
     }
 }

@@ -1,22 +1,22 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Input {
-    ptr: *mut AVInputFormat,
+    ptr: *mut ffi::AVInputFormat,
 }
 
 impl Input {
-    pub unsafe fn wrap(ptr: *mut AVInputFormat) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVInputFormat) -> Self {
         Input { ptr }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVInputFormat {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVInputFormat {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVInputFormat {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVInputFormat {
         self.ptr
     }
 }

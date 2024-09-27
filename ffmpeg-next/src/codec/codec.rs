@@ -2,34 +2,34 @@ use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
 use super::{Audio, Capabilities, Id, Profile, Video};
-use ffi::*;
-use {media, Error};
+use rsmpeg::ffi;
+use {crate::media, crate::Error};
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct Codec {
-    ptr: *const AVCodec,
+    ptr: *const ffi::AVCodec,
 }
 
 unsafe impl Send for Codec {}
 unsafe impl Sync for Codec {}
 
 impl Codec {
-    pub unsafe fn wrap(ptr: *const AVCodec) -> Self {
+    pub unsafe fn wrap(ptr: *const ffi::AVCodec) -> Self {
         Codec { ptr }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVCodec {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVCodec {
         self.ptr as *const _
     }
 }
 
 impl Codec {
     pub fn is_encoder(&self) -> bool {
-        unsafe { av_codec_is_encoder(self.as_ptr()) != 0 }
+        unsafe { ffi::av_codec_is_encoder(self.as_ptr()) != 0 }
     }
 
     pub fn is_decoder(&self) -> bool {
-        unsafe { av_codec_is_decoder(self.as_ptr()) != 0 }
+        unsafe { ffi::av_codec_is_decoder(self.as_ptr()) != 0 }
     }
 
     pub fn name(&self) -> &str {
@@ -104,11 +104,11 @@ impl Codec {
 
 pub struct ProfileIter {
     id: Id,
-    ptr: *const AVProfile,
+    ptr: *const ffi::AVProfile,
 }
 
 impl ProfileIter {
-    pub fn new(id: Id, ptr: *const AVProfile) -> Self {
+    pub fn new(id: Id, ptr: *const ffi::AVProfile) -> Self {
         ProfileIter { id, ptr }
     }
 }
@@ -118,7 +118,7 @@ impl Iterator for ProfileIter {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if (*self.ptr).profile == FF_PROFILE_UNKNOWN {
+            if (*self.ptr).profile == ffi::FF_PROFILE_UNKNOWN {
                 return None;
             }
 

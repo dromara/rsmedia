@@ -1,8 +1,8 @@
 use std::ops::Deref;
 
 use super::codec::Codec;
-use ffi::*;
-use {format, ChannelLayout};
+use rsmpeg::ffi;
+use crate::ChannelLayout;
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct Audio {
@@ -38,10 +38,10 @@ impl Audio {
 
     pub fn channel_layouts(&self) -> Option<ChannelLayoutIter> {
         unsafe {
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             let ptr = (*self.codec.as_ptr()).channel_layouts;
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             let ptr = (*self.codec.as_ptr()).ch_layouts;
 
             if ptr.is_null() {
@@ -89,21 +89,21 @@ impl Iterator for RateIter {
 }
 
 pub struct FormatIter {
-    ptr: *const AVSampleFormat,
+    ptr: *const ffi::AVSampleFormat,
 }
 
 impl FormatIter {
-    pub fn new(ptr: *const AVSampleFormat) -> Self {
+    pub fn new(ptr: *const ffi::AVSampleFormat) -> Self {
         FormatIter { ptr }
     }
 }
 
 impl Iterator for FormatIter {
-    type Item = format::Sample;
+    type Item = crate::format::Sample;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if *self.ptr == AVSampleFormat::AV_SAMPLE_FMT_NONE {
+            if *self.ptr == ffi::AV_SAMPLE_FMT_NONE {
                 return None;
             }
 
@@ -115,10 +115,10 @@ impl Iterator for FormatIter {
     }
 }
 
-#[cfg(not(feature = "ffmpeg_7_0"))]
+#[cfg(not(feature = "ffmpeg7"))]
 type ChannelLayoutType = u64;
-#[cfg(feature = "ffmpeg_7_0")]
-type ChannelLayoutType = AVChannelLayout;
+#[cfg(feature = "ffmpeg7")]
+type ChannelLayoutType = ffi::AVChannelLayout;
 
 pub struct ChannelLayoutIter {
     ptr: *const ChannelLayoutType,
@@ -145,20 +145,20 @@ impl Iterator for ChannelLayoutIter {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             if *self.ptr == 0 {
                 return None;
             }
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             if self.ptr.is_null() || (*self.ptr).u.mask == 0 {
                 return None;
             }
 
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             let layout = ChannelLayout::from_bits_truncate(*self.ptr);
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             let layout = ChannelLayout::from(*self.ptr);
 
             self.ptr = self.ptr.offset(1);

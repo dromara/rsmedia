@@ -1,4 +1,4 @@
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
@@ -23,23 +23,23 @@ pub enum Comparison {
 
 impl From<c_int> for Comparison {
     fn from(value: c_int) -> Comparison {
-        match value {
-            FF_CMP_SAD => Comparison::SAD,
-            FF_CMP_SSE => Comparison::SSE,
-            FF_CMP_SATD => Comparison::SATD,
-            FF_CMP_DCT => Comparison::DCT,
-            FF_CMP_PSNR => Comparison::PSNR,
-            FF_CMP_BIT => Comparison::BIT,
-            FF_CMP_RD => Comparison::RD,
-            FF_CMP_ZERO => Comparison::ZERO,
-            FF_CMP_VSAD => Comparison::VSAD,
-            FF_CMP_VSSE => Comparison::VSSE,
-            FF_CMP_NSSE => Comparison::NSSE,
-            FF_CMP_W53 => Comparison::W53,
-            FF_CMP_W97 => Comparison::W97,
-            FF_CMP_DCTMAX => Comparison::DCTMAX,
-            FF_CMP_DCT264 => Comparison::DCT264,
-            FF_CMP_CHROMA => Comparison::CHROMA,
+        match value as u32 {
+            ffi::FF_CMP_SAD => Comparison::SAD,
+            ffi::FF_CMP_SSE => Comparison::SSE,
+            ffi::FF_CMP_SATD => Comparison::SATD,
+            ffi::FF_CMP_DCT => Comparison::DCT,
+            ffi::FF_CMP_PSNR => Comparison::PSNR,
+            ffi::FF_CMP_BIT => Comparison::BIT,
+            ffi::FF_CMP_RD => Comparison::RD,
+            ffi::FF_CMP_ZERO => Comparison::ZERO,
+            ffi::FF_CMP_VSAD => Comparison::VSAD,
+            ffi::FF_CMP_VSSE => Comparison::VSSE,
+            ffi::FF_CMP_NSSE => Comparison::NSSE,
+            ffi::FF_CMP_W53 => Comparison::W53,
+            ffi::FF_CMP_W97 => Comparison::W97,
+            ffi::FF_CMP_DCTMAX => Comparison::DCTMAX,
+            ffi::FF_CMP_DCT264 => Comparison::DCT264,
+            ffi::FF_CMP_CHROMA => Comparison::CHROMA,
 
             _ => Comparison::ZERO,
         }
@@ -49,22 +49,22 @@ impl From<c_int> for Comparison {
 impl From<Comparison> for c_int {
     fn from(value: Comparison) -> c_int {
         match value {
-            Comparison::SAD => FF_CMP_SAD,
-            Comparison::SSE => FF_CMP_SSE,
-            Comparison::SATD => FF_CMP_SATD,
-            Comparison::DCT => FF_CMP_DCT,
-            Comparison::PSNR => FF_CMP_PSNR,
-            Comparison::BIT => FF_CMP_BIT,
-            Comparison::RD => FF_CMP_RD,
-            Comparison::ZERO => FF_CMP_ZERO,
-            Comparison::VSAD => FF_CMP_VSAD,
-            Comparison::VSSE => FF_CMP_VSSE,
-            Comparison::NSSE => FF_CMP_NSSE,
-            Comparison::W53 => FF_CMP_W53,
-            Comparison::W97 => FF_CMP_W97,
-            Comparison::DCTMAX => FF_CMP_DCTMAX,
-            Comparison::DCT264 => FF_CMP_DCT264,
-            Comparison::CHROMA => FF_CMP_CHROMA,
+            Comparison::SAD => ffi::FF_CMP_SAD as i32,
+            Comparison::SSE => ffi::FF_CMP_SSE as i32,
+            Comparison::SATD => ffi::FF_CMP_SATD as i32,
+            Comparison::DCT => ffi::FF_CMP_DCT as i32,
+            Comparison::PSNR => ffi::FF_CMP_PSNR as i32,
+            Comparison::BIT => ffi::FF_CMP_BIT as i32,
+            Comparison::RD => ffi::FF_CMP_RD as i32,
+            Comparison::ZERO => ffi::FF_CMP_ZERO as i32,
+            Comparison::VSAD => ffi::FF_CMP_VSAD as i32,
+            Comparison::VSSE => ffi::FF_CMP_VSSE as i32,
+            Comparison::NSSE => ffi::FF_CMP_NSSE as i32,
+            Comparison::W53 => ffi::FF_CMP_W53 as i32,
+            Comparison::W97 => ffi::FF_CMP_W97 as i32,
+            Comparison::DCTMAX => ffi::FF_CMP_DCTMAX as i32,
+            Comparison::DCT264 => ffi::FF_CMP_DCT264 as i32,
+            Comparison::CHROMA => ffi::FF_CMP_CHROMA as i32,
         }
     }
 }

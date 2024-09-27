@@ -1,48 +1,19 @@
 use std::ops::{Deref, DerefMut};
 
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 use super::{slice, Opened};
-use codec::Context;
-use color;
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use frame;
-use util::chroma;
-use util::format;
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use {packet, Error};
-use {FieldOrder, Rational};
+use crate::codec::Context;
+use crate::color;
+use crate::frame;
+use crate::util::{chroma, format};
+use {crate::packet, crate::Error};
+use {crate::FieldOrder, crate::Rational};
 
 pub struct Video(pub Opened);
 
 impl Video {
-    #[deprecated(
-        since = "4.4.0",
-        note = "Underlying API avcodec_decode_video2 has been deprecated since FFmpeg 3.1; \
-        consider switching to send_packet() and receive_frame()"
-    )]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
-    pub fn decode<P: packet::Ref>(
-        &mut self,
-        packet: &P,
-        out: &mut frame::Video,
-    ) -> Result<bool, Error> {
-        unsafe {
-            let mut got: c_int = 0;
-
-            match avcodec_decode_video2(
-                self.as_mut_ptr(),
-                out.as_mut_ptr(),
-                &mut got,
-                packet.as_ptr(),
-            ) {
-                e if e < 0 => Err(Error::from(e)),
-                _ => Ok(got != 0),
-            }
-        }
-    }
 
     pub fn width(&self) -> u32 {
         unsafe { (*self.as_ptr()).width as u32 }
@@ -84,7 +55,7 @@ impl Video {
         unsafe { chroma::Location::from((*self.as_ptr()).chroma_sample_location) }
     }
 
-    #[cfg(not(feature = "ffmpeg_7_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn set_slice_count(&mut self, value: usize) {
         unsafe {
             (*self.as_mut_ptr()).slice_count = value as c_int;
@@ -147,12 +118,12 @@ impl DerefMut for Video {
 
 impl AsRef<Context> for Video {
     fn as_ref(&self) -> &Context {
-        self
+        self.0.as_ref()
     }
 }
 
 impl AsMut<Context> for Video {
     fn as_mut(&mut self) -> &mut Context {
-        &mut self.0
+        self.0.as_mut()
     }
 }

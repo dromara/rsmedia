@@ -1,7 +1,9 @@
-use ffi::*;
-use {DictionaryRef, Rational};
-
-use format::context::common::Context;
+use rsmpeg::ffi;
+use {
+    crate::DictionaryRef,
+    crate::Rational,
+    crate::format::context::common::Context
+};
 
 // WARNING: index refers to the offset in the chapters array (starting from 0)
 // it is not necessarly equal to the id (which may start at 1)
@@ -15,7 +17,7 @@ impl<'a> Chapter<'a> {
         Chapter { context, index }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVChapter {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVChapter {
         *(*self.context.as_ptr()).chapters.add(self.index)
     }
 }

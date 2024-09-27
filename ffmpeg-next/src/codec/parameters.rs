@@ -2,26 +2,26 @@ use std::any::Any;
 use std::rc::Rc;
 
 use super::{Context, Id};
-use ffi::*;
-use media;
+use rsmpeg::ffi;
+use crate::media;
 
 pub struct Parameters {
-    ptr: *mut AVCodecParameters,
+    ptr: *mut ffi::AVCodecParameters,
     owner: Option<Rc<dyn Any>>,
 }
 
 unsafe impl Send for Parameters {}
 
 impl Parameters {
-    pub unsafe fn wrap(ptr: *mut AVCodecParameters, owner: Option<Rc<dyn Any>>) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVCodecParameters, owner: Option<Rc<dyn Any>>) -> Self {
         Parameters { ptr, owner }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVCodecParameters {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVCodecParameters {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVCodecParameters {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVCodecParameters {
         self.ptr
     }
 }
@@ -30,7 +30,7 @@ impl Parameters {
     pub fn new() -> Self {
         unsafe {
             Parameters {
-                ptr: avcodec_parameters_alloc(),
+                ptr: ffi::avcodec_parameters_alloc(),
                 owner: None,
             }
         }
@@ -55,7 +55,7 @@ impl Drop for Parameters {
     fn drop(&mut self) {
         unsafe {
             if self.owner.is_none() {
-                avcodec_parameters_free(&mut self.as_mut_ptr());
+                ffi::avcodec_parameters_free(&mut self.as_mut_ptr());
             }
         }
     }
@@ -71,7 +71,7 @@ impl Clone for Parameters {
 
     fn clone_from(&mut self, source: &Self) {
         unsafe {
-            avcodec_parameters_copy(self.as_mut_ptr(), source.as_ptr());
+            ffi::avcodec_parameters_copy(self.as_mut_ptr(), source.as_ptr());
         }
     }
 }
@@ -81,7 +81,7 @@ impl<C: AsRef<Context>> From<C> for Parameters {
         let mut parameters = Parameters::new();
         let context = context.as_ref();
         unsafe {
-            avcodec_parameters_from_context(parameters.as_mut_ptr(), context.as_ptr());
+            ffi::avcodec_parameters_from_context(parameters.as_mut_ptr(), context.as_ptr());
         }
         parameters
     }

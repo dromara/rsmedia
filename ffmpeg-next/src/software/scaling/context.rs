@@ -1,10 +1,10 @@
 use std::ptr;
 
 use super::Flags;
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
-use util::format;
-use {frame, Error};
+use crate::util::format;
+use {crate::frame, crate::Error};
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub struct Definition {
@@ -14,7 +14,7 @@ pub struct Definition {
 }
 
 pub struct Context {
-    ptr: *mut SwsContext,
+    ptr: *mut ffi::SwsContext,
 
     input: Definition,
     output: Definition,
@@ -22,12 +22,12 @@ pub struct Context {
 
 impl Context {
     #[inline(always)]
-    pub unsafe fn as_ptr(&self) -> *const SwsContext {
+    pub unsafe fn as_ptr(&self) -> *const ffi::SwsContext {
         self.ptr as *const _
     }
 
     #[inline(always)]
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut SwsContext {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::SwsContext {
         self.ptr
     }
 }
@@ -43,7 +43,7 @@ impl Context {
         flags: Flags,
     ) -> Result<Self, Error> {
         unsafe {
-            let ptr = sws_getContext(
+            let ptr = ffi::sws_getContext(
                 src_w as c_int,
                 src_h as c_int,
                 src_format.into(),
@@ -101,7 +101,7 @@ impl Context {
         };
 
         unsafe {
-            self.ptr = sws_getCachedContext(
+            self.ptr = ffi::sws_getCachedContext(
                 self.as_mut_ptr(),
                 src_w as c_int,
                 src_h as c_int,
@@ -149,7 +149,7 @@ impl Context {
         }
 
         unsafe {
-            sws_scale(
+            ffi::sws_scale(
                 self.as_mut_ptr(),
                 (*input.as_ptr()).data.as_ptr() as *const *const _,
                 (*input.as_ptr()).linesize.as_ptr() as *const _,
@@ -167,7 +167,7 @@ impl Context {
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            sws_freeContext(self.as_mut_ptr());
+            ffi::sws_freeContext(self.as_mut_ptr());
         }
     }
 }

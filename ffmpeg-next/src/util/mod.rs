@@ -15,26 +15,26 @@ pub mod range;
 pub mod rational;
 pub mod time;
 
-#[cfg_attr(feature = "ffmpeg_7_0", path = "channel_layout.rs")]
-#[cfg_attr(not(feature = "ffmpeg_7_0"), path = "legacy_channel_layout.rs")]
+#[cfg_attr(feature = "ffmpeg7", path = "channel_layout.rs")]
+#[cfg_attr(not(feature = "ffmpeg7"), path = "legacy_channel_layout.rs")]
 pub mod channel_layout;
 
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use ffi::*;
+use rsmpeg::ffi;
 
 #[inline(always)]
 pub fn version() -> u32 {
-    unsafe { avutil_version() }
+    unsafe { ffi::avutil_version() }
 }
 
 #[inline(always)]
 pub fn configuration() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(avutil_configuration()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avutil_configuration()).to_bytes()) }
 }
 
 #[inline(always)]
 pub fn license() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(avutil_license()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avutil_license()).to_bytes()) }
 }

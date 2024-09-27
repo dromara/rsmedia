@@ -2,18 +2,18 @@ use std::mem;
 use std::ptr;
 
 use super::Ref;
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 pub struct Borrow<'a> {
-    packet: AVPacket,
+    packet: ffi::AVPacket,
     data: &'a [u8],
 }
 
 impl<'a> Borrow<'a> {
     pub fn new(data: &[u8]) -> Borrow {
         unsafe {
-            let mut packet: AVPacket = mem::zeroed();
+            let mut packet: ffi::AVPacket = mem::zeroed();
 
             packet.data = data.as_ptr() as *mut _;
             packet.size = data.len() as c_int;
@@ -34,7 +34,7 @@ impl<'a> Borrow<'a> {
 }
 
 impl<'a> Ref for Borrow<'a> {
-    fn as_ptr(&self) -> *const AVPacket {
+    fn as_ptr(&self) -> *const ffi::AVPacket {
         &self.packet
     }
 }
@@ -45,7 +45,7 @@ impl<'a> Drop for Borrow<'a> {
             self.packet.data = ptr::null_mut();
             self.packet.size = 0;
 
-            av_packet_unref(&mut self.packet);
+            ffi::av_packet_unref(&mut self.packet);
         }
     }
 }

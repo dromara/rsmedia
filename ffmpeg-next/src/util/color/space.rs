@@ -1,8 +1,7 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use ffi::AVColorSpace::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Space {
@@ -32,56 +31,57 @@ impl Space {
             return None;
         }
         unsafe {
-            let ptr = av_color_space_name((*self).into());
+            let ptr = ffi::av_color_space_name((*self).into());
             ptr.as_ref()
                 .map(|ptr| from_utf8_unchecked(CStr::from_ptr(ptr).to_bytes()))
         }
     }
 }
 
-impl From<AVColorSpace> for Space {
-    fn from(value: AVColorSpace) -> Self {
+impl From<ffi::AVColorSpace> for Space {
+    fn from(value: ffi::AVColorSpace) -> Self {
         match value {
-            AVCOL_SPC_RGB => Space::RGB,
-            AVCOL_SPC_BT709 => Space::BT709,
-            AVCOL_SPC_UNSPECIFIED => Space::Unspecified,
-            AVCOL_SPC_RESERVED => Space::Reserved,
-            AVCOL_SPC_FCC => Space::FCC,
-            AVCOL_SPC_BT470BG => Space::BT470BG,
-            AVCOL_SPC_SMPTE170M => Space::SMPTE170M,
-            AVCOL_SPC_SMPTE240M => Space::SMPTE240M,
-            AVCOL_SPC_YCGCO => Space::YCGCO,
-            AVCOL_SPC_BT2020_NCL => Space::BT2020NCL,
-            AVCOL_SPC_BT2020_CL => Space::BT2020CL,
-            AVCOL_SPC_SMPTE2085 => Space::SMPTE2085,
-            AVCOL_SPC_NB => Space::Unspecified,
+            ffi::AVCOL_SPC_RGB => Space::RGB,
+            ffi::AVCOL_SPC_BT709 => Space::BT709,
+            ffi::AVCOL_SPC_UNSPECIFIED => Space::Unspecified,
+            ffi::AVCOL_SPC_RESERVED => Space::Reserved,
+            ffi::AVCOL_SPC_FCC => Space::FCC,
+            ffi::AVCOL_SPC_BT470BG => Space::BT470BG,
+            ffi::AVCOL_SPC_SMPTE170M => Space::SMPTE170M,
+            ffi::AVCOL_SPC_SMPTE240M => Space::SMPTE240M,
+            ffi::AVCOL_SPC_YCGCO => Space::YCGCO,
+            ffi::AVCOL_SPC_BT2020_NCL => Space::BT2020NCL,
+            ffi::AVCOL_SPC_BT2020_CL => Space::BT2020CL,
+            ffi::AVCOL_SPC_SMPTE2085 => Space::SMPTE2085,
+            ffi::AVCOL_SPC_NB => Space::Unspecified,
 
-            AVCOL_SPC_CHROMA_DERIVED_NCL => Space::ChromaDerivedNCL,
-            AVCOL_SPC_CHROMA_DERIVED_CL => Space::ChromaDerivedCL,
-            AVCOL_SPC_ICTCP => Space::ICTCP,
+            ffi::AVCOL_SPC_CHROMA_DERIVED_NCL => Space::ChromaDerivedNCL,
+            ffi::AVCOL_SPC_CHROMA_DERIVED_CL => Space::ChromaDerivedCL,
+            ffi::AVCOL_SPC_ICTCP => Space::ICTCP,
+            16_u32..=u32::MAX => todo!(),
         }
     }
 }
 
-impl From<Space> for AVColorSpace {
-    fn from(value: Space) -> AVColorSpace {
+impl From<Space> for ffi::AVColorSpace {
+    fn from(value: Space) -> ffi::AVColorSpace {
         match value {
-            Space::RGB => AVCOL_SPC_RGB,
-            Space::BT709 => AVCOL_SPC_BT709,
-            Space::Unspecified => AVCOL_SPC_UNSPECIFIED,
-            Space::Reserved => AVCOL_SPC_RESERVED,
-            Space::FCC => AVCOL_SPC_FCC,
-            Space::BT470BG => AVCOL_SPC_BT470BG,
-            Space::SMPTE170M => AVCOL_SPC_SMPTE170M,
-            Space::SMPTE240M => AVCOL_SPC_SMPTE240M,
-            Space::YCGCO => AVCOL_SPC_YCGCO,
-            Space::BT2020NCL => AVCOL_SPC_BT2020_NCL,
-            Space::BT2020CL => AVCOL_SPC_BT2020_CL,
-            Space::SMPTE2085 => AVCOL_SPC_SMPTE2085,
+            Space::RGB => ffi::AVCOL_SPC_RGB,
+            Space::BT709 => ffi::AVCOL_SPC_BT709,
+            Space::Unspecified => ffi::AVCOL_SPC_UNSPECIFIED,
+            Space::Reserved => ffi::AVCOL_SPC_RESERVED,
+            Space::FCC => ffi::AVCOL_SPC_FCC,
+            Space::BT470BG => ffi::AVCOL_SPC_BT470BG,
+            Space::SMPTE170M => ffi::AVCOL_SPC_SMPTE170M,
+            Space::SMPTE240M => ffi::AVCOL_SPC_SMPTE240M,
+            Space::YCGCO => ffi::AVCOL_SPC_YCGCO,
+            Space::BT2020NCL => ffi::AVCOL_SPC_BT2020_NCL,
+            Space::BT2020CL => ffi::AVCOL_SPC_BT2020_CL,
+            Space::SMPTE2085 => ffi::AVCOL_SPC_SMPTE2085,
 
-            Space::ChromaDerivedNCL => AVCOL_SPC_CHROMA_DERIVED_NCL,
-            Space::ChromaDerivedCL => AVCOL_SPC_CHROMA_DERIVED_CL,
-            Space::ICTCP => AVCOL_SPC_ICTCP,
+            Space::ChromaDerivedNCL => ffi::AVCOL_SPC_CHROMA_DERIVED_NCL,
+            Space::ChromaDerivedCL => ffi::AVCOL_SPC_CHROMA_DERIVED_CL,
+            Space::ICTCP => ffi::AVCOL_SPC_ICTCP,
         }
     }
 }

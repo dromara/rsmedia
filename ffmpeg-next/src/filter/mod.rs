@@ -16,43 +16,43 @@ pub use self::graph::Graph;
 use std::ffi::{CStr, CString};
 use std::str::from_utf8_unchecked;
 
-use ffi::*;
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use Error;
+use rsmpeg::ffi;
+use crate::Error;
 
-#[cfg(not(feature = "ffmpeg_5_0"))]
 pub fn register_all() {
     unsafe {
-        avfilter_register_all();
+        // TODO:
+        // ffi::avfilter_register_all();
     }
 }
 
-#[cfg(not(feature = "ffmpeg_5_0"))]
 pub fn register(filter: &Filter) -> Result<(), Error> {
     unsafe {
-        match avfilter_register(filter.as_ptr() as *mut _) {
-            0 => Ok(()),
-            _ => Err(Error::InvalidData),
-        }
+        // TODO:
+        // match ffi::avfilter_register(filter.as_ptr() as *mut _) {
+        //     0 => Ok(()),
+        //     _ => Err(Error::InvalidData),
+        // }
+        todo!("Not implemented")
     }
 }
 
 pub fn version() -> u32 {
-    unsafe { avfilter_version() }
+    unsafe { ffi::avfilter_version() }
 }
 
 pub fn configuration() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(avfilter_configuration()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avfilter_configuration()).to_bytes()) }
 }
 
 pub fn license() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(avfilter_license()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avfilter_license()).to_bytes()) }
 }
 
 pub fn find(name: &str) -> Option<Filter> {
     unsafe {
         let name = CString::new(name).unwrap();
-        let ptr = avfilter_get_by_name(name.as_ptr());
+        let ptr = ffi::avfilter_get_by_name(name.as_ptr());
 
         if ptr.is_null() {
             None
@@ -68,7 +68,6 @@ mod tests {
 
     #[test]
     fn test_paditer() {
-        #[cfg(not(feature = "ffmpeg_5_0"))]
         register_all();
         assert_eq!(
             find("overlay")

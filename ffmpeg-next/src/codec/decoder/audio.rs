@@ -1,59 +1,30 @@
 use std::ops::{Deref, DerefMut};
 
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use ffi::*;
-#[cfg(not(feature = "ffmpeg_5_0"))]
+use rsmpeg::ffi;
 use libc::c_int;
 
 use super::Opened;
-use codec::Context;
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use frame;
-use util::format;
-#[cfg(not(feature = "ffmpeg_5_0"))]
-use {packet, Error};
-use {AudioService, ChannelLayout};
+use crate::codec::Context;
+use crate::frame;
+use crate::util::format;
+use {crate::packet, crate::Error};
+use {crate::AudioService, crate::ChannelLayout};
 
 pub struct Audio(pub Opened);
 
 impl Audio {
-    #[deprecated(
-        since = "4.4.0",
-        note = "Underlying API avcodec_decode_audio4 has been deprecated since FFmpeg 3.1; \
-        consider switching to send_packet() and receive_frame()"
-    )]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
-    pub fn decode<P: packet::Ref>(
-        &mut self,
-        packet: &P,
-        out: &mut frame::Audio,
-    ) -> Result<bool, Error> {
-        unsafe {
-            let mut got: c_int = 0;
-
-            match avcodec_decode_audio4(
-                self.as_mut_ptr(),
-                out.as_mut_ptr(),
-                &mut got,
-                packet.as_ptr(),
-            ) {
-                e if e < 0 => Err(Error::from(e)),
-                _ => Ok(got != 0),
-            }
-        }
-    }
 
     pub fn rate(&self) -> u32 {
         unsafe { (*self.as_ptr()).sample_rate as u32 }
     }
 
     pub fn channels(&self) -> u16 {
-        #[cfg(not(feature = "ffmpeg_7_0"))]
+        #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
             (*self.as_ptr()).channels as u16
         }
 
-        #[cfg(feature = "ffmpeg_7_0")]
+        #[cfg(feature = "ffmpeg7")]
         {
             self.channel_layout().channels() as u16
         }
@@ -70,12 +41,12 @@ impl Audio {
     }
 
     pub fn frames(&self) -> usize {
-        #[cfg(not(feature = "ffmpeg_7_0"))]
+        #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
             (*self.as_ptr()).frame_number as usize
         }
 
-        #[cfg(feature = "ffmpeg_7_0")]
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             (*self.as_ptr()).frame_num as usize
         }
@@ -86,12 +57,12 @@ impl Audio {
     }
 
     pub fn channel_layout(&self) -> ChannelLayout {
-        #[cfg(not(feature = "ffmpeg_7_0"))]
+        #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
             ChannelLayout::from_bits_truncate((*self.as_ptr()).channel_layout)
         }
 
-        #[cfg(feature = "ffmpeg_7_0")]
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             ChannelLayout::from((*self.as_ptr()).ch_layout)
         }
@@ -99,19 +70,19 @@ impl Audio {
 
     pub fn set_channel_layout(&mut self, value: ChannelLayout) {
         unsafe {
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             {
                 (*self.as_mut_ptr()).channel_layout = value.bits();
             }
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             {
                 (*self.as_mut_ptr()).ch_layout = value.into();
             }
         }
     }
 
-    #[cfg(not(feature = "ffmpeg_7_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn request_channel_layout(&mut self, value: ChannelLayout) {
         unsafe {
             (*self.as_mut_ptr()).request_channel_layout = value.bits();
@@ -128,18 +99,6 @@ impl Audio {
 
     pub fn frame_size(&self) -> u32 {
         unsafe { (*self.as_ptr()).frame_size as u32 }
-    }
-
-    #[cfg(not(feature = "ffmpeg_5_0"))]
-    pub fn frame_start(&self) -> Option<usize> {
-        unsafe {
-            // Removed in ffmpeg >= 5.0 in favor of using encoder
-            // private options.
-            match (*self.as_ptr()).timecode_frame_start {
-                -1 => None,
-                n => Some(n as usize),
-            }
-        }
     }
 }
 

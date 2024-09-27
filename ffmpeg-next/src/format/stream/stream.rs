@@ -1,9 +1,10 @@
 use super::Disposition;
-use codec::{self, packet};
-use ffi::*;
-use format::context::common::Context;
+use crate::codec::{self, packet};
+use crate::format::context::common::Context;
+use {crate::DictionaryRef, crate::Discard, crate::Rational};
+
+use rsmpeg::ffi;
 use libc::c_int;
-use {DictionaryRef, Discard, Rational};
 
 #[derive(Debug)]
 pub struct Stream<'a> {
@@ -16,7 +17,7 @@ impl<'a> Stream<'a> {
         Stream { context, index }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVStream {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVStream {
         *(*self.context.as_ptr()).streams.add(self.index)
     }
 }
@@ -26,7 +27,7 @@ impl<'a> Stream<'a> {
         unsafe { (*self.as_ptr()).id }
     }
 
-    #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn codec(&self) -> codec::Context {
         unsafe { codec::Context::wrap((*self.as_ptr()).codec, Some(self.context.destructor())) }
     }

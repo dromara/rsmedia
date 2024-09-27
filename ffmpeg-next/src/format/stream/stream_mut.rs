@@ -2,9 +2,10 @@ use std::mem;
 use std::ops::Deref;
 
 use super::Stream;
-use ffi::*;
-use format::context::common::Context;
-use {codec, Dictionary, Rational};
+use crate::format::context::common::Context;
+use {crate::codec, crate::Dictionary, crate::Rational};
+
+use rsmpeg::ffi;
 
 pub struct StreamMut<'a> {
     context: &'a mut Context,
@@ -23,7 +24,7 @@ impl<'a> StreamMut<'a> {
         }
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVStream {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVStream {
         *(*self.context.as_mut_ptr()).streams.add(self.index)
     }
 }
@@ -51,7 +52,7 @@ impl<'a> StreamMut<'a> {
         let parameters = parameters.into();
 
         unsafe {
-            avcodec_parameters_copy((*self.as_mut_ptr()).codecpar, parameters.as_ptr());
+            ffi::avcodec_parameters_copy((*self.as_mut_ptr()).codecpar, parameters.as_ptr());
         }
     }
 

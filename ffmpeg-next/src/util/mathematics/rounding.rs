@@ -1,5 +1,4 @@
-use ffi::AVRounding::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Rounding {
@@ -11,30 +10,32 @@ pub enum Rounding {
     PassMinMax,
 }
 
-impl From<AVRounding> for Rounding {
+impl From<ffi::AVRounding> for Rounding {
     #[inline(always)]
-    fn from(value: AVRounding) -> Self {
+    fn from(value: ffi::AVRounding) -> Self {
         match value {
-            AV_ROUND_ZERO => Rounding::Zero,
-            AV_ROUND_INF => Rounding::Infinity,
-            AV_ROUND_DOWN => Rounding::Down,
-            AV_ROUND_UP => Rounding::Up,
-            AV_ROUND_NEAR_INF => Rounding::NearInfinity,
-            AV_ROUND_PASS_MINMAX => Rounding::PassMinMax,
+            ffi::AV_ROUND_ZERO => Rounding::Zero,
+            ffi::AV_ROUND_INF => Rounding::Infinity,
+            ffi::AV_ROUND_DOWN => Rounding::Down,
+            ffi::AV_ROUND_UP => Rounding::Up,
+            ffi::AV_ROUND_NEAR_INF => Rounding::NearInfinity,
+            ffi::AV_ROUND_PASS_MINMAX => Rounding::PassMinMax,
+            // non-exhaustive patterns: `4_u32`, `6_u32..=8191_u32` and `8193_u32..=u32::MAX` not covered
+            4_u32 | 6_u32..=8191_u32 | 8193_u32..=u32::MAX => todo!(),
         }
     }
 }
 
-impl From<Rounding> for AVRounding {
+impl From<Rounding> for ffi::AVRounding {
     #[inline(always)]
-    fn from(value: Rounding) -> AVRounding {
+    fn from(value: Rounding) -> ffi::AVRounding {
         match value {
-            Rounding::Zero => AV_ROUND_ZERO,
-            Rounding::Infinity => AV_ROUND_INF,
-            Rounding::Down => AV_ROUND_DOWN,
-            Rounding::Up => AV_ROUND_UP,
-            Rounding::NearInfinity => AV_ROUND_NEAR_INF,
-            Rounding::PassMinMax => AV_ROUND_PASS_MINMAX,
+            Rounding::Zero => ffi::AV_ROUND_ZERO,
+            Rounding::Infinity => ffi::AV_ROUND_INF,
+            Rounding::Down => ffi::AV_ROUND_DOWN,
+            Rounding::Up => ffi::AV_ROUND_UP,
+            Rounding::NearInfinity => ffi::AV_ROUND_NEAR_INF,
+            Rounding::PassMinMax => ffi::AV_ROUND_PASS_MINMAX,
         }
     }
 }

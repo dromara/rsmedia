@@ -1,10 +1,9 @@
 use std::ptr;
 
-use ffi::*;
-use format;
-use Format;
+use rsmpeg::ffi;
+use crate::Format;
 
-pub struct AudioIter(*mut AVInputFormat);
+pub struct AudioIter(*mut ffi::AVInputFormat);
 
 impl Iterator for AudioIter {
     type Item = Format;
@@ -13,14 +12,14 @@ impl Iterator for AudioIter {
         unsafe {
             // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
             #[allow(clippy::unnecessary_cast)]
-            let ptr = av_input_audio_device_next(self.0) as *mut AVInputFormat;
+            let ptr =ffi:: av_input_audio_device_next(self.0) as *mut ffi::AVInputFormat;
 
             if ptr.is_null() && !self.0.is_null() {
                 None
             } else {
                 self.0 = ptr;
 
-                Some(Format::Input(format::Input::wrap(ptr)))
+                Some(Format::Input(crate::format::Input::wrap(ptr)))
             }
         }
     }
@@ -30,7 +29,7 @@ pub fn audio() -> AudioIter {
     AudioIter(ptr::null_mut())
 }
 
-pub struct VideoIter(*mut AVInputFormat);
+pub struct VideoIter(*mut ffi::AVInputFormat);
 
 impl Iterator for VideoIter {
     type Item = Format;
@@ -39,14 +38,14 @@ impl Iterator for VideoIter {
         unsafe {
             // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
             #[allow(clippy::unnecessary_cast)]
-            let ptr = av_input_video_device_next(self.0) as *mut AVInputFormat;
+            let ptr = ffi::av_input_video_device_next(self.0) as *mut ffi::AVInputFormat;
 
             if ptr.is_null() && !self.0.is_null() {
                 None
             } else {
                 self.0 = ptr;
 
-                Some(Format::Input(format::Input::wrap(ptr)))
+                Some(Format::Input(crate::format::Input::wrap(ptr)))
             }
         }
     }

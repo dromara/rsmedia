@@ -3,17 +3,17 @@ use std::ops::{Deref, DerefMut};
 use std::slice;
 
 use super::Frame;
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
-use util::format;
-use ChannelLayout;
+use crate::util::format;
+use crate::ChannelLayout;
 
 #[derive(PartialEq, Eq)]
 pub struct Audio(Frame);
 
 impl Audio {
     #[inline(always)]
-    pub unsafe fn wrap(ptr: *mut AVFrame) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVFrame) -> Self {
         Audio(Frame::wrap(ptr))
     }
 
@@ -23,7 +23,7 @@ impl Audio {
         self.set_samples(samples);
         self.set_channel_layout(layout);
 
-        av_frame_get_buffer(self.as_mut_ptr(), 0);
+        ffi::av_frame_get_buffer(self.as_mut_ptr(), 0);
     }
 }
 
@@ -49,7 +49,7 @@ impl Audio {
             if (*self.as_ptr()).format == -1 {
                 format::Sample::None
             } else {
-                format::Sample::from(mem::transmute::<i32, AVSampleFormat>(
+                format::Sample::from(mem::transmute::<i32, ffi::AVSampleFormat>(
                     (*self.as_ptr()).format,
                 ))
             }
@@ -59,19 +59,19 @@ impl Audio {
     #[inline]
     pub fn set_format(&mut self, value: format::Sample) {
         unsafe {
-            (*self.as_mut_ptr()).format = mem::transmute::<AVSampleFormat, c_int>(value.into());
+            (*self.as_mut_ptr()).format = mem::transmute::<ffi::AVSampleFormat, c_int>(value.into());
         }
     }
 
     #[inline]
     pub fn channel_layout(&self) -> ChannelLayout {
         unsafe {
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             {
                 ChannelLayout::from_bits_truncate((*self.as_ptr()).channel_layout as _)
             }
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             {
                 ChannelLayout::from((*self.as_ptr()).ch_layout)
             }
@@ -81,12 +81,12 @@ impl Audio {
     #[inline]
     pub fn set_channel_layout(&mut self, value: ChannelLayout) {
         unsafe {
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             {
                 (*self.as_mut_ptr()).channel_layout = value.bits()
             }
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             {
                 (*self.as_mut_ptr()).ch_layout = value.into()
             }
@@ -95,19 +95,19 @@ impl Audio {
 
     #[inline]
     pub fn channels(&self) -> u16 {
-        #[cfg(not(feature = "ffmpeg_7_0"))]
+        #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
             (*self.as_ptr()).channels as u16
         }
 
-        #[cfg(feature = "ffmpeg_7_0")]
+        #[cfg(feature = "ffmpeg7")]
         {
             self.channel_layout().channels() as u16
         }
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg_7_0"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn set_channels(&mut self, value: u16) {
         unsafe {
             (*self.as_mut_ptr()).channels = i32::from(value);
@@ -255,8 +255,8 @@ impl Clone for Audio {
 
     fn clone_from(&mut self, source: &Self) {
         unsafe {
-            av_frame_copy(self.as_mut_ptr(), source.as_ptr());
-            av_frame_copy_props(self.as_mut_ptr(), source.as_ptr());
+            ffi::av_frame_copy(self.as_mut_ptr(), source.as_ptr());
+            ffi::av_frame_copy_props(self.as_mut_ptr(), source.as_ptr());
         }
     }
 }

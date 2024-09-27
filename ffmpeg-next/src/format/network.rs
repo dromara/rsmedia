@@ -1,13 +1,13 @@
-use ffi::*;
+use rsmpeg::ffi;
 
 pub fn init() {
     unsafe {
-        avformat_network_init();
+        ffi::avformat_network_init();
     }
 }
 
 pub fn deinit() {
     unsafe {
-        avformat_network_deinit();
+        ffi::avformat_network_deinit();
     }
 }

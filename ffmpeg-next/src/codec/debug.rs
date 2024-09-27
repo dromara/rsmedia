@@ -1,30 +1,23 @@
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct Debug: c_int {
-        const PICT_INFO   = FF_DEBUG_PICT_INFO;
-        const RC          = FF_DEBUG_RC;
-        const BITSTREAM   = FF_DEBUG_BITSTREAM;
-        const MB_TYPE     = FF_DEBUG_MB_TYPE;
-        const QP          = FF_DEBUG_QP;
-        #[cfg(not(feature = "ffmpeg_4_0"))]
-        const MV          = FF_DEBUG_MV;
-        const DCT_COEFF   = FF_DEBUG_DCT_COEFF;
-        const SKIP        = FF_DEBUG_SKIP;
-        const STARTCODE   = FF_DEBUG_STARTCODE;
-        #[cfg(not(feature = "ffmpeg_4_0"))]
-        const PTS         = FF_DEBUG_PTS;
-        const ER          = FF_DEBUG_ER;
-        const MMCO        = FF_DEBUG_MMCO;
-        const BUGS        = FF_DEBUG_BUGS;
-        #[cfg(not(feature = "ffmpeg_4_0"))]
-        const VIS_QP      = FF_DEBUG_VIS_QP;
-        #[cfg(not(feature = "ffmpeg_4_0"))]
-        const VIS_MB_TYPE = FF_DEBUG_VIS_MB_TYPE;
-        const BUFFERS     = FF_DEBUG_BUFFERS;
-        const THREADS     = FF_DEBUG_THREADS;
-        const NOMC        = FF_DEBUG_NOMC;
+        const PICT_INFO   = ffi::FF_DEBUG_PICT_INFO as i32;
+        const RC          = ffi::FF_DEBUG_RC as i32;
+        const BITSTREAM   = ffi::FF_DEBUG_BITSTREAM as i32;
+        const MB_TYPE     = ffi::FF_DEBUG_MB_TYPE as i32;
+        const QP          = ffi::FF_DEBUG_QP as i32;
+        const DCT_COEFF   = ffi::FF_DEBUG_DCT_COEFF as i32;
+        const SKIP        = ffi::FF_DEBUG_SKIP as i32;
+        const STARTCODE   = ffi::FF_DEBUG_STARTCODE as i32;
+        const ER          = ffi::FF_DEBUG_ER as i32;
+        const MMCO        = ffi::FF_DEBUG_MMCO as i32;
+        const BUGS        = ffi::FF_DEBUG_BUGS as i32;
+        const BUFFERS     = ffi::FF_DEBUG_BUFFERS as i32;
+        const THREADS     = ffi::FF_DEBUG_THREADS as i32;
+        const GREEN_MD     = ffi::FF_DEBUG_GREEN_MD as i32;
+        const NOMC        = ffi::FF_DEBUG_NOMC as i32;
     }
 }

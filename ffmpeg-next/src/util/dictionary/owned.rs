@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use super::mutable;
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Owned<'a> {
     inner: mutable::Ref<'a>,
@@ -17,13 +17,13 @@ impl<'a> Default for Owned<'a> {
 }
 
 impl<'a> Owned<'a> {
-    pub unsafe fn own(ptr: *mut AVDictionary) -> Self {
+    pub unsafe fn own(ptr: *mut ffi::AVDictionary) -> Self {
         Owned {
             inner: mutable::Ref::wrap(ptr),
         }
     }
 
-    pub unsafe fn disown(mut self) -> *mut AVDictionary {
+    pub unsafe fn disown(mut self) -> *mut ffi::AVDictionary {
         let result = self.inner.as_mut_ptr();
         self.inner = mutable::Ref::wrap(ptr::null_mut());
 
@@ -114,7 +114,7 @@ impl<'a> Clone for Owned<'a> {
     fn clone_from(&mut self, source: &Self) {
         unsafe {
             let mut ptr = self.as_mut_ptr();
-            av_dict_copy(&mut ptr, source.as_ptr(), 0);
+            ffi::av_dict_copy(&mut ptr, source.as_ptr(), 0);
             self.inner = mutable::Ref::wrap(ptr);
         }
     }
@@ -123,7 +123,7 @@ impl<'a> Clone for Owned<'a> {
 impl<'a> Drop for Owned<'a> {
     fn drop(&mut self) {
         unsafe {
-            av_dict_free(&mut self.inner.as_mut_ptr());
+            ffi::av_dict_free(&mut self.inner.as_mut_ptr());
         }
     }
 }

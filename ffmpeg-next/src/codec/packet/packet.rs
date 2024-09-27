@@ -3,11 +3,11 @@ use std::mem;
 use std::slice;
 
 use super::{Borrow, Flags, Mut, Ref, SideData};
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
-use {format, Error, Rational};
+use {crate::format, crate::Error, crate::Rational};
 
-pub struct Packet(AVPacket);
+pub struct Packet(ffi::AVPacket);
 
 unsafe impl Send for Packet {}
 unsafe impl Sync for Packet {}
@@ -23,9 +23,9 @@ impl Packet {
     #[inline]
     pub fn empty() -> Self {
         unsafe {
-            let mut pkt: AVPacket = mem::zeroed();
+            let mut pkt: ffi::AVPacket = mem::zeroed();
 
-            av_init_packet(&mut pkt);
+            ffi::av_init_packet(&mut pkt);
 
             Packet(pkt)
         }
@@ -34,10 +34,10 @@ impl Packet {
     #[inline]
     pub fn new(size: usize) -> Self {
         unsafe {
-            let mut pkt: AVPacket = mem::zeroed();
+            let mut pkt: ffi::AVPacket = mem::zeroed();
 
-            av_init_packet(&mut pkt);
-            av_new_packet(&mut pkt, size as c_int);
+            ffi::av_init_packet(&mut pkt);
+            ffi::av_new_packet(&mut pkt, size as c_int);
 
             Packet(pkt)
         }
@@ -61,14 +61,14 @@ impl Packet {
     #[inline]
     pub fn shrink(&mut self, size: usize) {
         unsafe {
-            av_shrink_packet(&mut self.0, size as c_int);
+            ffi::av_shrink_packet(&mut self.0, size as c_int);
         }
     }
 
     #[inline]
     pub fn grow(&mut self, size: usize) {
         unsafe {
-            av_grow_packet(&mut self.0, size as c_int);
+            ffi::av_grow_packet(&mut self.0, size as c_int);
         }
     }
 
@@ -79,7 +79,7 @@ impl Packet {
         D: Into<Rational>,
     {
         unsafe {
-            av_packet_rescale_ts(
+            ffi::av_packet_rescale_ts(
                 self.as_mut_ptr(),
                 source.into().into(),
                 destination.into().into(),
@@ -127,7 +127,7 @@ impl Packet {
 
     #[inline]
     pub fn set_pts(&mut self, value: Option<i64>) {
-        self.0.pts = value.unwrap_or(AV_NOPTS_VALUE);
+        self.0.pts = value.unwrap_or(ffi::AV_NOPTS_VALUE);
     }
 
     #[inline]
@@ -140,17 +140,15 @@ impl Packet {
 
     #[inline]
     pub fn set_dts(&mut self, value: Option<i64>) {
-        self.0.dts = value.unwrap_or(AV_NOPTS_VALUE);
+        self.0.dts = value.unwrap_or(ffi::AV_NOPTS_VALUE);
     }
 
     #[inline]
-    #[cfg(feature = "ffmpeg_5_0")]
     pub fn time_base(&self) -> Rational {
         self.0.time_base.into()
     }
 
     #[inline]
-    #[cfg(feature = "ffmpeg_5_0")]
     pub fn set_time_base(&mut self, value: Rational) {
         self.0.time_base = value.into();
     }
@@ -181,10 +179,10 @@ impl Packet {
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg_5_0"))]
-    pub fn convergence(&self) -> isize {
-        self.0.convergence_duration as isize
-    }
+    // pub fn convergence(&self) -> isize {
+    //     // TODO:
+    //     self.0.convergence_duration as isize
+    // }
 
     #[inline]
     pub fn side_data(&self) -> SideDataIter {
@@ -216,7 +214,7 @@ impl Packet {
     #[inline]
     pub fn read(&mut self, format: &mut format::context::Input) -> Result<(), Error> {
         unsafe {
-            match av_read_frame(format.as_mut_ptr(), self.as_mut_ptr()) {
+            match ffi::av_read_frame(format.as_mut_ptr(), self.as_mut_ptr()) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -230,7 +228,7 @@ impl Packet {
                 return Err(Error::InvalidData);
             }
 
-            match av_write_frame(format.as_mut_ptr(), self.as_ptr() as *mut _) {
+            match ffi::av_write_frame(format.as_mut_ptr(), self.as_ptr() as *mut _) {
                 1 => Ok(true),
                 0 => Ok(false),
                 e => Err(Error::from(e)),
@@ -245,7 +243,7 @@ impl Packet {
                 return Err(Error::InvalidData);
             }
 
-            match av_interleaved_write_frame(format.as_mut_ptr(), self.as_ptr() as *mut _) {
+            match ffi::av_interleaved_write_frame(format.as_mut_ptr(), self.as_ptr() as *mut _) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -254,13 +252,13 @@ impl Packet {
 }
 
 impl Ref for Packet {
-    fn as_ptr(&self) -> *const AVPacket {
+    fn as_ptr(&self) -> *const ffi::AVPacket {
         &self.0
     }
 }
 
 impl Mut for Packet {
-    fn as_mut_ptr(&mut self) -> *mut AVPacket {
+    fn as_mut_ptr(&mut self) -> *mut ffi::AVPacket {
         &mut self.0
     }
 }
@@ -276,14 +274,8 @@ impl Clone for Packet {
 
     #[inline]
     fn clone_from(&mut self, source: &Self) {
-        #[cfg(feature = "ffmpeg_4_0")]
         unsafe {
-            av_packet_ref(&mut self.0, &source.0);
-            av_packet_make_writable(&mut self.0);
-        }
-        #[cfg(not(feature = "ffmpeg_4_0"))]
-        unsafe {
-            av_copy_packet(&mut self.0, &source.0);
+            ffi::av_packet_copy_props(&mut self.0, &source.0);
         }
     }
 }
@@ -291,20 +283,20 @@ impl Clone for Packet {
 impl Drop for Packet {
     fn drop(&mut self) {
         unsafe {
-            av_packet_unref(&mut self.0);
+            ffi::av_packet_unref(&mut self.0);
         }
     }
 }
 
 pub struct SideDataIter<'a> {
-    ptr: *const AVPacket,
+    ptr: *const ffi::AVPacket,
     cur: c_int,
 
     _marker: PhantomData<&'a Packet>,
 }
 
 impl<'a> SideDataIter<'a> {
-    pub fn new(ptr: *const AVPacket) -> Self {
+    pub fn new(ptr: *const ffi::AVPacket) -> Self {
         SideDataIter {
             ptr,
             cur: 0,

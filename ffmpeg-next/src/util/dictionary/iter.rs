@@ -3,17 +3,17 @@ use std::marker::PhantomData;
 use std::ptr;
 use std::str::from_utf8_unchecked;
 
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Iter<'a> {
-    ptr: *const AVDictionary,
-    cur: *mut AVDictionaryEntry,
+    ptr: *const ffi::AVDictionary,
+    cur: *mut ffi::AVDictionaryEntry,
 
     _marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Iter<'a> {
-    pub fn new(dictionary: *const AVDictionary) -> Self {
+    pub fn new(dictionary: *const ffi::AVDictionary) -> Self {
         Iter {
             ptr: dictionary,
             cur: ptr::null_mut(),
@@ -29,7 +29,7 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
             let empty = CString::new("").unwrap();
-            let entry = av_dict_get(self.ptr, empty.as_ptr(), self.cur, AV_DICT_IGNORE_SUFFIX);
+            let entry = ffi::av_dict_get(self.ptr, empty.as_ptr(), self.cur, ffi::AV_DICT_IGNORE_SUFFIX as i32);
 
             if !entry.is_null() {
                 let key = from_utf8_unchecked(CStr::from_ptr((*entry).key).to_bytes());

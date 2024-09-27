@@ -1,4 +1,4 @@
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
@@ -10,10 +10,10 @@ pub enum Decision {
 
 impl From<c_int> for Decision {
     fn from(value: c_int) -> Decision {
-        match value {
-            FF_MB_DECISION_SIMPLE => Decision::Simple,
-            FF_MB_DECISION_BITS => Decision::Bits,
-            FF_MB_DECISION_RD => Decision::RateDistortion,
+        match value as u32 {
+            ffi::FF_MB_DECISION_SIMPLE => Decision::Simple,
+            ffi::FF_MB_DECISION_BITS => Decision::Bits,
+            ffi::FF_MB_DECISION_RD => Decision::RateDistortion,
 
             _ => Decision::Simple,
         }
@@ -23,9 +23,9 @@ impl From<c_int> for Decision {
 impl From<Decision> for c_int {
     fn from(value: Decision) -> c_int {
         match value {
-            Decision::Simple => FF_MB_DECISION_SIMPLE,
-            Decision::Bits => FF_MB_DECISION_BITS,
-            Decision::RateDistortion => FF_MB_DECISION_RD,
+            Decision::Simple => ffi::FF_MB_DECISION_SIMPLE as i32,
+            Decision::Bits => ffi::FF_MB_DECISION_BITS as i32,
+            Decision::RateDistortion => ffi::FF_MB_DECISION_RD as i32,
         }
     }
 }

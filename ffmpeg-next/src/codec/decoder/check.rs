@@ -1,17 +1,17 @@
-use ffi::*;
+use rsmpeg::ffi;
 use libc::c_int;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct Check: c_int {
-        const CRC      = AV_EF_CRCCHECK;
-        const BISTREAM = AV_EF_BITSTREAM;
-        const BUFFER   = AV_EF_BUFFER;
-        const EXPLODE  = AV_EF_EXPLODE;
+        const CRC      = ffi::AV_EF_CRCCHECK as i32;
+        const BISTREAM = ffi::AV_EF_BITSTREAM as i32;
+        const BUFFER   = ffi::AV_EF_BUFFER as i32;
+        const EXPLODE  = ffi::AV_EF_EXPLODE as i32;
 
-        const IGNORE_ERROR = AV_EF_IGNORE_ERR;
-        const CAREFUL      = AV_EF_CAREFUL;
-        const COMPLIANT    = AV_EF_COMPLIANT;
-        const AGGRESSIVE   = AV_EF_AGGRESSIVE;
+        const IGNORE_ERROR = ffi::AV_EF_IGNORE_ERR as i32;
+        const CAREFUL      = ffi::AV_EF_CAREFUL as i32;
+        const COMPLIANT    = ffi::AV_EF_COMPLIANT as i32;
+        const AGGRESSIVE   = ffi::AV_EF_AGGRESSIVE as i32;
     }
 }

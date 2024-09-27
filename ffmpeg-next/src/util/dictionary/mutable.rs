@@ -4,17 +4,17 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use super::immutable;
-use ffi::*;
+use rsmpeg::ffi;
 
 pub struct Ref<'a> {
-    ptr: *mut AVDictionary,
+    ptr: *mut ffi::AVDictionary,
     imm: immutable::Ref<'a>,
 
     _marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Ref<'a> {
-    pub unsafe fn wrap(ptr: *mut AVDictionary) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVDictionary) -> Self {
         Ref {
             ptr,
             imm: immutable::Ref::wrap(ptr),
@@ -22,7 +22,7 @@ impl<'a> Ref<'a> {
         }
     }
 
-    pub unsafe fn as_mut_ptr(&self) -> *mut AVDictionary {
+    pub unsafe fn as_mut_ptr(&self) -> *mut ffi::AVDictionary {
         self.ptr
     }
 }
@@ -34,7 +34,7 @@ impl<'a> Ref<'a> {
             let value = CString::new(value).unwrap();
             let mut ptr = self.as_mut_ptr();
 
-            if av_dict_set(&mut ptr, key.as_ptr(), value.as_ptr(), 0) < 0 {
+            if ffi::av_dict_set(&mut ptr, key.as_ptr(), value.as_ptr(), 0) < 0 {
                 panic!("out of memory");
             }
 

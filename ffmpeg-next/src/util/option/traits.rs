@@ -3,10 +3,10 @@
 use std::ffi::CString;
 use std::mem;
 
-use ffi::*;
+use rsmpeg::ffi;
 use libc::{c_int, c_void};
-use util::format;
-use {ChannelLayout, Error, Rational};
+use crate::util::format;
+use {crate::ChannelLayout, crate::Error, crate::Rational};
 
 macro_rules! check {
     ($expr:expr) => {
@@ -27,12 +27,12 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_bin(
+            check!(ffi::av_opt_set_bin(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 value as *const _ as *const _,
                 mem::size_of::<T>() as c_int,
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -42,11 +42,11 @@ pub trait Settable: Target {
             let name = CString::new(name).unwrap();
             let value = CString::new(value).unwrap();
 
-            check!(av_opt_set(
+            check!(ffi::av_opt_set(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 value.as_ptr(),
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -55,11 +55,11 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_int(
+            check!(ffi::av_opt_set_int(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 value,
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -68,11 +68,11 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_double(
+            check!(ffi::av_opt_set_double(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 value,
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -81,11 +81,11 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_q(
+            check!(ffi::av_opt_set_q(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 value.into().into(),
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -94,12 +94,12 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_image_size(
+            check!(ffi::av_opt_set_image_size(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 w as c_int,
                 h as c_int,
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -108,11 +108,11 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_pixel_fmt(
+            check!(ffi::av_opt_set_pixel_fmt(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 format.into(),
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -121,11 +121,11 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            check!(av_opt_set_sample_fmt(
+            check!(ffi::av_opt_set_sample_fmt(
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 format.into(),
-                AV_OPT_SEARCH_CHILDREN
+                ffi::AV_OPT_SEARCH_CHILDREN as i32,
             ))
         }
     }
@@ -134,7 +134,7 @@ pub trait Settable: Target {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            #[cfg(not(feature = "ffmpeg_7_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             {
                 check!(av_opt_set_channel_layout(
                     self.as_mut_ptr(),
@@ -144,13 +144,13 @@ pub trait Settable: Target {
                 ))
             }
 
-            #[cfg(feature = "ffmpeg_7_0")]
+            #[cfg(feature = "ffmpeg7")]
             {
-                check!(av_opt_set_chlayout(
+                check!(ffi::av_opt_set_chlayout(
                     self.as_mut_ptr(),
                     name.as_ptr(),
                     &layout.into(),
-                    AV_OPT_SEARCH_CHILDREN
+                    ffi::AV_OPT_SEARCH_CHILDREN as i32
                 ))
             }
         }

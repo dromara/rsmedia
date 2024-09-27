@@ -1,5 +1,4 @@
-use ffi::SwrFilterType::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Filter {
@@ -8,22 +7,24 @@ pub enum Filter {
     Kaiser,
 }
 
-impl From<SwrFilterType> for Filter {
-    fn from(value: SwrFilterType) -> Filter {
+impl From<ffi::SwrFilterType> for Filter {
+    fn from(value: ffi::SwrFilterType) -> Filter {
         match value {
-            SWR_FILTER_TYPE_CUBIC => Filter::Cubic,
-            SWR_FILTER_TYPE_BLACKMAN_NUTTALL => Filter::BlackmanNuttall,
-            SWR_FILTER_TYPE_KAISER => Filter::Kaiser,
+            ffi::SWR_FILTER_TYPE_CUBIC => Filter::Cubic,
+            ffi::SWR_FILTER_TYPE_BLACKMAN_NUTTALL => Filter::BlackmanNuttall,
+            ffi::SWR_FILTER_TYPE_KAISER => Filter::Kaiser,
+            //  non-exhaustive patterns: `3_u32..=u32::MAX` not covered
+            3_u32..=u32::MAX => todo!(),
         }
     }
 }
 
-impl From<Filter> for SwrFilterType {
-    fn from(value: Filter) -> SwrFilterType {
+impl From<Filter> for ffi::SwrFilterType {
+    fn from(value: Filter) -> ffi::SwrFilterType {
         match value {
-            Filter::Cubic => SWR_FILTER_TYPE_CUBIC,
-            Filter::BlackmanNuttall => SWR_FILTER_TYPE_BLACKMAN_NUTTALL,
-            Filter::Kaiser => SWR_FILTER_TYPE_KAISER,
+            Filter::Cubic => ffi::SWR_FILTER_TYPE_CUBIC,
+            Filter::BlackmanNuttall => ffi::SWR_FILTER_TYPE_BLACKMAN_NUTTALL,
+            Filter::Kaiser => ffi::SWR_FILTER_TYPE_KAISER,
         }
     }
 }

@@ -1,8 +1,7 @@
 mod traits;
 pub use self::traits::{Gettable, Iterable, Settable, Target};
 
-use ffi::AVOptionType::*;
-use ffi::*;
+use rsmpeg::ffi;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Type {
@@ -24,72 +23,72 @@ pub enum Type {
     Duration,
     Color,
     ChannelLayout,
-    #[cfg(feature = "ffmpeg_7_0")]
+    #[cfg(feature = "ffmpeg7")]
     FlagArray,
     c_ulong,
     bool,
 }
 
-impl From<AVOptionType> for Type {
-    fn from(value: AVOptionType) -> Self {
+impl From<ffi::AVOptionType> for Type {
+    fn from(value: ffi::AVOptionType) -> Self {
         match value {
-            AV_OPT_TYPE_FLAGS => Type::Flags,
-            AV_OPT_TYPE_INT => Type::Int,
-            AV_OPT_TYPE_INT64 => Type::Int64,
-            AV_OPT_TYPE_DOUBLE => Type::Double,
-            AV_OPT_TYPE_FLOAT => Type::Float,
-            AV_OPT_TYPE_STRING => Type::String,
-            AV_OPT_TYPE_RATIONAL => Type::Rational,
-            AV_OPT_TYPE_BINARY => Type::Binary,
-            AV_OPT_TYPE_DICT => Type::Dictionary,
-            AV_OPT_TYPE_CONST => Type::Constant,
-            AV_OPT_TYPE_UINT64 => Type::c_ulong,
-            AV_OPT_TYPE_BOOL => Type::bool,
+            ffi::AV_OPT_TYPE_FLAGS => Type::Flags,
+            ffi::AV_OPT_TYPE_INT => Type::Int,
+            ffi::AV_OPT_TYPE_INT64 => Type::Int64,
+            ffi::AV_OPT_TYPE_DOUBLE => Type::Double,
+            ffi::AV_OPT_TYPE_FLOAT => Type::Float,
+            ffi::AV_OPT_TYPE_STRING => Type::String,
+            ffi::AV_OPT_TYPE_RATIONAL => Type::Rational,
+            ffi::AV_OPT_TYPE_BINARY => Type::Binary,
+            ffi::AV_OPT_TYPE_DICT => Type::Dictionary,
+            ffi::AV_OPT_TYPE_CONST => Type::Constant,
+            ffi::AV_OPT_TYPE_UINT64 => Type::c_ulong,
+            ffi::AV_OPT_TYPE_BOOL => Type::bool,
 
-            AV_OPT_TYPE_IMAGE_SIZE => Type::ImageSize,
-            AV_OPT_TYPE_PIXEL_FMT => Type::PixelFormat,
-            AV_OPT_TYPE_SAMPLE_FMT => Type::SampleFormat,
-            AV_OPT_TYPE_VIDEO_RATE => Type::VideoRate,
-            AV_OPT_TYPE_DURATION => Type::Duration,
-            AV_OPT_TYPE_COLOR => Type::Color,
-            #[cfg(not(feature = "ffmpeg_7_0"))]
-            AV_OPT_TYPE_CHANNEL_LAYOUT => Type::ChannelLayout,
-            #[cfg(feature = "ffmpeg_5_1")]
-            AV_OPT_TYPE_CHLAYOUT => Type::ChannelLayout,
-            #[cfg(feature = "ffmpeg_7_0")]
-            AV_OPT_TYPE_FLAG_ARRAY => Type::FlagArray,
+            ffi::AV_OPT_TYPE_IMAGE_SIZE => Type::ImageSize,
+            ffi::AV_OPT_TYPE_PIXEL_FMT => Type::PixelFormat,
+            ffi::AV_OPT_TYPE_SAMPLE_FMT => Type::SampleFormat,
+            ffi::AV_OPT_TYPE_VIDEO_RATE => Type::VideoRate,
+            ffi::AV_OPT_TYPE_DURATION => Type::Duration,
+            ffi::AV_OPT_TYPE_COLOR => Type::Color,
+            #[cfg(not(feature = "ffmpeg7"))]
+            ffi::AV_OPT_TYPE_CHANNEL_LAYOUT => Type::ChannelLayout,
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AV_OPT_TYPE_FLAG_ARRAY => Type::FlagArray,
+            // non-exhaustive patterns: `0_u32`, `19_u32..=65535_u32` and `65537_u32..=u32::MAX` not covered
+            0_u32 | 19_u32..=65535_u32 | 65537_u32..=u32::MAX => todo!(),
         }
     }
 }
 
-impl From<Type> for AVOptionType {
-    fn from(value: Type) -> AVOptionType {
+impl From<Type> for ffi::AVOptionType {
+    fn from(value: Type) -> ffi::AVOptionType {
         match value {
-            Type::Flags => AV_OPT_TYPE_FLAGS,
-            Type::Int => AV_OPT_TYPE_INT,
-            Type::Int64 => AV_OPT_TYPE_INT64,
-            Type::Double => AV_OPT_TYPE_DOUBLE,
-            Type::Float => AV_OPT_TYPE_FLOAT,
-            Type::String => AV_OPT_TYPE_STRING,
-            Type::Rational => AV_OPT_TYPE_RATIONAL,
-            Type::Binary => AV_OPT_TYPE_BINARY,
-            Type::Dictionary => AV_OPT_TYPE_DICT,
-            Type::Constant => AV_OPT_TYPE_CONST,
-            Type::c_ulong => AV_OPT_TYPE_UINT64,
-            Type::bool => AV_OPT_TYPE_BOOL,
+            Type::Flags => ffi::AV_OPT_TYPE_FLAGS,
+            Type::Int => ffi::AV_OPT_TYPE_INT,
+            Type::Int64 => ffi::AV_OPT_TYPE_INT64,
+            Type::Double => ffi::AV_OPT_TYPE_DOUBLE,
+            Type::Float => ffi::AV_OPT_TYPE_FLOAT,
+            Type::String => ffi::AV_OPT_TYPE_STRING,
+            Type::Rational => ffi::AV_OPT_TYPE_RATIONAL,
+            Type::Binary => ffi::AV_OPT_TYPE_BINARY,
+            Type::Dictionary => ffi::AV_OPT_TYPE_DICT,
+            Type::Constant => ffi::AV_OPT_TYPE_CONST,
+            Type::c_ulong => ffi::AV_OPT_TYPE_UINT64,
+            Type::bool => ffi::AV_OPT_TYPE_BOOL,
 
-            Type::ImageSize => AV_OPT_TYPE_IMAGE_SIZE,
-            Type::PixelFormat => AV_OPT_TYPE_PIXEL_FMT,
-            Type::SampleFormat => AV_OPT_TYPE_SAMPLE_FMT,
-            Type::VideoRate => AV_OPT_TYPE_VIDEO_RATE,
-            Type::Duration => AV_OPT_TYPE_DURATION,
-            Type::Color => AV_OPT_TYPE_COLOR,
-            #[cfg(not(feature = "ffmpeg_7_0"))]
-            Type::ChannelLayout => AV_OPT_TYPE_CHANNEL_LAYOUT,
-            #[cfg(feature = "ffmpeg_7_0")]
-            Type::ChannelLayout => AV_OPT_TYPE_CHLAYOUT,
-            #[cfg(feature = "ffmpeg_7_0")]
-            Type::FlagArray => AV_OPT_TYPE_FLAG_ARRAY,
+            Type::ImageSize => ffi::AV_OPT_TYPE_IMAGE_SIZE,
+            Type::PixelFormat => ffi::AV_OPT_TYPE_PIXEL_FMT,
+            Type::SampleFormat => ffi::AV_OPT_TYPE_SAMPLE_FMT,
+            Type::VideoRate => ffi::AV_OPT_TYPE_VIDEO_RATE,
+            Type::Duration => ffi::AV_OPT_TYPE_DURATION,
+            Type::Color => ffi::AV_OPT_TYPE_COLOR,
+            #[cfg(not(feature = "ffmpeg7"))]
+            Type::ChannelLayout => ffi::AV_OPT_TYPE_CHANNEL_LAYOUT,
+            #[cfg(feature = "ffmpeg7")]
+            Type::ChannelLayout => ffi::AV_OPT_TYPE_CHLAYOUT,
+            #[cfg(feature = "ffmpeg7")]
+            Type::FlagArray => ffi::AV_OPT_TYPE_FLAG_ARRAY,
         }
     }
 }

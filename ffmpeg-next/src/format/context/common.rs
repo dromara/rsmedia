@@ -4,30 +4,37 @@ use std::ptr;
 use std::rc::Rc;
 
 use super::destructor::{self, Destructor};
-use ffi::*;
+use rsmpeg::ffi;
 use libc::{c_int, c_uint};
-use {media, Chapter, ChapterMut, DictionaryRef, Stream, StreamMut};
+use {
+    crate::media,
+    crate::Chapter,
+    crate::ChapterMut,
+    crate::DictionaryRef,
+    crate::Stream,
+    crate::StreamMut,
+};
 
 pub struct Context {
-    ptr: *mut AVFormatContext,
+    ptr: *mut ffi::AVFormatContext,
     dtor: Rc<Destructor>,
 }
 
 unsafe impl Send for Context {}
 
 impl Context {
-    pub unsafe fn wrap(ptr: *mut AVFormatContext, mode: destructor::Mode) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVFormatContext, mode: destructor::Mode) -> Self {
         Context {
             ptr,
             dtor: Rc::new(Destructor::new(ptr, mode)),
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVFormatContext {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVFormatContext {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFormatContext {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFormatContext {
         self.ptr
     }
 
@@ -167,7 +174,7 @@ impl<'a> Best<'a> {
     {
         unsafe {
             let decoder = ptr::null_mut();
-            let index = av_find_best_stream(
+            let index = ffi::av_find_best_stream(
                 self.context.ptr,
                 kind.into(),
                 self.wanted as c_int,

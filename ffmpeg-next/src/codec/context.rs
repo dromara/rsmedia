@@ -4,29 +4,31 @@ use std::rc::Rc;
 
 use super::decoder::Decoder;
 use super::encoder::Encoder;
-use super::{threading, Compliance, Debug, Flags, Id, Parameters};
-use ffi::*;
+use super::{threading, Debug, Flags, Id, Parameters};
+
+use crate::media;
+use {crate::Codec, crate::Error, crate::Rational};
+
+use rsmpeg::ffi;
 use libc::c_int;
-use media;
-use {Codec, Error, Rational};
 
 pub struct Context {
-    ptr: *mut AVCodecContext,
+    ptr: *mut ffi::AVCodecContext,
     owner: Option<Rc<dyn Any>>,
 }
 
 unsafe impl Send for Context {}
 
 impl Context {
-    pub unsafe fn wrap(ptr: *mut AVCodecContext, owner: Option<Rc<dyn Any>>) -> Self {
+    pub unsafe fn wrap(ptr: *mut ffi::AVCodecContext, owner: Option<Rc<dyn Any>>) -> Self {
         Context { ptr, owner }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const AVCodecContext {
+    pub unsafe fn as_ptr(&self) -> *const ffi::AVCodecContext {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVCodecContext {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVCodecContext {
         self.ptr
     }
 }
@@ -35,7 +37,7 @@ impl Context {
     pub fn new() -> Self {
         unsafe {
             Context {
-                ptr: avcodec_alloc_context3(ptr::null()),
+                ptr: ffi::avcodec_alloc_context3(ptr::null()),
                 owner: None,
             }
         }
@@ -44,7 +46,7 @@ impl Context {
     pub fn new_with_codec(codec: Codec) -> Self {
         unsafe {
             Context {
-                ptr: avcodec_alloc_context3(codec.as_ptr()),
+                ptr: ffi::avcodec_alloc_context3(codec.as_ptr()),
                 owner: None,
             }
         }
@@ -55,7 +57,7 @@ impl Context {
         let mut context = Self::new();
 
         unsafe {
-            match avcodec_parameters_to_context(context.as_mut_ptr(), parameters.as_ptr()) {
+            match ffi::avcodec_parameters_to_context(context.as_mut_ptr(), parameters.as_ptr()) {
                 e if e < 0 => Err(Error::from(e)),
                 _ => Ok(context),
             }
@@ -94,11 +96,11 @@ impl Context {
         unsafe { Id::from((*self.as_ptr()).codec_id) }
     }
 
-    pub fn compliance(&mut self, value: Compliance) {
-        unsafe {
-            (*self.as_mut_ptr()).strict_std_compliance = value.into();
-        }
-    }
+    // pub fn compliance(&mut self, value: Compliance) {
+    //     unsafe {
+    //         (*self.as_mut_ptr()).strict_std_compliance = value.into();
+    //     }
+    // }
 
     pub fn debug(&mut self, value: Debug) {
         unsafe {
@@ -110,7 +112,7 @@ impl Context {
         unsafe {
             (*self.as_mut_ptr()).thread_type = config.kind.into();
             (*self.as_mut_ptr()).thread_count = config.count as c_int;
-            #[cfg(not(feature = "ffmpeg_6_0"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             {
                 (*self.as_mut_ptr()).thread_safe_callbacks = if config.safe { 1 } else { 0 };
             }
@@ -122,7 +124,7 @@ impl Context {
             threading::Config {
                 kind: threading::Type::from((*self.as_ptr()).active_thread_type),
                 count: (*self.as_ptr()).thread_count as usize,
-                #[cfg(not(feature = "ffmpeg_6_0"))]
+                #[cfg(not(feature = "ffmpeg7"))]
                 safe: (*self.as_ptr()).thread_safe_callbacks != 0,
             }
         }
@@ -132,7 +134,7 @@ impl Context {
         let parameters = parameters.into();
 
         unsafe {
-            match avcodec_parameters_to_context(self.as_mut_ptr(), parameters.as_ptr()) {
+            match ffi::avcodec_parameters_to_context(self.as_mut_ptr(), parameters.as_ptr()) {
                 e if e < 0 => Err(Error::from(e)),
                 _ => Ok(()),
             }
@@ -175,13 +177,12 @@ impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
             if self.owner.is_none() {
-                avcodec_free_context(&mut self.as_mut_ptr());
+                ffi::avcodec_free_context(&mut self.as_mut_ptr());
             }
         }
     }
 }
 
-#[cfg(not(feature = "ffmpeg_5_0"))]
 impl Clone for Context {
     fn clone(&self) -> Self {
         let mut ctx = Context::new();
@@ -193,7 +194,8 @@ impl Clone for Context {
     fn clone_from(&mut self, source: &Self) {
         unsafe {
             // Removed in ffmpeg >= 5.0.
-            avcodec_copy_context(self.as_mut_ptr(), source.as_ptr());
+            // ffi::avcodec_copy_context(self.as_mut_ptr(), source.as_ptr());
+            todo!("Implement Context::clone_from for ffmpeg < 5.0")
         }
     }
 }

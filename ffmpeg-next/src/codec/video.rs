@@ -1,8 +1,8 @@
 use std::ops::Deref;
 
 use super::codec::Codec;
-use ffi::*;
-use {format, Rational};
+use rsmpeg::ffi;
+use crate::Rational;
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct Video {
@@ -46,11 +46,11 @@ impl Deref for Video {
 }
 
 pub struct RateIter {
-    ptr: *const AVRational,
+    ptr: *const ffi::AVRational,
 }
 
 impl RateIter {
-    pub fn new(ptr: *const AVRational) -> Self {
+    pub fn new(ptr: *const ffi::AVRational) -> Self {
         RateIter { ptr }
     }
 }
@@ -73,21 +73,21 @@ impl Iterator for RateIter {
 }
 
 pub struct FormatIter {
-    ptr: *const AVPixelFormat,
+    ptr: *const ffi::AVPixelFormat,
 }
 
 impl FormatIter {
-    pub fn new(ptr: *const AVPixelFormat) -> Self {
+    pub fn new(ptr: *const ffi::AVPixelFormat) -> Self {
         FormatIter { ptr }
     }
 }
 
 impl Iterator for FormatIter {
-    type Item = format::Pixel;
+    type Item = crate::format::Pixel;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if *self.ptr == AVPixelFormat::AV_PIX_FMT_NONE {
+            if *self.ptr == ffi::AV_PIX_FMT_NONE {
                 return None;
             }
 

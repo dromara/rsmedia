@@ -1,6 +1,6 @@
+use rsmpeg::ffi;
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
-use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Primaries {
@@ -58,7 +58,7 @@ impl From<ffi::AVColorPrimaries> for Primaries {
             ffi::AVCOL_PRI_SMPTE431 => Primaries::SMPTE431,
             ffi::AVCOL_PRI_SMPTE432 => Primaries::SMPTE432,
             ffi::AVCOL_PRI_JEDEC_P22 => Primaries::JEDEC_P22,
-            ffi::AVCOL_PRI_EBU3213 => Primaries::EBU3213,
+            //
             13_u32..=21_u32 | 24_u32..=u32::MAX => todo!(),
         }
     }

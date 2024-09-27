@@ -24,7 +24,7 @@ impl Config {
         }
     }
 
-    #[cfg(not(feature = "ffmpeg6"))]
+    #[cfg(not(feature = "ffmpeg7"))]
     pub fn safe(value: bool) -> Self {
         Config {
             ..Default::default()

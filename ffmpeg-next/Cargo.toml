@@ -28,7 +28,7 @@ default = [
 
 [dependencies]
 libc     = "0.2"
-bitflags = "2.5"
+bitflags = "2.6"
 image    = { version = "0.25", optional = true }
 rsmpeg = { path = "/Users/admin/Workspace/rust/github.com/rsmpeg" }
 

@@ -1424,8 +1424,8 @@ impl From<Id> for AVCodecID {
             Id::MLP => AV_CODEC_ID_MLP,
             Id::GSM_MS => AV_CODEC_ID_GSM_MS,
             Id::ATRAC3 => AV_CODEC_ID_ATRAC3,
-            #[cfg(feature = "ff_api_voxware")]
-            Id::VOXWARE => AV_CODEC_ID_VOXWARE,
+            // #[cfg(feature = "ff_api_voxware")]
+            // Id::VOXWARE => AV_CODEC_ID_VOXWARE,
             Id::APE => AV_CODEC_ID_APE,
             Id::NELLYMOSER => AV_CODEC_ID_NELLYMOSER,
             Id::MUSEPACK8 => AV_CODEC_ID_MUSEPACK8,
@@ -1545,9 +1545,6 @@ impl From<Id> for AVCodecID {
             Id::FITS => AV_CODEC_ID_FITS,
             Id::GREMLIN_DPCM => AV_CODEC_ID_GREMLIN_DPCM,
             Id::DOLBY_E => AV_CODEC_ID_DOLBY_E,
-            _ => {
-                todo!("Not implemented codec id: {}", value.name());
-            }
 
             #[cfg(feature = "ffmpeg6")]
             Id::RADIANCE_HDR => AV_CODEC_ID_RADIANCE_HDR,
@@ -1599,6 +1596,10 @@ impl From<Id> for AVCodecID {
             Id::QOA => AV_CODEC_ID_QOA,
             #[cfg(feature = "ffmpeg7")]
             Id::LEAD => AV_CODEC_ID_LEAD,
+
+            _ => {
+                todo!("Not implemented codec id: {}", value.name());
+            }
         }
     }
 }

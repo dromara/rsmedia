@@ -24,24 +24,10 @@ use rsmpeg::ffi;
 use {crate::Dictionary, crate::Error, crate::Format};
 
 pub fn register_all() {
-    unsafe {
-        // TODO:
-        // ffi::av_register_all();
-    }
-}
-
-pub fn register(format: &Format) {
-    match *format {
-        Format::Input(ref format) => unsafe {
-            // TODO:
-            // ffi::av_register_input_format(format.as_ptr() as *mut _);
-        },
-
-        Format::Output(ref format) => unsafe {
-            // TODO:
-            // ffi::av_register_output_format(format.as_ptr() as *mut _);
-        },
-    }
+    // unsafe {
+    //     // TODO:
+    //     // ffi::av_register_all();
+    // }
 }
 
 pub fn version() -> u32 {

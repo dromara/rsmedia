@@ -675,17 +675,6 @@ impl From<AVPixelFormat> for Pixel {
 
             // non-exhaustive patterns: `i32::MIN..=-2_i32`, `179_i32..=226_i32` and `229_i32..=i32::MAX` not covered
             i32::MIN..=-2_i32 | 179_i32..=226_i32 | 229_i32..=i32::MAX => todo!(),
-
-            #[cfg(feature = "rpi")]
-            AV_PIX_FMT_SAND128 => Pixel::SAND128,
-            #[cfg(feature = "rpi")]
-            AV_PIX_FMT_SAND64_10 => Pixel::SAND64_10,
-            #[cfg(feature = "rpi")]
-            AV_PIX_FMT_SAND64_16 => Pixel::SAND64_16,
-            #[cfg(feature = "rpi")]
-            AV_PIX_FMT_RPI4_8 => Pixel::RPI4_8,
-            #[cfg(feature = "rpi")]
-            AV_PIX_FMT_RPI4_10 => Pixel::RPI4_10,
         }
     }
 }

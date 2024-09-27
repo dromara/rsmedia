@@ -187,15 +187,6 @@ impl Clone for Context {
     fn clone(&self) -> Self {
         let mut ctx = Context::new();
         ctx.clone_from(self);
-
         ctx
-    }
-
-    fn clone_from(&mut self, source: &Self) {
-        unsafe {
-            // Removed in ffmpeg >= 5.0.
-            // ffi::avcodec_copy_context(self.as_mut_ptr(), source.as_ptr());
-            todo!("Implement Context::clone_from for ffmpeg < 5.0")
-        }
     }
 }

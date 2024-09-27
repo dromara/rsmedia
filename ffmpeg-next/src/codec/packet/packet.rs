@@ -120,7 +120,7 @@ impl Packet {
     #[inline]
     pub fn pts(&self) -> Option<i64> {
         match self.0.pts {
-            AV_NOPTS_VALUE => None,
+            ffi::AV_NOPTS_VALUE => None,
             pts => Some(pts),
         }
     }
@@ -133,7 +133,7 @@ impl Packet {
     #[inline]
     pub fn dts(&self) -> Option<i64> {
         match self.0.dts {
-            AV_NOPTS_VALUE => None,
+            ffi::AV_NOPTS_VALUE => None,
             dts => Some(dts),
         }
     }
@@ -178,7 +178,7 @@ impl Packet {
         self.0.pos = value as i64
     }
 
-    #[inline]
+    // #[inline]
     // pub fn convergence(&self) -> isize {
     //     // TODO:
     //     self.0.convergence_duration as isize

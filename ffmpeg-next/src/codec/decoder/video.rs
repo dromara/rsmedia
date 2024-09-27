@@ -1,15 +1,16 @@
 use std::ops::{Deref, DerefMut};
 
-use rsmpeg::ffi;
 use libc::c_int;
 
 use super::{slice, Opened};
-use crate::codec::Context;
-use crate::color;
-use crate::frame;
-use crate::util::{chroma, format};
-use {crate::packet, crate::Error};
-use {crate::FieldOrder, crate::Rational};
+
+use crate::{
+    color,
+    Rational,
+    FieldOrder,
+    codec::Context,
+    util::{chroma, format}
+};
 
 pub struct Video(pub Opened);
 

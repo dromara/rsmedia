@@ -7,7 +7,7 @@ use libc::{c_float, c_int};
 use super::Encoder as Super;
 use super::{Comparison, Decision};
 use crate::codec::{traits, Context};
-use {crate::color, format, crate::Dictionary, crate::Error, crate::Rational};
+use {crate::color, crate::Dictionary, crate::Error, crate::Rational};
 
 pub struct Video(pub Super);
 

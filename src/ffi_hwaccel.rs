@@ -42,9 +42,9 @@ impl Drop for HardwareDeviceContext {
 pub fn hwdevice_list_available_device_types() -> Vec<HardwareAccelerationDeviceType> {
     let mut hwdevice_types = Vec::new();
     let mut hwdevice_type = unsafe {
-        ffmpeg::ffi::av_hwdevice_iterate_types(ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE)
+        ffmpeg::ffi::av_hwdevice_iterate_types(ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE)
     };
-    while hwdevice_type != ffmpeg::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
+    while hwdevice_type != ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE {
         hwdevice_types.push(HardwareAccelerationDeviceType::from(hwdevice_type).unwrap());
         hwdevice_type = unsafe { ffmpeg::ffi::av_hwdevice_iterate_types(hwdevice_type) };
     }
@@ -116,11 +116,11 @@ unsafe extern "C" fn hwaccel_get_format(
     pix_fmts: *const ffmpeg::ffi::AVPixelFormat,
 ) -> ffmpeg::ffi::AVPixelFormat {
     let mut p = pix_fmts;
-    while *p != ffmpeg::ffi::AVPixelFormat::AV_PIX_FMT_NONE {
+    while *p != ffmpeg::ffi::AV_PIX_FMT_NONE {
         if *p == std::mem::transmute::<i32, ffmpeg::ffi::AVPixelFormat>((*ctx).opaque as i32) {
             return *p;
         }
         p = p.add(1);
     }
-    ffmpeg::ffi::AVPixelFormat::AV_PIX_FMT_NONE
+    ffmpeg::ffi::AV_PIX_FMT_NONE
 }

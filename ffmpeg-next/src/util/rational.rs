@@ -53,7 +53,7 @@ impl Rational {
 
     #[inline]
     pub fn invert(&self) -> Rational {
-        unsafe { Rational::from(ffi::av_inv_q((*self).into())) }
+        Rational::from(ffi::av_inv_q((*self).into()))
     }
 }
 
@@ -84,7 +84,7 @@ impl From<f64> for Rational {
 impl From<Rational> for f64 {
     #[inline]
     fn from(value: Rational) -> f64 {
-        unsafe { ffi::av_q2d(value.into()) }
+        ffi::av_q2d(value.into())
     }
 }
 
@@ -123,14 +123,11 @@ impl Eq for Rational {}
 impl PartialOrd for Rational {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        unsafe {
-            match ffi::av_cmp_q((*self).into(), (*other).into()) {
-                0 => Some(Ordering::Equal),
-                1 => Some(Ordering::Greater),
-                -1 => Some(Ordering::Less),
-
-                _ => None,
-            }
+        match ffi::av_cmp_q((*self).into(), (*other).into()) {
+            0 => Some(Ordering::Equal),
+            1 => Some(Ordering::Greater),
+            -1 => Some(Ordering::Less),
+            _ => None,
         }
     }
 }

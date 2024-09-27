@@ -1,19 +1,16 @@
 use std::ops::{Deref, DerefMut};
 
-use rsmpeg::ffi;
-use libc::c_int;
-
 use super::Opened;
-use crate::codec::Context;
-use crate::frame;
-use crate::util::format;
-use {crate::packet, crate::Error};
-use {crate::AudioService, crate::ChannelLayout};
+use crate::{
+    codec::Context,
+    util::format,
+    AudioService,
+    ChannelLayout,
+};
 
 pub struct Audio(pub Opened);
 
 impl Audio {
-
     pub fn rate(&self) -> u32 {
         unsafe { (*self.as_ptr()).sample_rate as u32 }
     }

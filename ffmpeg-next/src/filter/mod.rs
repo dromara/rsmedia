@@ -20,21 +20,22 @@ use rsmpeg::ffi;
 use crate::Error;
 
 pub fn register_all() {
-    unsafe {
-        // TODO:
-        // ffi::avfilter_register_all();
-    }
+    // unsafe {
+    //     // TODO:
+    //     // ffi::avfilter_register_all();
+    // }
 }
 
-pub fn register(filter: &Filter) -> Result<(), Error> {
-    unsafe {
-        // TODO:
-        // match ffi::avfilter_register(filter.as_ptr() as *mut _) {
-        //     0 => Ok(()),
-        //     _ => Err(Error::InvalidData),
-        // }
-        todo!("Not implemented")
-    }
+pub fn register(_filter: &Filter) -> Result<(), Error> {
+    // unsafe {
+    //     // TODO:
+    //     // match ffi::avfilter_register(filter.as_ptr() as *mut _) {
+    //     //     0 => Ok(()),
+    //     //     _ => Err(Error::InvalidData),
+    //     // }
+    //     todo!("Not implemented")
+    // }
+    Ok(())
 }
 
 pub fn version() -> u32 {

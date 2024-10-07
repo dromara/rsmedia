@@ -1,11 +1,9 @@
 extern crate ffmpeg_next as ffmpeg;
 
 use ffmpeg::codec::packet::Packet as AvPacket;
-use ffmpeg::ffi::AV_TIME_BASE_Q;
 use ffmpeg::format::context::{Input as AvInput, Output as AvOutput};
 use ffmpeg::media::Type as AvMediaType;
 use ffmpeg::Error as AvError;
-use ffmpeg_next::ffi::av_seek_frame;
 
 use crate::error::Error;
 use crate::ffi;
@@ -146,9 +144,9 @@ impl Reader {
     /// * `timestamp_milliseconds` - Number of millisecond from start of video to seek to.
     pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
         // Conversion factor from timestamp in milliseconds to `TIME_BASE` units.
-        const CONVERSION_FACTOR: i64 = (AV_TIME_BASE_Q.den / 1000) as i64;
+        const CONVERSION_FACTOR: i64 = (ffmpeg::ffi::AV_TIME_BASE_Q.den / 1000) as i64;
         // One second left and right leeway when seeking.
-        const LEEWAY: i64 = AV_TIME_BASE_Q.den as i64;
+        const LEEWAY: i64 = ffmpeg::ffi::AV_TIME_BASE_Q.den as i64;
 
         let timestamp = CONVERSION_FACTOR * timestamp_milliseconds;
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
@@ -165,7 +163,7 @@ impl Reader {
     /// * `frame_number` - The frame number to seek to.
     pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
         unsafe {
-            match av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
+            match ffmpeg::ffi::av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
                 0 => Ok(()),
                 e => Err(Error::BackendError(AvError::from(e))),
             }

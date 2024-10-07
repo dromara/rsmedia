@@ -1,13 +1,13 @@
 [package]
-name = "video-rs"
+name = "rsmedia"
 description = "High-level video toolkit based on ffmpeg."
 keywords = ["video", "ffmpeg", "encoding", "decoding", "muxing"]
 categories = ["multimedia", "multimedia::video"]
 version = "0.9.0"
-authors = ["Oddity.ai Developers <hello@oddity.ai>"]
-license = "MIT OR Apache-2.0"
 edition = "2021"
+authors = ["Oddity.ai Developers <hello@oddity.ai>"]
 repository = "https://github.com/oddity-ai/video-rs"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]

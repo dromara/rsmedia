@@ -1,12 +1,12 @@
 use std::error::Error;
-use video_rs::decode::Decoder;
-use video_rs::Url;
+use rsmedia::decode::Decoder;
+use url::Url;
 use image::{ImageBuffer, Rgb};
 use tokio::task;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>>  {
-    video_rs::init().unwrap();
+    rsmedia::init()?;
 
     let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4".parse::<Url>().unwrap();
     let mut decoder = Decoder::new(source).expect("failed to create decoder");

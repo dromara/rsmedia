@@ -1,10 +1,10 @@
 use std::path::Path;
 use ndarray::Array3;
-use video_rs::encode::{Encoder, Settings};
-use video_rs::time::Time;
+use rsmedia::encode::{Encoder, Settings};
+use rsmedia::time::Time;
 
 fn main() {
-    video_rs::init().unwrap();
+    rsmedia::init().unwrap();
 
     let settings = Settings::preset_h264_yuv420p(1280, 720, false);
     let mut encoder =

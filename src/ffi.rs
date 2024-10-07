@@ -525,7 +525,7 @@ unsafe extern "C" fn log_callback(
                         ffi::AV_LOG_VERBOSE | ffi::AV_LOG_DEBUG => {
                             tracing::debug!(target: "video", "{}", line)
                         }
-                        AV_LOG_TRACE => tracing::trace!(target: "video", "{}", line),
+                        ffi::AV_LOG_TRACE => tracing::trace!(target: "video", "{}", line),
                         _ => {}
                     };
                 }

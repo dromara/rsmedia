@@ -1,5 +1,5 @@
 /// Re-export [`url::Url`] since it is an input type for callers of the API.
-use url::Url;
+pub use url::Url;
 
 /// Represents a video file or stream location. Can be either a file resource (a path) or a network
 /// resource (a URL).

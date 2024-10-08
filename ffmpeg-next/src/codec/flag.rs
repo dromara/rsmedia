@@ -14,6 +14,8 @@ bitflags! {
         const LOOP_FILTER     = ffi::AV_CODEC_FLAG_LOOP_FILTER;
         const GRAY            = ffi::AV_CODEC_FLAG_GRAY;
         const PSNR            = ffi::AV_CODEC_FLAG_PSNR;
+        // #[cfg(not(feature = "ffmpeg6"))]
+        // const TRUNCATED       = ffi::AV_CODEC_FLAG_TRUNCATED;
         const INTERLACED_DCT  = ffi::AV_CODEC_FLAG_INTERLACED_DCT;
         const LOW_DELAY       = ffi::AV_CODEC_FLAG_LOW_DELAY;
         const GLOBAL_HEADER   = ffi::AV_CODEC_FLAG_GLOBAL_HEADER;

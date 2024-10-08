@@ -2,14 +2,16 @@ use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::slice;
 
-use super::Frame;
-use crate::color;
-use rsmpeg::ffi;
 use libc::c_int;
-use crate::picture;
-use crate::util::chroma;
-use crate::util::format;
-use crate::Rational;
+use rsmpeg::ffi;
+
+use super::Frame;
+use crate::{
+    color,
+    picture,
+    util::{chroma, format},
+    Rational,
+};
 
 #[derive(PartialEq, Eq)]
 pub struct Video(Frame);

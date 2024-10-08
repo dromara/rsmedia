@@ -5,8 +5,11 @@ use rsmpeg::ffi;
 use libc::c_int;
 
 use super::Encoder as Super;
-use crate::codec::{traits, Context};
-use {crate::Dictionary, crate::Error};
+use crate::{
+    codec::{traits, Context},
+    Dictionary,
+    Error
+};
 
 pub struct Subtitle(pub Super);
 

@@ -1,8 +1,9 @@
 use std::ptr;
 
-use super::Context;
 use rsmpeg::ffi;
-use {crate::Error, crate::Frame};
+
+use super::Context;
+use crate::{Error, Frame};
 
 pub struct Source<'a> {
     ctx: &'a mut Context,

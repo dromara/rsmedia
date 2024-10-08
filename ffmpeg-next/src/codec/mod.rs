@@ -8,6 +8,9 @@ pub mod packet;
 
 pub mod subtitle;
 
+// #[cfg(not(feature = "ffmpeg_5_0"))]
+pub mod picture;
+
 pub mod discard;
 
 pub mod context;
@@ -31,6 +34,7 @@ pub mod audio_service;
 pub mod field_order;
 
 pub mod compliance;
+pub use self::compliance::Compliance;
 
 pub mod debug;
 pub use self::debug::Debug;

@@ -12,6 +12,7 @@ impl From<ffi::SwrEngine> for Engine {
             ffi::SWR_ENGINE_SWR => Engine::Software,
             ffi::SWR_ENGINE_SOXR => Engine::SoundExchange,
             ffi::SWR_ENGINE_NB => Engine::Software,
+
             //  non-exhaustive patterns: `3_u32..=u32::MAX` not covered
             3_u32..=u32::MAX => todo!(),
         }

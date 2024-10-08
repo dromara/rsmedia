@@ -21,6 +21,13 @@ pub enum Space {
     ChromaDerivedNCL,
     ChromaDerivedCL,
     ICTCP,
+
+    #[cfg(feature = "ffmpeg7")]
+    IPT_C2,
+    #[cfg(feature = "ffmpeg7")]
+    YCGCO_RE,
+    #[cfg(feature = "ffmpeg7")]
+    YCGCO_RO,
 }
 
 impl Space {
@@ -58,6 +65,14 @@ impl From<ffi::AVColorSpace> for Space {
             ffi::AVCOL_SPC_CHROMA_DERIVED_NCL => Space::ChromaDerivedNCL,
             ffi::AVCOL_SPC_CHROMA_DERIVED_CL => Space::ChromaDerivedCL,
             ffi::AVCOL_SPC_ICTCP => Space::ICTCP,
+
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AVCOL_SPC_IPT_C2 => Space::IPT_C2,
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AVCOL_SPC_YCGCO_RE => Space::YCGCO_RE,
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AVCOL_SPC_YCGCO_RO => Space::YCGCO_RO,
+
             16_u32..=u32::MAX => todo!(),
         }
     }
@@ -82,6 +97,13 @@ impl From<Space> for ffi::AVColorSpace {
             Space::ChromaDerivedNCL => ffi::AVCOL_SPC_CHROMA_DERIVED_NCL,
             Space::ChromaDerivedCL => ffi::AVCOL_SPC_CHROMA_DERIVED_CL,
             Space::ICTCP => ffi::AVCOL_SPC_ICTCP,
+
+            #[cfg(feature = "ffmpeg7")]
+            Space::IPT_C2 => ffi::AVCOL_SPC_IPT_C2,
+            #[cfg(feature = "ffmpeg7")]
+            Space::YCGCO_RE => ffi::AVCOL_SPC_YCGCO_RE,
+            #[cfg(feature = "ffmpeg7")]
+            Space::YCGCO_RO => ffi::AVCOL_SPC_YCGCO_RO,
         }
     }
 }

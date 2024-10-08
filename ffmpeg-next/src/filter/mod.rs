@@ -17,26 +17,23 @@ use std::ffi::{CStr, CString};
 use std::str::from_utf8_unchecked;
 
 use rsmpeg::ffi;
-use crate::Error;
 
+// #[cfg(not(feature = "ffmpeg_5_0"))]
 pub fn register_all() {
     // unsafe {
-    //     // TODO:
-    //     // ffi::avfilter_register_all();
+    //     ffi::av_filter_register_all();
     // }
 }
 
-pub fn register(_filter: &Filter) -> Result<(), Error> {
-    // unsafe {
-    //     // TODO:
-    //     // match ffi::avfilter_register(filter.as_ptr() as *mut _) {
-    //     //     0 => Ok(()),
-    //     //     _ => Err(Error::InvalidData),
-    //     // }
-    //     todo!("Not implemented")
-    // }
-    Ok(())
-}
+// #[cfg(not(feature = "ffmpeg_5_0"))]
+// pub fn register(filter: &Filter) -> Result<(), Error> {
+//     unsafe {
+//         match ffi::avfilter_register(filter.as_ptr() as *mut _) {
+//             0 => Ok(()),
+//             _ => Err(Error::InvalidData),
+//         }
+//     }
+// }
 
 pub fn version() -> u32 {
     unsafe { ffi::avfilter_version() }

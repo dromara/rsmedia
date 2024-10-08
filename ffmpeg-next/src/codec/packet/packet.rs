@@ -2,10 +2,12 @@ use std::marker::PhantomData;
 use std::mem;
 use std::slice;
 
-use super::{Borrow, Flags, Mut, Ref, SideData};
 use rsmpeg::ffi;
 use libc::c_int;
-use {crate::format, crate::Error, crate::Rational};
+
+use super::{Borrow, Flags, Mut, Ref, SideData};
+
+use crate::{format, Error, Rational};
 
 pub struct Packet(ffi::AVPacket);
 
@@ -179,8 +181,8 @@ impl Packet {
     }
 
     // #[inline]
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     // pub fn convergence(&self) -> isize {
-    //     // TODO:
     //     self.0.convergence_duration as isize
     // }
 
@@ -274,6 +276,12 @@ impl Clone for Packet {
 
     #[inline]
     fn clone_from(&mut self, source: &Self) {
+        #[cfg(not(feature = "ffmpeg7"))]
+        unsafe {
+            ffi::av_packet_ref(&mut self.0, &source.0);
+            ffi::av_packet_make_writable(&mut self.0);
+        }
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             ffi::av_packet_copy_props(&mut self.0, &source.0);
         }

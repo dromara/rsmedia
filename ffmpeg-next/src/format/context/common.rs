@@ -6,13 +6,14 @@ use std::rc::Rc;
 use super::destructor::{self, Destructor};
 use rsmpeg::ffi;
 use libc::{c_int, c_uint};
-use {
-    crate::media,
-    crate::Chapter,
-    crate::ChapterMut,
-    crate::DictionaryRef,
-    crate::Stream,
-    crate::StreamMut,
+
+use crate::{
+    media,
+    Chapter,
+    ChapterMut,
+    DictionaryRef,
+    Stream,
+    StreamMut,
 };
 
 pub struct Context {

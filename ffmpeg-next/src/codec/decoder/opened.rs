@@ -1,10 +1,17 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
-use super::{Audio, Decoder, Subtitle, Video};
-use crate::codec::{Context, Profile};
-use {crate::media, crate::packet, crate::Error, crate::Frame, crate::Rational};
 use rsmpeg::ffi;
+
+use super::{Audio, Decoder, Subtitle, Video};
+use crate::{
+    codec::{Context, Profile},
+    media,
+    packet,
+    Error,
+    Frame,
+    Rational,
+};
 
 pub struct Opened(pub Decoder);
 

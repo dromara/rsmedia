@@ -1,13 +1,12 @@
-use std::path::Path;
-
 use std::ffi::{CStr, CString};
+use std::path::Path;
 use std::ptr;
 use std::str::from_utf8_unchecked;
 
-use super::Flags;
-use {crate::codec, crate::media};
-
 use rsmpeg::ffi;
+
+use super::Flags;
+use crate::{codec, media};
 
 pub struct Output {
     ptr: *mut ffi::AVOutputFormat,

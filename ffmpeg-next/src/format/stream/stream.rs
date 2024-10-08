@@ -1,10 +1,14 @@
-use super::Disposition;
-use crate::codec::{self, packet};
-use crate::format::context::common::Context;
-use {crate::DictionaryRef, crate::Discard, crate::Rational};
-
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
+
+use super::Disposition;
+use crate::{
+    codec::{self, packet},
+    format::context::common::Context,
+    DictionaryRef,
+    Discard,
+    Rational
+};
 
 #[derive(Debug)]
 pub struct Stream<'a> {

@@ -1,8 +1,9 @@
 use rsmpeg::ffi;
-use {
-    crate::DictionaryRef,
-    crate::Rational,
-    crate::format::context::common::Context
+
+use crate::{
+    DictionaryRef,
+    Rational,
+    format::context::common::Context
 };
 
 // WARNING: index refers to the offset in the chapters array (starting from 0)

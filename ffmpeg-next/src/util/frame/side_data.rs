@@ -27,11 +27,46 @@ pub enum Type {
     ContentLightLevel,
     IccProfile,
 
-    #[cfg(feature = "ffmpeg6")]
-    AMBIENT_VIEWING_ENVIRONMENT,
+    // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+    QPTableProperties,
+    // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+    QPTableData,
+
+    // #[cfg(feature = "ffmpeg_4_1")]
+    S12M_TIMECODE,
+
+    // #[cfg(feature = "ffmpeg_4_2")]
+    DYNAMIC_HDR_PLUS,
+    // #[cfg(feature = "ffmpeg_4_2")]
+    REGIONS_OF_INTEREST,
+
+    // #[cfg(feature = "ffmpeg_4_3")]
+    VIDEO_ENC_PARAMS,
+
+    // #[cfg(feature = "ffmpeg_4_4")]
+    SEI_UNREGISTERED,
+    // #[cfg(feature = "ffmpeg_4_4")]
+    FILM_GRAIN_PARAMS,
+
+    // #[cfg(feature = "ffmpeg_5_0")]
+    DETECTION_BBOXES,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    DOVI_RPU_BUFFER,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    DOVI_METADATA,
+
+    // #[cfg(feature = "ffmpeg_5_1")]
+    DYNAMIC_HDR_VIVID,
 
     #[cfg(feature = "ffmpeg6")]
+    AMBIENT_VIEWING_ENVIRONMENT,
+    #[cfg(feature = "ffmpeg6")]
     VIDEO_HINT,
+
+    #[cfg(feature = "ffmpeg7")]
+    LCEVC,
+    #[cfg(feature = "ffmpeg7")]
+    VIEW_ID,
 }
 
 impl Type {
@@ -64,14 +99,49 @@ impl From<ffi::AVFrameSideDataType> for Type {
 
             ffi::AV_FRAME_DATA_CONTENT_LIGHT_LEVEL => Type::ContentLightLevel,
             ffi::AV_FRAME_DATA_ICC_PROFILE => Type::IccProfile,
-            //  non-exhaustive patterns: `16_u32..=u32::MAX` not covered
-            16_u32..=u32::MAX => todo!(),
+
+            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_FRAME_DATA_QP_TABLE_PROPERTIES => Type::QPTableProperties,
+            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_FRAME_DATA_QP_TABLE_DATA => Type::QPTableData,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            ffi::AV_FRAME_DATA_S12M_TIMECODE => Type::S12M_TIMECODE,
+
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_FRAME_DATA_DYNAMIC_HDR_PLUS => Type::DYNAMIC_HDR_PLUS,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_FRAME_DATA_REGIONS_OF_INTEREST => Type::REGIONS_OF_INTEREST,
+
+            // #[cfg(feature = "ffmpeg_4_3")]
+            ffi::AV_FRAME_DATA_VIDEO_ENC_PARAMS => Type::VIDEO_ENC_PARAMS,
+
+            // #[cfg(feature = "ffmpeg_4_4")]
+            ffi::AV_FRAME_DATA_SEI_UNREGISTERED => Type::SEI_UNREGISTERED,
+            // #[cfg(feature = "ffmpeg_4_4")]
+            ffi::AV_FRAME_DATA_FILM_GRAIN_PARAMS => Type::FILM_GRAIN_PARAMS,
+
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_FRAME_DATA_DETECTION_BBOXES => Type::DETECTION_BBOXES,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_FRAME_DATA_DOVI_RPU_BUFFER => Type::DOVI_RPU_BUFFER,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_FRAME_DATA_DOVI_METADATA => Type::DOVI_METADATA,
+
+            // #[cfg(feature = "ffmpeg_5_1")]
+            ffi::AV_FRAME_DATA_DYNAMIC_HDR_VIVID => Type::DYNAMIC_HDR_VIVID,
 
             #[cfg(feature = "ffmpeg6")]
             ffi::AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT => Type::AMBIENT_VIEWING_ENVIRONMENT,
-
             #[cfg(feature = "ffmpeg6")]
             ffi::AV_FRAME_DATA_VIDEO_HINT => Type::VIDEO_HINT,
+
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AV_FRAME_DATA_LCEVC => Type::LCEVC,
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AV_FRAME_DATA_VIEW_ID => Type::VIEW_ID,
+
+            //  non-exhaustive patterns: `16_u32..=u32::MAX` not covered
+            16_u32..=u32::MAX => todo!(),
         }
     }
 }
@@ -98,11 +168,45 @@ impl From<Type> for ffi::AVFrameSideDataType {
             Type::ContentLightLevel => ffi::AV_FRAME_DATA_CONTENT_LIGHT_LEVEL,
             Type::IccProfile => ffi::AV_FRAME_DATA_ICC_PROFILE,
 
-            #[cfg(feature = "ffmpeg6")]
-            Type::AMBIENT_VIEWING_ENVIRONMENT => ffi::AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            Type::QPTableProperties => panic!("not implemented"), // ffi::AV_FRAME_DATA_QP_TABLE_PROPERTIES,
+            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            Type::QPTableData => panic!("not implemented"),      // ffi::AV_FRAME_DATA_QP_TABLE_DATA,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            Type::S12M_TIMECODE => ffi::AV_FRAME_DATA_S12M_TIMECODE,
+
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Type::DYNAMIC_HDR_PLUS => ffi::AV_FRAME_DATA_DYNAMIC_HDR_PLUS,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Type::REGIONS_OF_INTEREST => ffi::AV_FRAME_DATA_REGIONS_OF_INTEREST,
+
+            // #[cfg(feature = "ffmpeg_4_3")]
+            Type::VIDEO_ENC_PARAMS => ffi::AV_FRAME_DATA_VIDEO_ENC_PARAMS,
+
+            // #[cfg(feature = "ffmpeg_4_4")]
+            Type::SEI_UNREGISTERED => ffi::AV_FRAME_DATA_SEI_UNREGISTERED,
+            // #[cfg(feature = "ffmpeg_4_4")]
+            Type::FILM_GRAIN_PARAMS => ffi::AV_FRAME_DATA_FILM_GRAIN_PARAMS,
+
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Type::DETECTION_BBOXES => ffi::AV_FRAME_DATA_DETECTION_BBOXES,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Type::DOVI_RPU_BUFFER => ffi::AV_FRAME_DATA_DOVI_RPU_BUFFER,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Type::DOVI_METADATA => ffi::AV_FRAME_DATA_DOVI_METADATA,
+
+            // #[cfg(feature = "ffmpeg_5_1")]
+            Type::DYNAMIC_HDR_VIVID => ffi::AV_FRAME_DATA_DYNAMIC_HDR_VIVID,
 
             #[cfg(feature = "ffmpeg6")]
+            Type::AMBIENT_VIEWING_ENVIRONMENT => ffi::AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+            #[cfg(feature = "ffmpeg6")]
             Type::VIDEO_HINT => ffi::AV_FRAME_DATA_VIDEO_HINT,
+
+            #[cfg(feature = "ffmpeg7")]
+            Type::LCEVC => ffi::AV_FRAME_DATA_LCEVC,
+            #[cfg(feature = "ffmpeg7")]
+            Type::VIEW_ID => ffi::AV_FRAME_DATA_VIEW_ID,
         }
     }
 }

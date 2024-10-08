@@ -18,5 +18,7 @@ bitflags! {
         const CAPTIONS         = ffi::AV_DISPOSITION_CAPTIONS as i32;
         const DESCRIPTIONS     = ffi::AV_DISPOSITION_DESCRIPTIONS as i32;
         const METADATA         = ffi::AV_DISPOSITION_METADATA as i32;
+        #[cfg(feature = "ffmpeg7")]
+        const MULTILAYER       = ffi::AV_DISPOSITION_MULTILAYER as i32;
     }
 }

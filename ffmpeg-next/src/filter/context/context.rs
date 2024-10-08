@@ -1,7 +1,9 @@
 use super::{Sink, Source};
-use rsmpeg::ffi;
+
 use libc::c_void;
-use {crate::option, crate::ChannelLayout};
+use rsmpeg::ffi;
+
+use crate::{option, ChannelLayout};
 
 pub struct Context {
     ptr: *mut ffi::AVFilterContext,

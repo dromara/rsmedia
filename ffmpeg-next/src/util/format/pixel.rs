@@ -2,7 +2,7 @@ use std::error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
 
-use rsmpeg::ffi::{self, *};
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Pixel {
@@ -23,7 +23,9 @@ pub enum Pixel {
     YUVJ420P,
     YUVJ422P,
     YUVJ444P,
+    // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
     XVMC_MPEG2_MC,
+    // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
     XVMC_MPEG2_IDCT,
     UYVY422,
     UYYVYY411,
@@ -46,10 +48,15 @@ pub enum Pixel {
     YUV440P,
     YUVJ440P,
     YUVA420P,
+    // #[cfg(feature = "ff_api_vdpau")]
     VDPAU_H264,
+    // #[cfg(feature = "ff_api_vdpau")]
     VDPAU_MPEG1,
+    // #[cfg(feature = "ff_api_vdpau")]
     VDPAU_MPEG2,
+    // #[cfg(feature = "ff_api_vdpau")]
     VDPAU_WMV3,
+    // #[cfg(feature = "ff_api_vdpau")]
     VDPAU_VC1,
     RGB48BE,
     RGB48LE,
@@ -64,9 +71,13 @@ pub enum Pixel {
     BGR555BE,
     BGR555LE,
 
+    // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
     VAAPI_MOCO,
+    // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
     VAAPI_IDCT,
+    // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
     VAAPI_VLD,
+    // #[cfg(any(not(feature = "ff_api_vaapi"), feature = "ffmpeg_5_0"))]
     VAAPI,
 
     YUV420P16LE,
@@ -75,6 +86,7 @@ pub enum Pixel {
     YUV422P16BE,
     YUV444P16LE,
     YUV444P16BE,
+    // #[cfg(feature = "ff_api_vdpau")]
     VDPAU_MPEG4,
     DXVA2_VLD,
 
@@ -99,6 +111,7 @@ pub enum Pixel {
     YUV444P10LE,
     YUV422P9BE,
     YUV422P9LE,
+    // #[cfg(not(feature = "ffmpeg_4_0"))]
     VDA_VLD,
 
     GBRP,
@@ -143,6 +156,7 @@ pub enum Pixel {
 
     YVYU422,
 
+    // #[cfg(not(feature = "ffmpeg_4_0"))]
     VDA,
 
     YA16BE,
@@ -206,7 +220,7 @@ pub enum Pixel {
     VIDEOTOOLBOX,
 
     // --- defaults
-    #[cfg(all(not(feature = "ffmpeg7")))]
+    // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg7")))]
     XVMC,
 
     RGB32,
@@ -294,19 +308,63 @@ pub enum Pixel {
     GBRAPF32LE,
     DRM_PRIME,
 
+    // #[cfg(feature = "ffmpeg_4_0")]
     OPENCL,
 
+    // #[cfg(feature = "ffmpeg_4_1")]
     GRAY14BE,
+    // #[cfg(feature = "ffmpeg_4_1")]
     GRAY14LE,
+    // #[cfg(feature = "ffmpeg_4_1")]
     GRAYF32BE,
+    // #[cfg(feature = "ffmpeg_4_1")]
     GRAYF32LE,
 
+    // #[cfg(feature = "ffmpeg_4_2")]
     YUVA422P12BE,
+    // #[cfg(feature = "ffmpeg_4_2")]
     YUVA422P12LE,
+    // #[cfg(feature = "ffmpeg_4_2")]
     YUVA444P12BE,
+    // #[cfg(feature = "ffmpeg_4_2")]
     YUVA444P12LE,
+    // #[cfg(feature = "ffmpeg_4_2")]
     NV24,
+    // #[cfg(feature = "ffmpeg_4_2")]
     NV42,
+
+    // #[cfg(feature = "ffmpeg_4_3")]
+    VULKAN,
+    // #[cfg(feature = "ffmpeg_4_3")]
+    Y210BE,
+    // #[cfg(feature = "ffmpeg_4_3")]
+    Y210LE,
+
+    // #[cfg(feature = "ffmpeg_4_4")]
+    X2RGB10LE,
+    // #[cfg(feature = "ffmpeg_4_4")]
+    X2RGB10BE,
+
+    // #[cfg(feature = "ffmpeg_5_0")]
+    X2BGR10LE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    X2BGR10BE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P210BE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P210LE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P410BE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P410LE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P216BE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P216LE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P416BE,
+    // #[cfg(feature = "ffmpeg_5_0")]
+    P416LE,
 
     #[cfg(feature = "ffmpeg6")]
     VUYA,
@@ -356,11 +414,22 @@ pub enum Pixel {
 
     #[cfg(feature = "ffmpeg7")]
     D3D12,
+
+    // #[cfg(feature = "rpi")]
+    SAND128,
+    // #[cfg(feature = "rpi")]
+    SAND64_10,
+    // #[cfg(feature = "rpi")]
+    SAND64_16,
+    // #[cfg(feature = "rpi")]
+    RPI4_8,
+    // #[cfg(feature = "rpi")]
+    RPI4_10,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Descriptor {
-    ptr: *const AVPixFmtDescriptor,
+    ptr: *const ffi::AVPixFmtDescriptor,
 }
 
 unsafe impl Send for Descriptor {}
@@ -370,11 +439,12 @@ impl Pixel {
     pub const Y400A: Pixel = Pixel::YA8;
     pub const GRAY8A: Pixel = Pixel::YA8;
     pub const GBR24P: Pixel = Pixel::GBRP;
+    // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
     pub const XVMC: Pixel = Pixel::XVMC_MPEG2_IDCT;
 
     pub fn descriptor(self) -> Option<Descriptor> {
         unsafe {
-            let ptr = av_pix_fmt_desc_get(self.into());
+            let ptr = ffi::av_pix_fmt_desc_get(self.into());
 
             ptr.as_ref().map(|ptr| Descriptor { ptr })
         }
@@ -382,7 +452,7 @@ impl Pixel {
 }
 
 impl Descriptor {
-    pub fn as_ptr(self) -> *const AVPixFmtDescriptor {
+    pub fn as_ptr(self) -> *const ffi::AVPixFmtDescriptor {
         self.ptr
     }
 
@@ -403,625 +473,798 @@ impl Descriptor {
     }
 }
 
-impl From<AVPixelFormat> for Pixel {
+impl From<ffi::AVPixelFormat> for Pixel {
     #[inline]
-    fn from(value: AVPixelFormat) -> Self {
+    fn from(value: ffi::AVPixelFormat) -> Self {
         match value {
-            AV_PIX_FMT_NONE => Pixel::None,
+            ffi::AV_PIX_FMT_NONE => Pixel::None,
 
-            AV_PIX_FMT_YUV420P => Pixel::YUV420P,
-            AV_PIX_FMT_YUYV422 => Pixel::YUYV422,
-            AV_PIX_FMT_RGB24 => Pixel::RGB24,
-            AV_PIX_FMT_BGR24 => Pixel::BGR24,
-            AV_PIX_FMT_YUV422P => Pixel::YUV422P,
-            AV_PIX_FMT_YUV444P => Pixel::YUV444P,
-            AV_PIX_FMT_YUV410P => Pixel::YUV410P,
-            AV_PIX_FMT_YUV411P => Pixel::YUV411P,
-            AV_PIX_FMT_GRAY8 => Pixel::GRAY8,
-            AV_PIX_FMT_MONOWHITE => Pixel::MonoWhite,
-            AV_PIX_FMT_MONOBLACK => Pixel::MonoBlack,
-            AV_PIX_FMT_PAL8 => Pixel::PAL8,
-            AV_PIX_FMT_YUVJ420P => Pixel::YUVJ420P,
-            AV_PIX_FMT_YUVJ422P => Pixel::YUVJ422P,
-            AV_PIX_FMT_YUVJ444P => Pixel::YUVJ444P,
+            ffi::AV_PIX_FMT_YUV420P => Pixel::YUV420P,
+            ffi::AV_PIX_FMT_YUYV422 => Pixel::YUYV422,
+            ffi::AV_PIX_FMT_RGB24 => Pixel::RGB24,
+            ffi::AV_PIX_FMT_BGR24 => Pixel::BGR24,
+            ffi::AV_PIX_FMT_YUV422P => Pixel::YUV422P,
+            ffi::AV_PIX_FMT_YUV444P => Pixel::YUV444P,
+            ffi::AV_PIX_FMT_YUV410P => Pixel::YUV410P,
+            ffi::AV_PIX_FMT_YUV411P => Pixel::YUV411P,
+            ffi::AV_PIX_FMT_GRAY8 => Pixel::GRAY8,
+            ffi::AV_PIX_FMT_MONOWHITE => Pixel::MonoWhite,
+            ffi::AV_PIX_FMT_MONOBLACK => Pixel::MonoBlack,
+            ffi::AV_PIX_FMT_PAL8 => Pixel::PAL8,
+            ffi::AV_PIX_FMT_YUVJ420P => Pixel::YUVJ420P,
+            ffi::AV_PIX_FMT_YUVJ422P => Pixel::YUVJ422P,
+            ffi::AV_PIX_FMT_YUVJ444P => Pixel::YUVJ444P,
+            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg7")))]
+            // ffi::AV_PIX_FMT_XVMC => Pixel::XVMC,
+            // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_PIX_FMT_XVMC_MPEG2_MC => Pixel::XVMC_MPEG2_MC,
+            // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_PIX_FMT_XVMC_MPEG2_IDCT => Pixel::XVMC_MPEG2_IDCT,
+            ffi::AV_PIX_FMT_UYVY422 => Pixel::UYVY422,
+            ffi::AV_PIX_FMT_UYYVYY411 => Pixel::UYYVYY411,
+            ffi::AV_PIX_FMT_BGR8 => Pixel::BGR8,
+            ffi::AV_PIX_FMT_BGR4 => Pixel::BGR4,
+            ffi::AV_PIX_FMT_BGR4_BYTE => Pixel::BGR4_BYTE,
+            ffi::AV_PIX_FMT_RGB8 => Pixel::RGB8,
+            ffi::AV_PIX_FMT_RGB4 => Pixel::RGB4,
+            ffi::AV_PIX_FMT_RGB4_BYTE => Pixel::RGB4_BYTE,
+            ffi::AV_PIX_FMT_NV12 => Pixel::NV12,
+            ffi::AV_PIX_FMT_NV21 => Pixel::NV21,
 
+            ffi::AV_PIX_FMT_ARGB => Pixel::ARGB,
+            ffi::AV_PIX_FMT_RGBA => Pixel::RGBA,
+            ffi::AV_PIX_FMT_ABGR => Pixel::ABGR,
+            ffi::AV_PIX_FMT_BGRA => Pixel::BGRA,
 
-            AV_PIX_FMT_UYVY422 => Pixel::UYVY422,
-            AV_PIX_FMT_UYYVYY411 => Pixel::UYYVYY411,
-            AV_PIX_FMT_BGR8 => Pixel::BGR8,
-            AV_PIX_FMT_BGR4 => Pixel::BGR4,
-            AV_PIX_FMT_BGR4_BYTE => Pixel::BGR4_BYTE,
-            AV_PIX_FMT_RGB8 => Pixel::RGB8,
-            AV_PIX_FMT_RGB4 => Pixel::RGB4,
-            AV_PIX_FMT_RGB4_BYTE => Pixel::RGB4_BYTE,
-            AV_PIX_FMT_NV12 => Pixel::NV12,
-            AV_PIX_FMT_NV21 => Pixel::NV21,
+            ffi::AV_PIX_FMT_GRAY16BE => Pixel::GRAY16BE,
+            ffi::AV_PIX_FMT_GRAY16LE => Pixel::GRAY16LE,
+            ffi::AV_PIX_FMT_YUV440P => Pixel::YUV440P,
+            ffi::AV_PIX_FMT_YUVJ440P => Pixel::YUVJ440P,
+            ffi::AV_PIX_FMT_YUVA420P => Pixel::YUVA420P,
+            // #[cfg(feature = "ff_api_vdpau")]
+            // ffi::AV_PIX_FMT_VDPAU_H264 => Pixel::VDPAU_H264,
+            // #[cfg(feature = "ff_api_vdpau")]
+            // ffi::AV_PIX_FMT_VDPAU_MPEG1 => Pixel::VDPAU_MPEG1,
+            // #[cfg(feature = "ff_api_vdpau")]
+            // ffi::AV_PIX_FMT_VDPAU_MPEG2 => Pixel::VDPAU_MPEG2,
+            // #[cfg(feature = "ff_api_vdpau")]
+            // ffi::AV_PIX_FMT_VDPAU_WMV3 => Pixel::VDPAU_WMV3,
+            // #[cfg(feature = "ff_api_vdpau")]
+            // ffi::AV_PIX_FMT_VDPAU_VC1 => Pixel::VDPAU_VC1,
+            ffi::AV_PIX_FMT_RGB48BE => Pixel::RGB48BE,
+            ffi::AV_PIX_FMT_RGB48LE => Pixel::RGB48LE,
 
-            AV_PIX_FMT_ARGB => Pixel::ARGB,
-            AV_PIX_FMT_RGBA => Pixel::RGBA,
-            AV_PIX_FMT_ABGR => Pixel::ABGR,
-            AV_PIX_FMT_BGRA => Pixel::BGRA,
+            ffi::AV_PIX_FMT_RGB565BE => Pixel::RGB565BE,
+            ffi::AV_PIX_FMT_RGB565LE => Pixel::RGB565LE,
+            ffi::AV_PIX_FMT_RGB555BE => Pixel::RGB555BE,
+            ffi::AV_PIX_FMT_RGB555LE => Pixel::RGB555LE,
 
-            AV_PIX_FMT_GRAY16BE => Pixel::GRAY16BE,
-            AV_PIX_FMT_GRAY16LE => Pixel::GRAY16LE,
-            AV_PIX_FMT_YUV440P => Pixel::YUV440P,
-            AV_PIX_FMT_YUVJ440P => Pixel::YUVJ440P,
-            AV_PIX_FMT_YUVA420P => Pixel::YUVA420P,
+            ffi::AV_PIX_FMT_BGR565BE => Pixel::BGR565BE,
+            ffi::AV_PIX_FMT_BGR565LE => Pixel::BGR565LE,
+            ffi::AV_PIX_FMT_BGR555BE => Pixel::BGR555BE,
+            ffi::AV_PIX_FMT_BGR555LE => Pixel::BGR555LE,
 
-            AV_PIX_FMT_RGB48BE => Pixel::RGB48BE,
-            AV_PIX_FMT_RGB48LE => Pixel::RGB48LE,
+            // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_PIX_FMT_VAAPI_MOCO => Pixel::VAAPI_MOCO,
+            // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_PIX_FMT_VAAPI_IDCT => Pixel::VAAPI_IDCT,
+            // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
+            // ffi::AV_PIX_FMT_VAAPI_VLD => Pixel::VAAPI_VLD,
+            // #[cfg(any(not(feature = "ff_api_vaapi"), feature = "ffmpeg_5_0"))]
+            // ffi::AV_PIX_FMT_VAAPI => Pixel::VAAPI,
 
-            AV_PIX_FMT_RGB565BE => Pixel::RGB565BE,
-            AV_PIX_FMT_RGB565LE => Pixel::RGB565LE,
-            AV_PIX_FMT_RGB555BE => Pixel::RGB555BE,
-            AV_PIX_FMT_RGB555LE => Pixel::RGB555LE,
+            ffi::AV_PIX_FMT_YUV420P16LE => Pixel::YUV420P16LE,
+            ffi::AV_PIX_FMT_YUV420P16BE => Pixel::YUV420P16BE,
+            ffi::AV_PIX_FMT_YUV422P16LE => Pixel::YUV422P16LE,
+            ffi::AV_PIX_FMT_YUV422P16BE => Pixel::YUV422P16BE,
+            ffi::AV_PIX_FMT_YUV444P16LE => Pixel::YUV444P16LE,
+            ffi::AV_PIX_FMT_YUV444P16BE => Pixel::YUV444P16BE,
+            // #[cfg(feature = "ff_api_vdpau")]
+            // ffi::AV_PIX_FMT_VDPAU_MPEG4 => Pixel::VDPAU_MPEG4,
+            ffi::AV_PIX_FMT_DXVA2_VLD => Pixel::DXVA2_VLD,
 
-            AV_PIX_FMT_BGR565BE => Pixel::BGR565BE,
-            AV_PIX_FMT_BGR565LE => Pixel::BGR565LE,
-            AV_PIX_FMT_BGR555BE => Pixel::BGR555BE,
-            AV_PIX_FMT_BGR555LE => Pixel::BGR555LE,
+            ffi::AV_PIX_FMT_RGB444LE => Pixel::RGB444LE,
+            ffi::AV_PIX_FMT_RGB444BE => Pixel::RGB444BE,
+            ffi::AV_PIX_FMT_BGR444LE => Pixel::BGR444LE,
+            ffi::AV_PIX_FMT_BGR444BE => Pixel::BGR444BE,
+            ffi::AV_PIX_FMT_YA8 => Pixel::YA8,
 
-            // AV_PIX_FMT_VAAPI_MOCO => Pixel::VAAPI_MOCO,
-            // AV_PIX_FMT_VAAPI_IDCT => Pixel::VAAPI_IDCT,
-            // AV_PIX_FMT_VAAPI_VLD => Pixel::VAAPI_VLD,
-            AV_PIX_FMT_VAAPI => Pixel::VAAPI,
+            ffi::AV_PIX_FMT_BGR48BE => Pixel::BGR48BE,
+            ffi::AV_PIX_FMT_BGR48LE => Pixel::BGR48LE,
 
-            AV_PIX_FMT_YUV420P16LE => Pixel::YUV420P16LE,
-            AV_PIX_FMT_YUV420P16BE => Pixel::YUV420P16BE,
-            AV_PIX_FMT_YUV422P16LE => Pixel::YUV422P16LE,
-            AV_PIX_FMT_YUV422P16BE => Pixel::YUV422P16BE,
-            AV_PIX_FMT_YUV444P16LE => Pixel::YUV444P16LE,
-            AV_PIX_FMT_YUV444P16BE => Pixel::YUV444P16BE,
-            // AV_PIX_FMT_VDPAU_MPEG4 => Pixel::VDPAU_MPEG4,
-            AV_PIX_FMT_DXVA2_VLD => Pixel::DXVA2_VLD,
+            ffi::AV_PIX_FMT_YUV420P9BE => Pixel::YUV420P9BE,
+            ffi::AV_PIX_FMT_YUV420P9LE => Pixel::YUV420P9LE,
+            ffi::AV_PIX_FMT_YUV420P10BE => Pixel::YUV420P10BE,
+            ffi::AV_PIX_FMT_YUV420P10LE => Pixel::YUV420P10LE,
+            ffi::AV_PIX_FMT_YUV422P10BE => Pixel::YUV422P10BE,
+            ffi::AV_PIX_FMT_YUV422P10LE => Pixel::YUV422P10LE,
+            ffi::AV_PIX_FMT_YUV444P9BE => Pixel::YUV444P9BE,
+            ffi::AV_PIX_FMT_YUV444P9LE => Pixel::YUV444P9LE,
+            ffi::AV_PIX_FMT_YUV444P10BE => Pixel::YUV444P10BE,
+            ffi::AV_PIX_FMT_YUV444P10LE => Pixel::YUV444P10LE,
+            ffi::AV_PIX_FMT_YUV422P9BE => Pixel::YUV422P9BE,
+            ffi::AV_PIX_FMT_YUV422P9LE => Pixel::YUV422P9LE,
+            // #[cfg(not(feature = "ffmpeg_4_0"))]
+            // ffi::AV_PIX_FMT_VDA_VLD => Pixel::VDA_VLD,
 
-            AV_PIX_FMT_RGB444LE => Pixel::RGB444LE,
-            AV_PIX_FMT_RGB444BE => Pixel::RGB444BE,
-            AV_PIX_FMT_BGR444LE => Pixel::BGR444LE,
-            AV_PIX_FMT_BGR444BE => Pixel::BGR444BE,
-            AV_PIX_FMT_YA8 => Pixel::YA8,
+            ffi::AV_PIX_FMT_GBRP => Pixel::GBRP,
+            ffi::AV_PIX_FMT_GBRP9BE => Pixel::GBRP9BE,
+            ffi::AV_PIX_FMT_GBRP9LE => Pixel::GBRP9LE,
+            ffi::AV_PIX_FMT_GBRP10BE => Pixel::GBRP10BE,
+            ffi::AV_PIX_FMT_GBRP10LE => Pixel::GBRP10LE,
+            ffi::AV_PIX_FMT_GBRP16BE => Pixel::GBRP16BE,
+            ffi::AV_PIX_FMT_GBRP16LE => Pixel::GBRP16LE,
 
-            AV_PIX_FMT_BGR48BE => Pixel::BGR48BE,
-            AV_PIX_FMT_BGR48LE => Pixel::BGR48LE,
+            ffi::AV_PIX_FMT_YUVA420P9BE => Pixel::YUVA420P9BE,
+            ffi::AV_PIX_FMT_YUVA420P9LE => Pixel::YUVA420P9LE,
+            ffi::AV_PIX_FMT_YUVA422P9BE => Pixel::YUVA422P9BE,
+            ffi::AV_PIX_FMT_YUVA422P9LE => Pixel::YUVA422P9LE,
+            ffi::AV_PIX_FMT_YUVA444P9BE => Pixel::YUVA444P9BE,
+            ffi::AV_PIX_FMT_YUVA444P9LE => Pixel::YUVA444P9LE,
+            ffi::AV_PIX_FMT_YUVA420P10BE => Pixel::YUVA420P10BE,
+            ffi::AV_PIX_FMT_YUVA420P10LE => Pixel::YUVA420P10LE,
+            ffi::AV_PIX_FMT_YUVA422P10BE => Pixel::YUVA422P10BE,
+            ffi::AV_PIX_FMT_YUVA422P10LE => Pixel::YUVA422P10LE,
+            ffi::AV_PIX_FMT_YUVA444P10BE => Pixel::YUVA444P10BE,
+            ffi::AV_PIX_FMT_YUVA444P10LE => Pixel::YUVA444P10LE,
+            ffi::AV_PIX_FMT_YUVA420P16BE => Pixel::YUVA420P16BE,
+            ffi::AV_PIX_FMT_YUVA420P16LE => Pixel::YUVA420P16LE,
+            ffi::AV_PIX_FMT_YUVA422P16BE => Pixel::YUVA422P16BE,
+            ffi::AV_PIX_FMT_YUVA422P16LE => Pixel::YUVA422P16LE,
+            ffi::AV_PIX_FMT_YUVA444P16BE => Pixel::YUVA444P16BE,
+            ffi::AV_PIX_FMT_YUVA444P16LE => Pixel::YUVA444P16LE,
 
-            AV_PIX_FMT_YUV420P9BE => Pixel::YUV420P9BE,
-            AV_PIX_FMT_YUV420P9LE => Pixel::YUV420P9LE,
-            AV_PIX_FMT_YUV420P10BE => Pixel::YUV420P10BE,
-            AV_PIX_FMT_YUV420P10LE => Pixel::YUV420P10LE,
-            AV_PIX_FMT_YUV422P10BE => Pixel::YUV422P10BE,
-            AV_PIX_FMT_YUV422P10LE => Pixel::YUV422P10LE,
-            AV_PIX_FMT_YUV444P9BE => Pixel::YUV444P9BE,
-            AV_PIX_FMT_YUV444P9LE => Pixel::YUV444P9LE,
-            AV_PIX_FMT_YUV444P10BE => Pixel::YUV444P10BE,
-            AV_PIX_FMT_YUV444P10LE => Pixel::YUV444P10LE,
-            AV_PIX_FMT_YUV422P9BE => Pixel::YUV422P9BE,
-            AV_PIX_FMT_YUV422P9LE => Pixel::YUV422P9LE,
+            ffi::AV_PIX_FMT_VDPAU => Pixel::VDPAU,
 
-            AV_PIX_FMT_GBRP => Pixel::GBRP,
-            AV_PIX_FMT_GBRP9BE => Pixel::GBRP9BE,
-            AV_PIX_FMT_GBRP9LE => Pixel::GBRP9LE,
-            AV_PIX_FMT_GBRP10BE => Pixel::GBRP10BE,
-            AV_PIX_FMT_GBRP10LE => Pixel::GBRP10LE,
-            AV_PIX_FMT_GBRP16BE => Pixel::GBRP16BE,
-            AV_PIX_FMT_GBRP16LE => Pixel::GBRP16LE,
+            ffi::AV_PIX_FMT_XYZ12LE => Pixel::XYZ12LE,
+            ffi::AV_PIX_FMT_XYZ12BE => Pixel::XYZ12BE,
+            ffi::AV_PIX_FMT_NV16 => Pixel::NV16,
+            ffi::AV_PIX_FMT_NV20LE => Pixel::NV20LE,
+            ffi::AV_PIX_FMT_NV20BE => Pixel::NV20BE,
 
-            AV_PIX_FMT_YUVA420P9BE => Pixel::YUVA420P9BE,
-            AV_PIX_FMT_YUVA420P9LE => Pixel::YUVA420P9LE,
-            AV_PIX_FMT_YUVA422P9BE => Pixel::YUVA422P9BE,
-            AV_PIX_FMT_YUVA422P9LE => Pixel::YUVA422P9LE,
-            AV_PIX_FMT_YUVA444P9BE => Pixel::YUVA444P9BE,
-            AV_PIX_FMT_YUVA444P9LE => Pixel::YUVA444P9LE,
-            AV_PIX_FMT_YUVA420P10BE => Pixel::YUVA420P10BE,
-            AV_PIX_FMT_YUVA420P10LE => Pixel::YUVA420P10LE,
-            AV_PIX_FMT_YUVA422P10BE => Pixel::YUVA422P10BE,
-            AV_PIX_FMT_YUVA422P10LE => Pixel::YUVA422P10LE,
-            AV_PIX_FMT_YUVA444P10BE => Pixel::YUVA444P10BE,
-            AV_PIX_FMT_YUVA444P10LE => Pixel::YUVA444P10LE,
-            AV_PIX_FMT_YUVA420P16BE => Pixel::YUVA420P16BE,
-            AV_PIX_FMT_YUVA420P16LE => Pixel::YUVA420P16LE,
-            AV_PIX_FMT_YUVA422P16BE => Pixel::YUVA422P16BE,
-            AV_PIX_FMT_YUVA422P16LE => Pixel::YUVA422P16LE,
-            AV_PIX_FMT_YUVA444P16BE => Pixel::YUVA444P16BE,
-            AV_PIX_FMT_YUVA444P16LE => Pixel::YUVA444P16LE,
+            ffi::AV_PIX_FMT_RGBA64BE => Pixel::RGBA64BE,
+            ffi::AV_PIX_FMT_RGBA64LE => Pixel::RGBA64LE,
+            ffi::AV_PIX_FMT_BGRA64BE => Pixel::BGRA64BE,
+            ffi::AV_PIX_FMT_BGRA64LE => Pixel::BGRA64LE,
 
-            AV_PIX_FMT_VDPAU => Pixel::VDPAU,
+            ffi::AV_PIX_FMT_YVYU422 => Pixel::YVYU422,
 
-            AV_PIX_FMT_XYZ12LE => Pixel::XYZ12LE,
-            AV_PIX_FMT_XYZ12BE => Pixel::XYZ12BE,
-            AV_PIX_FMT_NV16 => Pixel::NV16,
-            AV_PIX_FMT_NV20LE => Pixel::NV20LE,
-            AV_PIX_FMT_NV20BE => Pixel::NV20BE,
+            // #[cfg(not(feature = "ffmpeg_4_0"))]
+            // ffi::AV_PIX_FMT_VDA => Pixel::VDA,
 
-            AV_PIX_FMT_RGBA64BE => Pixel::RGBA64BE,
-            AV_PIX_FMT_RGBA64LE => Pixel::RGBA64LE,
-            AV_PIX_FMT_BGRA64BE => Pixel::BGRA64BE,
-            AV_PIX_FMT_BGRA64LE => Pixel::BGRA64LE,
+            ffi::AV_PIX_FMT_YA16BE => Pixel::YA16BE,
+            ffi::AV_PIX_FMT_YA16LE => Pixel::YA16LE,
 
-            AV_PIX_FMT_YVYU422 => Pixel::YVYU422,
+            ffi::AV_PIX_FMT_QSV => Pixel::QSV,
+            ffi::AV_PIX_FMT_MMAL => Pixel::MMAL,
 
-            AV_PIX_FMT_YA16BE => Pixel::YA16BE,
-            AV_PIX_FMT_YA16LE => Pixel::YA16LE,
+            ffi::AV_PIX_FMT_D3D11VA_VLD => Pixel::D3D11VA_VLD,
 
-            AV_PIX_FMT_QSV => Pixel::QSV,
-            AV_PIX_FMT_MMAL => Pixel::MMAL,
+            ffi::AV_PIX_FMT_CUDA => Pixel::CUDA,
 
-            AV_PIX_FMT_D3D11VA_VLD => Pixel::D3D11VA_VLD,
+            ffi::AV_PIX_FMT_0RGB => Pixel::ZRGB,
+            ffi::AV_PIX_FMT_RGB0 => Pixel::RGBZ,
+            ffi::AV_PIX_FMT_0BGR => Pixel::ZBGR,
+            ffi::AV_PIX_FMT_BGR0 => Pixel::BGRZ,
+            ffi::AV_PIX_FMT_YUVA444P => Pixel::YUVA444P,
+            ffi::AV_PIX_FMT_YUVA422P => Pixel::YUVA422P,
 
-            AV_PIX_FMT_CUDA => Pixel::CUDA,
+            ffi::AV_PIX_FMT_YUV420P12BE => Pixel::YUV420P12BE,
+            ffi::AV_PIX_FMT_YUV420P12LE => Pixel::YUV420P12LE,
+            ffi::AV_PIX_FMT_YUV420P14BE => Pixel::YUV420P14BE,
+            ffi::AV_PIX_FMT_YUV420P14LE => Pixel::YUV420P14LE,
+            ffi::AV_PIX_FMT_YUV422P12BE => Pixel::YUV422P12BE,
+            ffi::AV_PIX_FMT_YUV422P12LE => Pixel::YUV422P12LE,
+            ffi::AV_PIX_FMT_YUV422P14BE => Pixel::YUV422P14BE,
+            ffi::AV_PIX_FMT_YUV422P14LE => Pixel::YUV422P14LE,
+            ffi::AV_PIX_FMT_YUV444P12BE => Pixel::YUV444P12BE,
+            ffi::AV_PIX_FMT_YUV444P12LE => Pixel::YUV444P12LE,
+            ffi::AV_PIX_FMT_YUV444P14BE => Pixel::YUV444P14BE,
+            ffi::AV_PIX_FMT_YUV444P14LE => Pixel::YUV444P14LE,
+            ffi::AV_PIX_FMT_GBRP12BE => Pixel::GBRP12BE,
+            ffi::AV_PIX_FMT_GBRP12LE => Pixel::GBRP12LE,
+            ffi::AV_PIX_FMT_GBRP14BE => Pixel::GBRP14BE,
+            ffi::AV_PIX_FMT_GBRP14LE => Pixel::GBRP14LE,
+            ffi::AV_PIX_FMT_GBRAP => Pixel::GBRAP,
+            ffi::AV_PIX_FMT_GBRAP16BE => Pixel::GBRAP16BE,
+            ffi::AV_PIX_FMT_GBRAP16LE => Pixel::GBRAP16LE,
+            ffi::AV_PIX_FMT_YUVJ411P => Pixel::YUVJ411P,
 
-            AV_PIX_FMT_0RGB => Pixel::ZRGB,
-            AV_PIX_FMT_RGB0 => Pixel::RGBZ,
-            AV_PIX_FMT_0BGR => Pixel::ZBGR,
-            AV_PIX_FMT_BGR0 => Pixel::BGRZ,
-            AV_PIX_FMT_YUVA444P => Pixel::YUVA444P,
-            AV_PIX_FMT_YUVA422P => Pixel::YUVA422P,
+            ffi::AV_PIX_FMT_BAYER_BGGR8 => Pixel::BAYER_BGGR8,
+            ffi::AV_PIX_FMT_BAYER_RGGB8 => Pixel::BAYER_RGGB8,
+            ffi::AV_PIX_FMT_BAYER_GBRG8 => Pixel::BAYER_GBRG8,
+            ffi::AV_PIX_FMT_BAYER_GRBG8 => Pixel::BAYER_GRBG8,
+            ffi::AV_PIX_FMT_BAYER_BGGR16LE => Pixel::BAYER_BGGR16LE,
+            ffi::AV_PIX_FMT_BAYER_BGGR16BE => Pixel::BAYER_BGGR16BE,
+            ffi::AV_PIX_FMT_BAYER_RGGB16LE => Pixel::BAYER_RGGB16LE,
+            ffi::AV_PIX_FMT_BAYER_RGGB16BE => Pixel::BAYER_RGGB16BE,
+            ffi::AV_PIX_FMT_BAYER_GBRG16LE => Pixel::BAYER_GBRG16LE,
+            ffi::AV_PIX_FMT_BAYER_GBRG16BE => Pixel::BAYER_GBRG16BE,
+            ffi::AV_PIX_FMT_BAYER_GRBG16LE => Pixel::BAYER_GRBG16LE,
+            ffi::AV_PIX_FMT_BAYER_GRBG16BE => Pixel::BAYER_GRBG16BE,
 
-            AV_PIX_FMT_YUV420P12BE => Pixel::YUV420P12BE,
-            AV_PIX_FMT_YUV420P12LE => Pixel::YUV420P12LE,
-            AV_PIX_FMT_YUV420P14BE => Pixel::YUV420P14BE,
-            AV_PIX_FMT_YUV420P14LE => Pixel::YUV420P14LE,
-            AV_PIX_FMT_YUV422P12BE => Pixel::YUV422P12BE,
-            AV_PIX_FMT_YUV422P12LE => Pixel::YUV422P12LE,
-            AV_PIX_FMT_YUV422P14BE => Pixel::YUV422P14BE,
-            AV_PIX_FMT_YUV422P14LE => Pixel::YUV422P14LE,
-            AV_PIX_FMT_YUV444P12BE => Pixel::YUV444P12BE,
-            AV_PIX_FMT_YUV444P12LE => Pixel::YUV444P12LE,
-            AV_PIX_FMT_YUV444P14BE => Pixel::YUV444P14BE,
-            AV_PIX_FMT_YUV444P14LE => Pixel::YUV444P14LE,
-            AV_PIX_FMT_GBRP12BE => Pixel::GBRP12BE,
-            AV_PIX_FMT_GBRP12LE => Pixel::GBRP12LE,
-            AV_PIX_FMT_GBRP14BE => Pixel::GBRP14BE,
-            AV_PIX_FMT_GBRP14LE => Pixel::GBRP14LE,
-            AV_PIX_FMT_GBRAP => Pixel::GBRAP,
-            AV_PIX_FMT_GBRAP16BE => Pixel::GBRAP16BE,
-            AV_PIX_FMT_GBRAP16LE => Pixel::GBRAP16LE,
-            AV_PIX_FMT_YUVJ411P => Pixel::YUVJ411P,
+            ffi::AV_PIX_FMT_YUV440P10LE => Pixel::YUV440P10LE,
+            ffi::AV_PIX_FMT_YUV440P10BE => Pixel::YUV440P10BE,
+            ffi::AV_PIX_FMT_YUV440P12LE => Pixel::YUV440P12LE,
+            ffi::AV_PIX_FMT_YUV440P12BE => Pixel::YUV440P12BE,
+            ffi::AV_PIX_FMT_AYUV64LE => Pixel::AYUV64LE,
+            ffi::AV_PIX_FMT_AYUV64BE => Pixel::AYUV64BE,
 
-            AV_PIX_FMT_BAYER_BGGR8 => Pixel::BAYER_BGGR8,
-            AV_PIX_FMT_BAYER_RGGB8 => Pixel::BAYER_RGGB8,
-            AV_PIX_FMT_BAYER_GBRG8 => Pixel::BAYER_GBRG8,
-            AV_PIX_FMT_BAYER_GRBG8 => Pixel::BAYER_GRBG8,
-            AV_PIX_FMT_BAYER_BGGR16LE => Pixel::BAYER_BGGR16LE,
-            AV_PIX_FMT_BAYER_BGGR16BE => Pixel::BAYER_BGGR16BE,
-            AV_PIX_FMT_BAYER_RGGB16LE => Pixel::BAYER_RGGB16LE,
-            AV_PIX_FMT_BAYER_RGGB16BE => Pixel::BAYER_RGGB16BE,
-            AV_PIX_FMT_BAYER_GBRG16LE => Pixel::BAYER_GBRG16LE,
-            AV_PIX_FMT_BAYER_GBRG16BE => Pixel::BAYER_GBRG16BE,
-            AV_PIX_FMT_BAYER_GRBG16LE => Pixel::BAYER_GRBG16LE,
-            AV_PIX_FMT_BAYER_GRBG16BE => Pixel::BAYER_GRBG16BE,
+            ffi::AV_PIX_FMT_VIDEOTOOLBOX => Pixel::VIDEOTOOLBOX,
 
-            AV_PIX_FMT_YUV440P10LE => Pixel::YUV440P10LE,
-            AV_PIX_FMT_YUV440P10BE => Pixel::YUV440P10BE,
-            AV_PIX_FMT_YUV440P12LE => Pixel::YUV440P12LE,
-            AV_PIX_FMT_YUV440P12BE => Pixel::YUV440P12BE,
-            AV_PIX_FMT_AYUV64LE => Pixel::AYUV64LE,
-            AV_PIX_FMT_AYUV64BE => Pixel::AYUV64BE,
+            ffi::AV_PIX_FMT_P010LE => Pixel::P010LE,
+            ffi::AV_PIX_FMT_P010BE => Pixel::P010BE,
+            ffi::AV_PIX_FMT_GBRAP12BE => Pixel::GBRAP12BE,
+            ffi::AV_PIX_FMT_GBRAP12LE => Pixel::GBRAP12LE,
+            ffi::AV_PIX_FMT_GBRAP10LE => Pixel::GBRAP10LE,
+            ffi::AV_PIX_FMT_GBRAP10BE => Pixel::GBRAP10BE,
+            ffi::AV_PIX_FMT_MEDIACODEC => Pixel::MEDIACODEC,
+            ffi::AV_PIX_FMT_GRAY12BE => Pixel::GRAY12BE,
+            ffi::AV_PIX_FMT_GRAY12LE => Pixel::GRAY12LE,
+            ffi::AV_PIX_FMT_GRAY10BE => Pixel::GRAY10BE,
+            ffi::AV_PIX_FMT_GRAY10LE => Pixel::GRAY10LE,
+            ffi::AV_PIX_FMT_P016LE => Pixel::P016LE,
+            ffi::AV_PIX_FMT_P016BE => Pixel::P016BE,
 
-            AV_PIX_FMT_VIDEOTOOLBOX => Pixel::VIDEOTOOLBOX,
+            ffi::AV_PIX_FMT_NB => Pixel::None,
 
-            AV_PIX_FMT_P010LE => Pixel::P010LE,
-            AV_PIX_FMT_P010BE => Pixel::P010BE,
-            AV_PIX_FMT_GBRAP12BE => Pixel::GBRAP12BE,
-            AV_PIX_FMT_GBRAP12LE => Pixel::GBRAP12LE,
-            AV_PIX_FMT_GBRAP10LE => Pixel::GBRAP10LE,
-            AV_PIX_FMT_GBRAP10BE => Pixel::GBRAP10BE,
-            AV_PIX_FMT_MEDIACODEC => Pixel::MEDIACODEC,
-            AV_PIX_FMT_GRAY12BE => Pixel::GRAY12BE,
-            AV_PIX_FMT_GRAY12LE => Pixel::GRAY12LE,
-            AV_PIX_FMT_GRAY10BE => Pixel::GRAY10BE,
-            AV_PIX_FMT_GRAY10LE => Pixel::GRAY10LE,
-            AV_PIX_FMT_P016LE => Pixel::P016LE,
-            AV_PIX_FMT_P016BE => Pixel::P016BE,
+            ffi::AV_PIX_FMT_D3D11 => Pixel::D3D11,
+            ffi::AV_PIX_FMT_GRAY9BE => Pixel::GRAY9BE,
+            ffi::AV_PIX_FMT_GRAY9LE => Pixel::GRAY9LE,
+            ffi::AV_PIX_FMT_GBRPF32BE => Pixel::GBRPF32BE,
+            ffi::AV_PIX_FMT_GBRPF32LE => Pixel::GBRPF32LE,
+            ffi::AV_PIX_FMT_GBRAPF32BE => Pixel::GBRAPF32BE,
+            ffi::AV_PIX_FMT_GBRAPF32LE => Pixel::GBRAPF32LE,
+            ffi::AV_PIX_FMT_DRM_PRIME => Pixel::DRM_PRIME,
 
-            AV_PIX_FMT_NB => Pixel::None,
+            // #[cfg(feature = "ffmpeg_4_0")]
+            ffi::AV_PIX_FMT_OPENCL => Pixel::OPENCL,
 
-            AV_PIX_FMT_D3D11 => Pixel::D3D11,
-            AV_PIX_FMT_GRAY9BE => Pixel::GRAY9BE,
-            AV_PIX_FMT_GRAY9LE => Pixel::GRAY9LE,
-            AV_PIX_FMT_GBRPF32BE => Pixel::GBRPF32BE,
-            AV_PIX_FMT_GBRPF32LE => Pixel::GBRPF32LE,
-            AV_PIX_FMT_GBRAPF32BE => Pixel::GBRAPF32BE,
-            AV_PIX_FMT_GBRAPF32LE => Pixel::GBRAPF32LE,
-            AV_PIX_FMT_DRM_PRIME => Pixel::DRM_PRIME,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            ffi::AV_PIX_FMT_GRAY14BE => Pixel::GRAY14BE,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            ffi::AV_PIX_FMT_GRAY14LE => Pixel::GRAY14LE,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            ffi::AV_PIX_FMT_GRAYF32BE => Pixel::GRAYF32BE,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            ffi::AV_PIX_FMT_GRAYF32LE => Pixel::GRAYF32LE,
+
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_PIX_FMT_YUVA422P12BE => Pixel::YUVA422P12BE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_PIX_FMT_YUVA422P12LE => Pixel::YUVA422P12LE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_PIX_FMT_YUVA444P12BE => Pixel::YUVA444P12BE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_PIX_FMT_YUVA444P12LE => Pixel::YUVA444P12LE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_PIX_FMT_NV24 => Pixel::NV24,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            ffi::AV_PIX_FMT_NV42 => Pixel::NV42,
+
+            // #[cfg(feature = "ffmpeg_4_3")]
+            ffi::AV_PIX_FMT_VULKAN => Pixel::VULKAN,
+            // #[cfg(feature = "ffmpeg_4_3")]
+            ffi::AV_PIX_FMT_Y210BE => Pixel::Y210BE,
+            // #[cfg(feature = "ffmpeg_4_3")]
+            ffi::AV_PIX_FMT_Y210LE => Pixel::Y210LE,
+
+            // #[cfg(feature = "ffmpeg_4_4")]
+            ffi::AV_PIX_FMT_X2RGB10LE => Pixel::X2RGB10LE,
+            // #[cfg(feature = "ffmpeg_4_4")]
+            ffi::AV_PIX_FMT_X2RGB10BE => Pixel::X2RGB10BE,
+
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_X2BGR10LE => Pixel::X2BGR10LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_X2BGR10BE => Pixel::X2BGR10BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P210BE => Pixel::P210BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P210LE => Pixel::P210LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P410BE => Pixel::P410BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P410LE => Pixel::P410LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P216BE => Pixel::P216BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P216LE => Pixel::P216LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P416BE => Pixel::P416BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            ffi::AV_PIX_FMT_P416LE => Pixel::P416LE,
 
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_VUYA => Pixel::VUYA,
+            ffi::AV_PIX_FMT_VUYA => Pixel::VUYA,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_RGBAF16BE => Pixel::RGBAF16BE,
+            ffi::AV_PIX_FMT_RGBAF16BE => Pixel::RGBAF16BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_RGBAF16LE => Pixel::RGBAF16LE,
+            ffi::AV_PIX_FMT_RGBAF16LE => Pixel::RGBAF16LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_VUYX => Pixel::VUYX,
+            ffi::AV_PIX_FMT_VUYX => Pixel::VUYX,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_P012LE => Pixel::P012LE,
+            ffi::AV_PIX_FMT_P012LE => Pixel::P012LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_P012BE => Pixel::P012BE,
+            ffi::AV_PIX_FMT_P012BE => Pixel::P012BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_Y212BE => Pixel::Y212BE,
+            ffi::AV_PIX_FMT_Y212BE => Pixel::Y212BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_Y212LE => Pixel::Y212LE,
+            ffi::AV_PIX_FMT_Y212LE => Pixel::Y212LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_XV30BE => Pixel::XV30BE,
+            ffi::AV_PIX_FMT_XV30BE => Pixel::XV30BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_XV30LE => Pixel::XV30LE,
+            ffi::AV_PIX_FMT_XV30LE => Pixel::XV30LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_XV36BE => Pixel::XV36BE,
+            ffi::AV_PIX_FMT_XV36BE => Pixel::XV36BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_XV36LE => Pixel::XV36LE,
+            ffi::AV_PIX_FMT_XV36LE => Pixel::XV36LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_RGBF32BE => Pixel::RGBF32BE,
+            ffi::AV_PIX_FMT_RGBF32BE => Pixel::RGBF32BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_RGBF32LE => Pixel::RGBF32LE,
+            ffi::AV_PIX_FMT_RGBF32LE => Pixel::RGBF32LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_RGBAF32BE => Pixel::RGBAF32BE,
+            ffi::AV_PIX_FMT_RGBAF32BE => Pixel::RGBAF32BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_RGBAF32LE => Pixel::RGBAF32LE,
+            ffi::AV_PIX_FMT_RGBAF32LE => Pixel::RGBAF32LE,
 
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_P212BE => Pixel::P212BE,
+            ffi::AV_PIX_FMT_P212BE => Pixel::P212BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_P212LE => Pixel::P212LE,
+            ffi::AV_PIX_FMT_P212LE => Pixel::P212LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_P412BE => Pixel::P412BE,
+            ffi::AV_PIX_FMT_P412BE => Pixel::P412BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_P412LE => Pixel::P412LE,
+            ffi::AV_PIX_FMT_P412LE => Pixel::P412LE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_GBRAP14BE => Pixel::GBRAP14BE,
+            ffi::AV_PIX_FMT_GBRAP14BE => Pixel::GBRAP14BE,
             #[cfg(feature = "ffmpeg6")]
-            AV_PIX_FMT_GBRAP14LE => Pixel::GBRAP14LE,
+            ffi::AV_PIX_FMT_GBRAP14LE => Pixel::GBRAP14LE,
 
             #[cfg(feature = "ffmpeg7")]
-            AV_PIX_FMT_D3D12 => Pixel::D3D12,
+            ffi::AV_PIX_FMT_D3D12 => Pixel::D3D12,
 
-            // non-exhaustive patterns: `i32::MIN..=-2_i32`, `179_i32..=226_i32` and `229_i32..=i32::MAX` not covered
-            i32::MIN..=-2_i32 | 179_i32..=226_i32 | 229_i32..=i32::MAX => todo!(),
+            // #[cfg(feature = "rpi")]
+            // ffi::AV_PIX_FMT_SAND128 => Pixel::SAND128,
+            // #[cfg(feature = "rpi")]
+            // ffi::AV_PIX_FMT_SAND64_10 => Pixel::SAND64_10,
+            // #[cfg(feature = "rpi")]
+            // ffi::AV_PIX_FMT_SAND64_16 => Pixel::SAND64_16,
+            // #[cfg(feature = "rpi")]
+            // ffi::AV_PIX_FMT_RPI4_8 => Pixel::RPI4_8,
+            // #[cfg(feature = "rpi")]
+            // ffi::AV_PIX_FMT_RPI4_10 => Pixel::RPI4_10,
+
+            _ => panic!("Unsupported pixel type"),
         }
     }
 }
 
-impl From<Pixel> for AVPixelFormat {
+impl From<Pixel> for ffi::AVPixelFormat {
     #[inline]
-    fn from(value: Pixel) -> AVPixelFormat {
+    fn from(value: Pixel) -> ffi::AVPixelFormat {
         match value {
-            Pixel::None => AV_PIX_FMT_NONE,
+            Pixel::None => ffi::AV_PIX_FMT_NONE,
 
-            Pixel::YUV420P => AV_PIX_FMT_YUV420P,
-            Pixel::YUYV422 => AV_PIX_FMT_YUYV422,
-            Pixel::RGB24 => AV_PIX_FMT_RGB24,
-            Pixel::BGR24 => AV_PIX_FMT_BGR24,
-            Pixel::YUV422P => AV_PIX_FMT_YUV422P,
-            Pixel::YUV444P => AV_PIX_FMT_YUV444P,
-            Pixel::YUV410P => AV_PIX_FMT_YUV410P,
-            Pixel::YUV411P => AV_PIX_FMT_YUV411P,
-            Pixel::GRAY8 => AV_PIX_FMT_GRAY8,
-            Pixel::MonoWhite => AV_PIX_FMT_MONOWHITE,
-            Pixel::MonoBlack => AV_PIX_FMT_MONOBLACK,
-            Pixel::PAL8 => AV_PIX_FMT_PAL8,
-            Pixel::YUVJ420P => AV_PIX_FMT_YUVJ420P,
-            Pixel::YUVJ422P => AV_PIX_FMT_YUVJ422P,
-            Pixel::YUVJ444P => AV_PIX_FMT_YUVJ444P,
+            Pixel::YUV420P => ffi::AV_PIX_FMT_YUV420P,
+            Pixel::YUYV422 => ffi::AV_PIX_FMT_YUYV422,
+            Pixel::RGB24 => ffi::AV_PIX_FMT_RGB24,
+            Pixel::BGR24 => ffi::AV_PIX_FMT_BGR24,
+            Pixel::YUV422P => ffi::AV_PIX_FMT_YUV422P,
+            Pixel::YUV444P => ffi::AV_PIX_FMT_YUV444P,
+            Pixel::YUV410P => ffi::AV_PIX_FMT_YUV410P,
+            Pixel::YUV411P => ffi::AV_PIX_FMT_YUV411P,
+            Pixel::GRAY8 => ffi::AV_PIX_FMT_GRAY8,
+            Pixel::MonoWhite => ffi::AV_PIX_FMT_MONOWHITE,
+            Pixel::MonoBlack => ffi::AV_PIX_FMT_MONOBLACK,
+            Pixel::PAL8 => ffi::AV_PIX_FMT_PAL8,
+            Pixel::YUVJ420P => ffi::AV_PIX_FMT_YUVJ420P,
+            Pixel::YUVJ422P => ffi::AV_PIX_FMT_YUVJ422P,
+            Pixel::YUVJ444P => ffi::AV_PIX_FMT_YUVJ444P,
+            // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
+            Pixel::XVMC_MPEG2_MC => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_XVMC_MPEG2_MC,
+            // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
+            Pixel::XVMC_MPEG2_IDCT => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_XVMC_MPEG2_IDCT,
+            Pixel::UYVY422 => ffi::AV_PIX_FMT_UYVY422,
+            Pixel::UYYVYY411 => ffi::AV_PIX_FMT_UYYVYY411,
+            Pixel::BGR8 => ffi::AV_PIX_FMT_BGR8,
+            Pixel::BGR4 => ffi::AV_PIX_FMT_BGR4,
+            Pixel::BGR4_BYTE => ffi::AV_PIX_FMT_BGR4_BYTE,
+            Pixel::RGB8 => ffi::AV_PIX_FMT_RGB8,
+            Pixel::RGB4 => ffi::AV_PIX_FMT_RGB4,
+            Pixel::RGB4_BYTE => ffi::AV_PIX_FMT_RGB4_BYTE,
+            Pixel::NV12 => ffi::AV_PIX_FMT_NV12,
+            Pixel::NV21 => ffi::AV_PIX_FMT_NV21,
 
-            Pixel::UYVY422 => AV_PIX_FMT_UYVY422,
-            Pixel::UYYVYY411 => AV_PIX_FMT_UYYVYY411,
-            Pixel::BGR8 => AV_PIX_FMT_BGR8,
-            Pixel::BGR4 => AV_PIX_FMT_BGR4,
-            Pixel::BGR4_BYTE => AV_PIX_FMT_BGR4_BYTE,
-            Pixel::RGB8 => AV_PIX_FMT_RGB8,
-            Pixel::RGB4 => AV_PIX_FMT_RGB4,
-            Pixel::RGB4_BYTE => AV_PIX_FMT_RGB4_BYTE,
-            Pixel::NV12 => AV_PIX_FMT_NV12,
-            Pixel::NV21 => AV_PIX_FMT_NV21,
+            Pixel::ARGB => ffi::AV_PIX_FMT_ARGB,
+            Pixel::RGBA => ffi::AV_PIX_FMT_RGBA,
+            Pixel::ABGR => ffi::AV_PIX_FMT_ABGR,
+            Pixel::BGRA => ffi::AV_PIX_FMT_BGRA,
 
-            Pixel::ARGB => AV_PIX_FMT_ARGB,
-            Pixel::RGBA => AV_PIX_FMT_RGBA,
-            Pixel::ABGR => AV_PIX_FMT_ABGR,
-            Pixel::BGRA => AV_PIX_FMT_BGRA,
+            Pixel::GRAY16BE => ffi::AV_PIX_FMT_GRAY16BE,
+            Pixel::GRAY16LE => ffi::AV_PIX_FMT_GRAY16LE,
+            Pixel::YUV440P => ffi::AV_PIX_FMT_YUV440P,
+            Pixel::YUVJ440P => ffi::AV_PIX_FMT_YUVJ440P,
+            Pixel::YUVA420P => ffi::AV_PIX_FMT_YUVA420P,
+            // #[cfg(feature = "ff_api_vdpau")]
+            Pixel::VDPAU_H264 => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VDPAU_H264,
+            // #[cfg(feature = "ff_api_vdpau")]
+            Pixel::VDPAU_MPEG1 => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VDPAU_MPEG1,
+            // #[cfg(feature = "ff_api_vdpau")]
+            Pixel::VDPAU_MPEG2 => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VDPAU_MPEG2,
+            // #[cfg(feature = "ff_api_vdpau")]
+            Pixel::VDPAU_WMV3 => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VDPAU_WMV3,
+            // #[cfg(feature = "ff_api_vdpau")]
+            Pixel::VDPAU_VC1 => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VDPAU_VC1,
+            Pixel::RGB48BE => ffi::AV_PIX_FMT_RGB48BE,
+            Pixel::RGB48LE => ffi::AV_PIX_FMT_RGB48LE,
 
-            Pixel::GRAY16BE => AV_PIX_FMT_GRAY16BE,
-            Pixel::GRAY16LE => AV_PIX_FMT_GRAY16LE,
-            Pixel::YUV440P => AV_PIX_FMT_YUV440P,
-            Pixel::YUVJ440P => AV_PIX_FMT_YUVJ440P,
-            Pixel::YUVA420P => AV_PIX_FMT_YUVA420P,
-            // Pixel::VDPAU_H264 => AV_PIX_FMT_VDPAU_H264,
-            // Pixel::VDPAU_MPEG1 => AV_PIX_FMT_VDPAU_MPEG1,
-            // Pixel::VDPAU_MPEG2 => AV_PIX_FMT_VDPAU_MPEG2,
-            // Pixel::VDPAU_WMV3 => AV_PIX_FMT_VDPAU_WMV3,
-            // Pixel::VDPAU_VC1 => AV_PIX_FMT_VDPAU_VC1,
-            Pixel::RGB48BE => AV_PIX_FMT_RGB48BE,
-            Pixel::RGB48LE => AV_PIX_FMT_RGB48LE,
+            Pixel::RGB565BE => ffi::AV_PIX_FMT_RGB565BE,
+            Pixel::RGB565LE => ffi::AV_PIX_FMT_RGB565LE,
+            Pixel::RGB555BE => ffi::AV_PIX_FMT_RGB555BE,
+            Pixel::RGB555LE => ffi::AV_PIX_FMT_RGB555LE,
 
-            Pixel::RGB565BE => AV_PIX_FMT_RGB565BE,
-            Pixel::RGB565LE => AV_PIX_FMT_RGB565LE,
-            Pixel::RGB555BE => AV_PIX_FMT_RGB555BE,
-            Pixel::RGB555LE => AV_PIX_FMT_RGB555LE,
+            Pixel::BGR565BE => ffi::AV_PIX_FMT_BGR565BE,
+            Pixel::BGR565LE => ffi::AV_PIX_FMT_BGR565LE,
+            Pixel::BGR555BE => ffi::AV_PIX_FMT_BGR555BE,
+            Pixel::BGR555LE => ffi::AV_PIX_FMT_BGR555LE,
 
-            Pixel::BGR565BE => AV_PIX_FMT_BGR565BE,
-            Pixel::BGR565LE => AV_PIX_FMT_BGR565LE,
-            Pixel::BGR555BE => AV_PIX_FMT_BGR555BE,
-            Pixel::BGR555LE => AV_PIX_FMT_BGR555LE,
+            // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
+            Pixel::VAAPI_MOCO => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VAAPI_MOCO,
+            // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
+            Pixel::VAAPI_IDCT => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VAAPI_IDCT,
+            // #[cfg(all(feature = "ff_api_vaapi", not(feature = "ffmpeg_5_0")))]
+            Pixel::VAAPI_VLD => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VAAPI_VLD,
+            // #[cfg(not(feature = "ff_api_vaapi"))]
+            Pixel::VAAPI => ffi::AV_PIX_FMT_VAAPI,
 
-            Pixel::VAAPI => AV_PIX_FMT_VAAPI,
+            Pixel::YUV420P16LE => ffi::AV_PIX_FMT_YUV420P16LE,
+            Pixel::YUV420P16BE => ffi::AV_PIX_FMT_YUV420P16BE,
+            Pixel::YUV422P16LE => ffi::AV_PIX_FMT_YUV422P16LE,
+            Pixel::YUV422P16BE => ffi::AV_PIX_FMT_YUV422P16BE,
+            Pixel::YUV444P16LE => ffi::AV_PIX_FMT_YUV444P16LE,
+            Pixel::YUV444P16BE => ffi::AV_PIX_FMT_YUV444P16BE,
+            // #[cfg(feature = "ff_api_vdpau")]
+            Pixel::VDPAU_MPEG4 => panic!("Unsupported pixel type"), // ffi::AV_PIX_FMT_VDPAU_MPEG4,
+            Pixel::DXVA2_VLD => ffi::AV_PIX_FMT_DXVA2_VLD,
 
-            Pixel::YUV420P16LE => AV_PIX_FMT_YUV420P16LE,
-            Pixel::YUV420P16BE => AV_PIX_FMT_YUV420P16BE,
-            Pixel::YUV422P16LE => AV_PIX_FMT_YUV422P16LE,
-            Pixel::YUV422P16BE => AV_PIX_FMT_YUV422P16BE,
-            Pixel::YUV444P16LE => AV_PIX_FMT_YUV444P16LE,
-            Pixel::YUV444P16BE => AV_PIX_FMT_YUV444P16BE,
-            Pixel::DXVA2_VLD => AV_PIX_FMT_DXVA2_VLD,
+            Pixel::RGB444LE => ffi::AV_PIX_FMT_RGB444LE,
+            Pixel::RGB444BE => ffi::AV_PIX_FMT_RGB444BE,
+            Pixel::BGR444LE => ffi::AV_PIX_FMT_BGR444LE,
+            Pixel::BGR444BE => ffi::AV_PIX_FMT_BGR444BE,
+            Pixel::YA8 => ffi::AV_PIX_FMT_YA8,
 
-            Pixel::RGB444LE => AV_PIX_FMT_RGB444LE,
-            Pixel::RGB444BE => AV_PIX_FMT_RGB444BE,
-            Pixel::BGR444LE => AV_PIX_FMT_BGR444LE,
-            Pixel::BGR444BE => AV_PIX_FMT_BGR444BE,
-            Pixel::YA8 => AV_PIX_FMT_YA8,
+            Pixel::BGR48BE => ffi::AV_PIX_FMT_BGR48BE,
+            Pixel::BGR48LE => ffi::AV_PIX_FMT_BGR48LE,
 
-            Pixel::BGR48BE => AV_PIX_FMT_BGR48BE,
-            Pixel::BGR48LE => AV_PIX_FMT_BGR48LE,
+            Pixel::YUV420P9BE => ffi::AV_PIX_FMT_YUV420P9BE,
+            Pixel::YUV420P9LE => ffi::AV_PIX_FMT_YUV420P9LE,
+            Pixel::YUV420P10BE => ffi::AV_PIX_FMT_YUV420P10BE,
+            Pixel::YUV420P10LE => ffi::AV_PIX_FMT_YUV420P10LE,
+            Pixel::YUV422P10BE => ffi::AV_PIX_FMT_YUV422P10BE,
+            Pixel::YUV422P10LE => ffi::AV_PIX_FMT_YUV422P10LE,
+            Pixel::YUV444P9BE => ffi::AV_PIX_FMT_YUV444P9BE,
+            Pixel::YUV444P9LE => ffi::AV_PIX_FMT_YUV444P9LE,
+            Pixel::YUV444P10BE => ffi::AV_PIX_FMT_YUV444P10BE,
+            Pixel::YUV444P10LE => ffi::AV_PIX_FMT_YUV444P10LE,
+            Pixel::YUV422P9BE => ffi::AV_PIX_FMT_YUV422P9BE,
+            Pixel::YUV422P9LE => ffi::AV_PIX_FMT_YUV422P9LE,
+            #[cfg(not(feature = "ffmpeg7"))]
+            Pixel::VDA_VLD => ffi::AV_PIX_FMT_VDA_VLD,
 
-            Pixel::YUV420P9BE => AV_PIX_FMT_YUV420P9BE,
-            Pixel::YUV420P9LE => AV_PIX_FMT_YUV420P9LE,
-            Pixel::YUV420P10BE => AV_PIX_FMT_YUV420P10BE,
-            Pixel::YUV420P10LE => AV_PIX_FMT_YUV420P10LE,
-            Pixel::YUV422P10BE => AV_PIX_FMT_YUV422P10BE,
-            Pixel::YUV422P10LE => AV_PIX_FMT_YUV422P10LE,
-            Pixel::YUV444P9BE => AV_PIX_FMT_YUV444P9BE,
-            Pixel::YUV444P9LE => AV_PIX_FMT_YUV444P9LE,
-            Pixel::YUV444P10BE => AV_PIX_FMT_YUV444P10BE,
-            Pixel::YUV444P10LE => AV_PIX_FMT_YUV444P10LE,
-            Pixel::YUV422P9BE => AV_PIX_FMT_YUV422P9BE,
-            Pixel::YUV422P9LE => AV_PIX_FMT_YUV422P9LE,
+            Pixel::GBRP => ffi::AV_PIX_FMT_GBRP,
+            Pixel::GBRP9BE => ffi::AV_PIX_FMT_GBRP9BE,
+            Pixel::GBRP9LE => ffi::AV_PIX_FMT_GBRP9LE,
+            Pixel::GBRP10BE => ffi::AV_PIX_FMT_GBRP10BE,
+            Pixel::GBRP10LE => ffi::AV_PIX_FMT_GBRP10LE,
+            Pixel::GBRP16BE => ffi::AV_PIX_FMT_GBRP16BE,
+            Pixel::GBRP16LE => ffi::AV_PIX_FMT_GBRP16LE,
 
-            // TODO:
-            // #[cfg(not(feature = "ffmpeg_4_0"))]
-            Pixel::VDA_VLD => -1, // AV_PIX_FMT_VDA_VLD,
+            Pixel::YUVA420P9BE => ffi::AV_PIX_FMT_YUVA420P9BE,
+            Pixel::YUVA420P9LE => ffi::AV_PIX_FMT_YUVA420P9LE,
+            Pixel::YUVA422P9BE => ffi::AV_PIX_FMT_YUVA422P9BE,
+            Pixel::YUVA422P9LE => ffi::AV_PIX_FMT_YUVA422P9LE,
+            Pixel::YUVA444P9BE => ffi::AV_PIX_FMT_YUVA444P9BE,
+            Pixel::YUVA444P9LE => ffi::AV_PIX_FMT_YUVA444P9LE,
+            Pixel::YUVA420P10BE => ffi::AV_PIX_FMT_YUVA420P10BE,
+            Pixel::YUVA420P10LE => ffi::AV_PIX_FMT_YUVA420P10LE,
+            Pixel::YUVA422P10BE => ffi::AV_PIX_FMT_YUVA422P10BE,
+            Pixel::YUVA422P10LE => ffi::AV_PIX_FMT_YUVA422P10LE,
+            Pixel::YUVA444P10BE => ffi::AV_PIX_FMT_YUVA444P10BE,
+            Pixel::YUVA444P10LE => ffi::AV_PIX_FMT_YUVA444P10LE,
+            Pixel::YUVA420P16BE => ffi::AV_PIX_FMT_YUVA420P16BE,
+            Pixel::YUVA420P16LE => ffi::AV_PIX_FMT_YUVA420P16LE,
+            Pixel::YUVA422P16BE => ffi::AV_PIX_FMT_YUVA422P16BE,
+            Pixel::YUVA422P16LE => ffi::AV_PIX_FMT_YUVA422P16LE,
+            Pixel::YUVA444P16BE => ffi::AV_PIX_FMT_YUVA444P16BE,
+            Pixel::YUVA444P16LE => ffi::AV_PIX_FMT_YUVA444P16LE,
 
-            Pixel::GBRP => AV_PIX_FMT_GBRP,
-            Pixel::GBRP9BE => AV_PIX_FMT_GBRP9BE,
-            Pixel::GBRP9LE => AV_PIX_FMT_GBRP9LE,
-            Pixel::GBRP10BE => AV_PIX_FMT_GBRP10BE,
-            Pixel::GBRP10LE => AV_PIX_FMT_GBRP10LE,
-            Pixel::GBRP16BE => AV_PIX_FMT_GBRP16BE,
-            Pixel::GBRP16LE => AV_PIX_FMT_GBRP16LE,
+            Pixel::VDPAU => ffi::AV_PIX_FMT_VDPAU,
 
-            Pixel::YUVA420P9BE => AV_PIX_FMT_YUVA420P9BE,
-            Pixel::YUVA420P9LE => AV_PIX_FMT_YUVA420P9LE,
-            Pixel::YUVA422P9BE => AV_PIX_FMT_YUVA422P9BE,
-            Pixel::YUVA422P9LE => AV_PIX_FMT_YUVA422P9LE,
-            Pixel::YUVA444P9BE => AV_PIX_FMT_YUVA444P9BE,
-            Pixel::YUVA444P9LE => AV_PIX_FMT_YUVA444P9LE,
-            Pixel::YUVA420P10BE => AV_PIX_FMT_YUVA420P10BE,
-            Pixel::YUVA420P10LE => AV_PIX_FMT_YUVA420P10LE,
-            Pixel::YUVA422P10BE => AV_PIX_FMT_YUVA422P10BE,
-            Pixel::YUVA422P10LE => AV_PIX_FMT_YUVA422P10LE,
-            Pixel::YUVA444P10BE => AV_PIX_FMT_YUVA444P10BE,
-            Pixel::YUVA444P10LE => AV_PIX_FMT_YUVA444P10LE,
-            Pixel::YUVA420P16BE => AV_PIX_FMT_YUVA420P16BE,
-            Pixel::YUVA420P16LE => AV_PIX_FMT_YUVA420P16LE,
-            Pixel::YUVA422P16BE => AV_PIX_FMT_YUVA422P16BE,
-            Pixel::YUVA422P16LE => AV_PIX_FMT_YUVA422P16LE,
-            Pixel::YUVA444P16BE => AV_PIX_FMT_YUVA444P16BE,
-            Pixel::YUVA444P16LE => AV_PIX_FMT_YUVA444P16LE,
+            Pixel::XYZ12LE => ffi::AV_PIX_FMT_XYZ12LE,
+            Pixel::XYZ12BE => ffi::AV_PIX_FMT_XYZ12BE,
+            Pixel::NV16 => ffi::AV_PIX_FMT_NV16,
+            Pixel::NV20LE => ffi::AV_PIX_FMT_NV20LE,
+            Pixel::NV20BE => ffi::AV_PIX_FMT_NV20BE,
 
-            Pixel::VDPAU => AV_PIX_FMT_VDPAU,
+            Pixel::RGBA64BE => ffi::AV_PIX_FMT_RGBA64BE,
+            Pixel::RGBA64LE => ffi::AV_PIX_FMT_RGBA64LE,
+            Pixel::BGRA64BE => ffi::AV_PIX_FMT_BGRA64BE,
+            Pixel::BGRA64LE => ffi::AV_PIX_FMT_BGRA64LE,
 
-            Pixel::XYZ12LE => AV_PIX_FMT_XYZ12LE,
-            Pixel::XYZ12BE => AV_PIX_FMT_XYZ12BE,
-            Pixel::NV16 => AV_PIX_FMT_NV16,
-            Pixel::NV20LE => AV_PIX_FMT_NV20LE,
-            Pixel::NV20BE => AV_PIX_FMT_NV20BE,
+            Pixel::YVYU422 => ffi::AV_PIX_FMT_YVYU422,
 
-            Pixel::RGBA64BE => AV_PIX_FMT_RGBA64BE,
-            Pixel::RGBA64LE => AV_PIX_FMT_RGBA64LE,
-            Pixel::BGRA64BE => AV_PIX_FMT_BGRA64BE,
-            Pixel::BGRA64LE => AV_PIX_FMT_BGRA64LE,
+            #[cfg(not(feature = "ffmpeg7"))]
+            Pixel::VDA => ffi::AV_PIX_FMT_VDA,
 
-            Pixel::YVYU422 => AV_PIX_FMT_YVYU422,
+            Pixel::YA16BE => ffi::AV_PIX_FMT_YA16BE,
+            Pixel::YA16LE => ffi::AV_PIX_FMT_YA16LE,
 
-            // #[cfg(not(feature = "ffmpeg_4_0"))]
-            // Pixel::VDA => -1, // AV_PIX_FMT_VDA,
+            Pixel::QSV => ffi::AV_PIX_FMT_QSV,
+            Pixel::MMAL => ffi::AV_PIX_FMT_MMAL,
 
-            Pixel::YA16BE => AV_PIX_FMT_YA16BE,
-            Pixel::YA16LE => AV_PIX_FMT_YA16LE,
+            Pixel::D3D11VA_VLD => ffi::AV_PIX_FMT_D3D11VA_VLD,
 
-            Pixel::QSV => AV_PIX_FMT_QSV,
-            Pixel::MMAL => AV_PIX_FMT_MMAL,
+            Pixel::CUDA => ffi::AV_PIX_FMT_CUDA,
 
-            Pixel::D3D11VA_VLD => AV_PIX_FMT_D3D11VA_VLD,
+            Pixel::ZRGB => ffi::AV_PIX_FMT_0RGB,
+            Pixel::RGBZ => ffi::AV_PIX_FMT_RGB0,
+            Pixel::ZBGR => ffi::AV_PIX_FMT_0BGR,
+            Pixel::BGRZ => ffi::AV_PIX_FMT_BGR0,
+            Pixel::YUVA444P => ffi::AV_PIX_FMT_YUVA444P,
+            Pixel::YUVA422P => ffi::AV_PIX_FMT_YUVA422P,
 
-            Pixel::CUDA => AV_PIX_FMT_CUDA,
+            Pixel::YUV420P12BE => ffi::AV_PIX_FMT_YUV420P12BE,
+            Pixel::YUV420P12LE => ffi::AV_PIX_FMT_YUV420P12LE,
+            Pixel::YUV420P14BE => ffi::AV_PIX_FMT_YUV420P14BE,
+            Pixel::YUV420P14LE => ffi::AV_PIX_FMT_YUV420P14LE,
+            Pixel::YUV422P12BE => ffi::AV_PIX_FMT_YUV422P12BE,
+            Pixel::YUV422P12LE => ffi::AV_PIX_FMT_YUV422P12LE,
+            Pixel::YUV422P14BE => ffi::AV_PIX_FMT_YUV422P14BE,
+            Pixel::YUV422P14LE => ffi::AV_PIX_FMT_YUV422P14LE,
+            Pixel::YUV444P12BE => ffi::AV_PIX_FMT_YUV444P12BE,
+            Pixel::YUV444P12LE => ffi::AV_PIX_FMT_YUV444P12LE,
+            Pixel::YUV444P14BE => ffi::AV_PIX_FMT_YUV444P14BE,
+            Pixel::YUV444P14LE => ffi::AV_PIX_FMT_YUV444P14LE,
+            Pixel::GBRP12BE => ffi::AV_PIX_FMT_GBRP12BE,
+            Pixel::GBRP12LE => ffi::AV_PIX_FMT_GBRP12LE,
+            Pixel::GBRP14BE => ffi::AV_PIX_FMT_GBRP14BE,
+            Pixel::GBRP14LE => ffi::AV_PIX_FMT_GBRP14LE,
+            Pixel::GBRAP => ffi::AV_PIX_FMT_GBRAP,
+            Pixel::GBRAP16BE => ffi::AV_PIX_FMT_GBRAP16BE,
+            Pixel::GBRAP16LE => ffi::AV_PIX_FMT_GBRAP16LE,
+            Pixel::YUVJ411P => ffi::AV_PIX_FMT_YUVJ411P,
 
-            Pixel::ZRGB => AV_PIX_FMT_0RGB,
-            Pixel::RGBZ => AV_PIX_FMT_RGB0,
-            Pixel::ZBGR => AV_PIX_FMT_0BGR,
-            Pixel::BGRZ => AV_PIX_FMT_BGR0,
-            Pixel::YUVA444P => AV_PIX_FMT_YUVA444P,
-            Pixel::YUVA422P => AV_PIX_FMT_YUVA422P,
+            Pixel::BAYER_BGGR8 => ffi::AV_PIX_FMT_BAYER_BGGR8,
+            Pixel::BAYER_RGGB8 => ffi::AV_PIX_FMT_BAYER_RGGB8,
+            Pixel::BAYER_GBRG8 => ffi::AV_PIX_FMT_BAYER_GBRG8,
+            Pixel::BAYER_GRBG8 => ffi::AV_PIX_FMT_BAYER_GRBG8,
+            Pixel::BAYER_BGGR16LE => ffi::AV_PIX_FMT_BAYER_BGGR16LE,
+            Pixel::BAYER_BGGR16BE => ffi::AV_PIX_FMT_BAYER_BGGR16BE,
+            Pixel::BAYER_RGGB16LE => ffi::AV_PIX_FMT_BAYER_RGGB16LE,
+            Pixel::BAYER_RGGB16BE => ffi::AV_PIX_FMT_BAYER_RGGB16BE,
+            Pixel::BAYER_GBRG16LE => ffi::AV_PIX_FMT_BAYER_GBRG16LE,
+            Pixel::BAYER_GBRG16BE => ffi::AV_PIX_FMT_BAYER_GBRG16BE,
+            Pixel::BAYER_GRBG16LE => ffi::AV_PIX_FMT_BAYER_GRBG16LE,
+            Pixel::BAYER_GRBG16BE => ffi::AV_PIX_FMT_BAYER_GRBG16BE,
 
-            Pixel::YUV420P12BE => AV_PIX_FMT_YUV420P12BE,
-            Pixel::YUV420P12LE => AV_PIX_FMT_YUV420P12LE,
-            Pixel::YUV420P14BE => AV_PIX_FMT_YUV420P14BE,
-            Pixel::YUV420P14LE => AV_PIX_FMT_YUV420P14LE,
-            Pixel::YUV422P12BE => AV_PIX_FMT_YUV422P12BE,
-            Pixel::YUV422P12LE => AV_PIX_FMT_YUV422P12LE,
-            Pixel::YUV422P14BE => AV_PIX_FMT_YUV422P14BE,
-            Pixel::YUV422P14LE => AV_PIX_FMT_YUV422P14LE,
-            Pixel::YUV444P12BE => AV_PIX_FMT_YUV444P12BE,
-            Pixel::YUV444P12LE => AV_PIX_FMT_YUV444P12LE,
-            Pixel::YUV444P14BE => AV_PIX_FMT_YUV444P14BE,
-            Pixel::YUV444P14LE => AV_PIX_FMT_YUV444P14LE,
-            Pixel::GBRP12BE => AV_PIX_FMT_GBRP12BE,
-            Pixel::GBRP12LE => AV_PIX_FMT_GBRP12LE,
-            Pixel::GBRP14BE => AV_PIX_FMT_GBRP14BE,
-            Pixel::GBRP14LE => AV_PIX_FMT_GBRP14LE,
-            Pixel::GBRAP => AV_PIX_FMT_GBRAP,
-            Pixel::GBRAP16BE => AV_PIX_FMT_GBRAP16BE,
-            Pixel::GBRAP16LE => AV_PIX_FMT_GBRAP16LE,
-            Pixel::YUVJ411P => AV_PIX_FMT_YUVJ411P,
+            Pixel::YUV440P10LE => ffi::AV_PIX_FMT_YUV440P10LE,
+            Pixel::YUV440P10BE => ffi::AV_PIX_FMT_YUV440P10BE,
+            Pixel::YUV440P12LE => ffi::AV_PIX_FMT_YUV440P12LE,
+            Pixel::YUV440P12BE => ffi::AV_PIX_FMT_YUV440P12BE,
+            Pixel::AYUV64LE => ffi::AV_PIX_FMT_AYUV64LE,
+            Pixel::AYUV64BE => ffi::AV_PIX_FMT_AYUV64BE,
 
-            Pixel::BAYER_BGGR8 => AV_PIX_FMT_BAYER_BGGR8,
-            Pixel::BAYER_RGGB8 => AV_PIX_FMT_BAYER_RGGB8,
-            Pixel::BAYER_GBRG8 => AV_PIX_FMT_BAYER_GBRG8,
-            Pixel::BAYER_GRBG8 => AV_PIX_FMT_BAYER_GRBG8,
-            Pixel::BAYER_BGGR16LE => AV_PIX_FMT_BAYER_BGGR16LE,
-            Pixel::BAYER_BGGR16BE => AV_PIX_FMT_BAYER_BGGR16BE,
-            Pixel::BAYER_RGGB16LE => AV_PIX_FMT_BAYER_RGGB16LE,
-            Pixel::BAYER_RGGB16BE => AV_PIX_FMT_BAYER_RGGB16BE,
-            Pixel::BAYER_GBRG16LE => AV_PIX_FMT_BAYER_GBRG16LE,
-            Pixel::BAYER_GBRG16BE => AV_PIX_FMT_BAYER_GBRG16BE,
-            Pixel::BAYER_GRBG16LE => AV_PIX_FMT_BAYER_GRBG16LE,
-            Pixel::BAYER_GRBG16BE => AV_PIX_FMT_BAYER_GRBG16BE,
-
-            Pixel::YUV440P10LE => AV_PIX_FMT_YUV440P10LE,
-            Pixel::YUV440P10BE => AV_PIX_FMT_YUV440P10BE,
-            Pixel::YUV440P12LE => AV_PIX_FMT_YUV440P12LE,
-            Pixel::YUV440P12BE => AV_PIX_FMT_YUV440P12BE,
-            Pixel::AYUV64LE => AV_PIX_FMT_AYUV64LE,
-            Pixel::AYUV64BE => AV_PIX_FMT_AYUV64BE,
-
-            Pixel::VIDEOTOOLBOX => AV_PIX_FMT_VIDEOTOOLBOX,
+            Pixel::VIDEOTOOLBOX => ffi::AV_PIX_FMT_VIDEOTOOLBOX,
 
             // --- defaults
             // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg7")))]
-            // Pixel::XVMC => AV_PIX_FMT_XVMC,
+            // Pixel::XVMC => ffi::AV_PIX_FMT_XVMC,
 
-            Pixel::RGB32 => AV_PIX_FMT_RGB32,
-            Pixel::RGB32_1 => AV_PIX_FMT_RGB32_1,
-            Pixel::BGR32 => AV_PIX_FMT_BGR32,
-            Pixel::BGR32_1 => AV_PIX_FMT_BGR32_1,
-            Pixel::ZRGB32 => AV_PIX_FMT_0RGB32,
-            Pixel::ZBGR32 => AV_PIX_FMT_0BGR32,
+            Pixel::RGB32 => ffi::AV_PIX_FMT_RGB32,
+            Pixel::RGB32_1 => ffi::AV_PIX_FMT_RGB32_1,
+            Pixel::BGR32 => ffi::AV_PIX_FMT_BGR32,
+            Pixel::BGR32_1 => ffi::AV_PIX_FMT_BGR32_1,
+            Pixel::ZRGB32 => ffi::AV_PIX_FMT_0RGB32,
+            Pixel::ZBGR32 => ffi::AV_PIX_FMT_0BGR32,
 
-            Pixel::GRAY16 => AV_PIX_FMT_GRAY16,
-            Pixel::YA16 => AV_PIX_FMT_YA16,
-            Pixel::RGB48 => AV_PIX_FMT_RGB48,
-            Pixel::RGB565 => AV_PIX_FMT_RGB565,
-            Pixel::RGB555 => AV_PIX_FMT_RGB555,
-            Pixel::RGB444 => AV_PIX_FMT_RGB444,
-            Pixel::BGR48 => AV_PIX_FMT_BGR48,
-            Pixel::BGR565 => AV_PIX_FMT_BGR565,
-            Pixel::BGR555 => AV_PIX_FMT_BGR555,
-            Pixel::BGR444 => AV_PIX_FMT_BGR444,
+            Pixel::GRAY16 => ffi::AV_PIX_FMT_GRAY16,
+            Pixel::YA16 => ffi::AV_PIX_FMT_YA16,
+            Pixel::RGB48 => ffi::AV_PIX_FMT_RGB48,
+            Pixel::RGB565 => ffi::AV_PIX_FMT_RGB565,
+            Pixel::RGB555 => ffi::AV_PIX_FMT_RGB555,
+            Pixel::RGB444 => ffi::AV_PIX_FMT_RGB444,
+            Pixel::BGR48 => ffi::AV_PIX_FMT_BGR48,
+            Pixel::BGR565 => ffi::AV_PIX_FMT_BGR565,
+            Pixel::BGR555 => ffi::AV_PIX_FMT_BGR555,
+            Pixel::BGR444 => ffi::AV_PIX_FMT_BGR444,
 
-            Pixel::YUV420P9 => AV_PIX_FMT_YUV420P9,
-            Pixel::YUV422P9 => AV_PIX_FMT_YUV422P9,
-            Pixel::YUV444P9 => AV_PIX_FMT_YUV444P9,
-            Pixel::YUV420P10 => AV_PIX_FMT_YUV420P10,
-            Pixel::YUV422P10 => AV_PIX_FMT_YUV422P10,
-            Pixel::YUV440P10 => AV_PIX_FMT_YUV440P10,
-            Pixel::YUV444P10 => AV_PIX_FMT_YUV444P10,
-            Pixel::YUV420P12 => AV_PIX_FMT_YUV420P12,
-            Pixel::YUV422P12 => AV_PIX_FMT_YUV422P12,
-            Pixel::YUV440P12 => AV_PIX_FMT_YUV440P12,
-            Pixel::YUV444P12 => AV_PIX_FMT_YUV444P12,
-            Pixel::YUV420P14 => AV_PIX_FMT_YUV420P14,
-            Pixel::YUV422P14 => AV_PIX_FMT_YUV422P14,
-            Pixel::YUV444P14 => AV_PIX_FMT_YUV444P14,
-            Pixel::YUV420P16 => AV_PIX_FMT_YUV420P16,
-            Pixel::YUV422P16 => AV_PIX_FMT_YUV422P16,
-            Pixel::YUV444P16 => AV_PIX_FMT_YUV444P16,
+            Pixel::YUV420P9 => ffi::AV_PIX_FMT_YUV420P9,
+            Pixel::YUV422P9 => ffi::AV_PIX_FMT_YUV422P9,
+            Pixel::YUV444P9 => ffi::AV_PIX_FMT_YUV444P9,
+            Pixel::YUV420P10 => ffi::AV_PIX_FMT_YUV420P10,
+            Pixel::YUV422P10 => ffi::AV_PIX_FMT_YUV422P10,
+            Pixel::YUV440P10 => ffi::AV_PIX_FMT_YUV440P10,
+            Pixel::YUV444P10 => ffi::AV_PIX_FMT_YUV444P10,
+            Pixel::YUV420P12 => ffi::AV_PIX_FMT_YUV420P12,
+            Pixel::YUV422P12 => ffi::AV_PIX_FMT_YUV422P12,
+            Pixel::YUV440P12 => ffi::AV_PIX_FMT_YUV440P12,
+            Pixel::YUV444P12 => ffi::AV_PIX_FMT_YUV444P12,
+            Pixel::YUV420P14 => ffi::AV_PIX_FMT_YUV420P14,
+            Pixel::YUV422P14 => ffi::AV_PIX_FMT_YUV422P14,
+            Pixel::YUV444P14 => ffi::AV_PIX_FMT_YUV444P14,
+            Pixel::YUV420P16 => ffi::AV_PIX_FMT_YUV420P16,
+            Pixel::YUV422P16 => ffi::AV_PIX_FMT_YUV422P16,
+            Pixel::YUV444P16 => ffi::AV_PIX_FMT_YUV444P16,
 
-            Pixel::GBRP9 => AV_PIX_FMT_GBRP9,
-            Pixel::GBRP10 => AV_PIX_FMT_GBRP10,
-            Pixel::GBRP12 => AV_PIX_FMT_GBRP12,
-            Pixel::GBRP14 => AV_PIX_FMT_GBRP14,
-            Pixel::GBRP16 => AV_PIX_FMT_GBRP16,
-            Pixel::GBRAP16 => AV_PIX_FMT_GBRAP16,
+            Pixel::GBRP9 => ffi::AV_PIX_FMT_GBRP9,
+            Pixel::GBRP10 => ffi::AV_PIX_FMT_GBRP10,
+            Pixel::GBRP12 => ffi::AV_PIX_FMT_GBRP12,
+            Pixel::GBRP14 => ffi::AV_PIX_FMT_GBRP14,
+            Pixel::GBRP16 => ffi::AV_PIX_FMT_GBRP16,
+            Pixel::GBRAP16 => ffi::AV_PIX_FMT_GBRAP16,
 
-            Pixel::BAYER_BGGR16 => AV_PIX_FMT_BAYER_BGGR16,
-            Pixel::BAYER_RGGB16 => AV_PIX_FMT_BAYER_RGGB16,
-            Pixel::BAYER_GBRG16 => AV_PIX_FMT_BAYER_GBRG16,
-            Pixel::BAYER_GRBG16 => AV_PIX_FMT_BAYER_GRBG16,
+            Pixel::BAYER_BGGR16 => ffi::AV_PIX_FMT_BAYER_BGGR16,
+            Pixel::BAYER_RGGB16 => ffi::AV_PIX_FMT_BAYER_RGGB16,
+            Pixel::BAYER_GBRG16 => ffi::AV_PIX_FMT_BAYER_GBRG16,
+            Pixel::BAYER_GRBG16 => ffi::AV_PIX_FMT_BAYER_GRBG16,
 
-            Pixel::YUVA420P9 => AV_PIX_FMT_YUVA420P9,
-            Pixel::YUVA422P9 => AV_PIX_FMT_YUVA422P9,
-            Pixel::YUVA444P9 => AV_PIX_FMT_YUVA444P9,
-            Pixel::YUVA420P10 => AV_PIX_FMT_YUVA420P10,
-            Pixel::YUVA422P10 => AV_PIX_FMT_YUVA422P10,
-            Pixel::YUVA444P10 => AV_PIX_FMT_YUVA444P10,
-            Pixel::YUVA420P16 => AV_PIX_FMT_YUVA420P16,
-            Pixel::YUVA422P16 => AV_PIX_FMT_YUVA422P16,
-            Pixel::YUVA444P16 => AV_PIX_FMT_YUVA444P16,
+            Pixel::YUVA420P9 => ffi::AV_PIX_FMT_YUVA420P9,
+            Pixel::YUVA422P9 => ffi::AV_PIX_FMT_YUVA422P9,
+            Pixel::YUVA444P9 => ffi::AV_PIX_FMT_YUVA444P9,
+            Pixel::YUVA420P10 => ffi::AV_PIX_FMT_YUVA420P10,
+            Pixel::YUVA422P10 => ffi::AV_PIX_FMT_YUVA422P10,
+            Pixel::YUVA444P10 => ffi::AV_PIX_FMT_YUVA444P10,
+            Pixel::YUVA420P16 => ffi::AV_PIX_FMT_YUVA420P16,
+            Pixel::YUVA422P16 => ffi::AV_PIX_FMT_YUVA422P16,
+            Pixel::YUVA444P16 => ffi::AV_PIX_FMT_YUVA444P16,
 
-            Pixel::XYZ12 => AV_PIX_FMT_XYZ12,
-            Pixel::NV20 => AV_PIX_FMT_NV20,
-            Pixel::AYUV64 => AV_PIX_FMT_AYUV64,
+            Pixel::XYZ12 => ffi::AV_PIX_FMT_XYZ12,
+            Pixel::NV20 => ffi::AV_PIX_FMT_NV20,
+            Pixel::AYUV64 => ffi::AV_PIX_FMT_AYUV64,
 
-            Pixel::P010LE => AV_PIX_FMT_P010LE,
-            Pixel::P010BE => AV_PIX_FMT_P010BE,
-            Pixel::GBRAP12BE => AV_PIX_FMT_GBRAP12BE,
-            Pixel::GBRAP12LE => AV_PIX_FMT_GBRAP12LE,
-            Pixel::GBRAP10LE => AV_PIX_FMT_GBRAP10LE,
-            Pixel::GBRAP10BE => AV_PIX_FMT_GBRAP10BE,
-            Pixel::MEDIACODEC => AV_PIX_FMT_MEDIACODEC,
-            Pixel::GRAY12BE => AV_PIX_FMT_GRAY12BE,
-            Pixel::GRAY12LE => AV_PIX_FMT_GRAY12LE,
-            Pixel::GRAY10BE => AV_PIX_FMT_GRAY10BE,
-            Pixel::GRAY10LE => AV_PIX_FMT_GRAY10LE,
-            Pixel::P016LE => AV_PIX_FMT_P016LE,
-            Pixel::P016BE => AV_PIX_FMT_P016BE,
+            Pixel::P010LE => ffi::AV_PIX_FMT_P010LE,
+            Pixel::P010BE => ffi::AV_PIX_FMT_P010BE,
+            Pixel::GBRAP12BE => ffi::AV_PIX_FMT_GBRAP12BE,
+            Pixel::GBRAP12LE => ffi::AV_PIX_FMT_GBRAP12LE,
+            Pixel::GBRAP10LE => ffi::AV_PIX_FMT_GBRAP10LE,
+            Pixel::GBRAP10BE => ffi::AV_PIX_FMT_GBRAP10BE,
+            Pixel::MEDIACODEC => ffi::AV_PIX_FMT_MEDIACODEC,
+            Pixel::GRAY12BE => ffi::AV_PIX_FMT_GRAY12BE,
+            Pixel::GRAY12LE => ffi::AV_PIX_FMT_GRAY12LE,
+            Pixel::GRAY10BE => ffi::AV_PIX_FMT_GRAY10BE,
+            Pixel::GRAY10LE => ffi::AV_PIX_FMT_GRAY10LE,
+            Pixel::P016LE => ffi::AV_PIX_FMT_P016LE,
+            Pixel::P016BE => ffi::AV_PIX_FMT_P016BE,
 
-            Pixel::D3D11 => AV_PIX_FMT_D3D11,
-            Pixel::GRAY9BE => AV_PIX_FMT_GRAY9BE,
-            Pixel::GRAY9LE => AV_PIX_FMT_GRAY9LE,
-            Pixel::GBRPF32BE => AV_PIX_FMT_GBRPF32BE,
-            Pixel::GBRPF32LE => AV_PIX_FMT_GBRPF32LE,
-            Pixel::GBRAPF32BE => AV_PIX_FMT_GBRAPF32BE,
-            Pixel::GBRAPF32LE => AV_PIX_FMT_GBRAPF32LE,
-            Pixel::DRM_PRIME => AV_PIX_FMT_DRM_PRIME,
+            Pixel::D3D11 => ffi::AV_PIX_FMT_D3D11,
+            Pixel::GRAY9BE => ffi::AV_PIX_FMT_GRAY9BE,
+            Pixel::GRAY9LE => ffi::AV_PIX_FMT_GRAY9LE,
+            Pixel::GBRPF32BE => ffi::AV_PIX_FMT_GBRPF32BE,
+            Pixel::GBRPF32LE => ffi::AV_PIX_FMT_GBRPF32LE,
+            Pixel::GBRAPF32BE => ffi::AV_PIX_FMT_GBRAPF32BE,
+            Pixel::GBRAPF32LE => ffi::AV_PIX_FMT_GBRAPF32LE,
+            Pixel::DRM_PRIME => ffi::AV_PIX_FMT_DRM_PRIME,
+
+            // #[cfg(feature = "ffmpeg_4_0")]
+            Pixel::OPENCL => ffi::AV_PIX_FMT_OPENCL,
+
+            // #[cfg(feature = "ffmpeg_4_1")]
+            Pixel::GRAY14BE => ffi::AV_PIX_FMT_GRAY14BE,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            Pixel::GRAY14LE => ffi::AV_PIX_FMT_GRAY14LE,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            Pixel::GRAYF32BE => ffi::AV_PIX_FMT_GRAYF32BE,
+            // #[cfg(feature = "ffmpeg_4_1")]
+            Pixel::GRAYF32LE => ffi::AV_PIX_FMT_GRAYF32LE,
+
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Pixel::YUVA422P12BE => ffi::AV_PIX_FMT_YUVA422P12BE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Pixel::YUVA422P12LE => ffi::AV_PIX_FMT_YUVA422P12LE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Pixel::YUVA444P12BE => ffi::AV_PIX_FMT_YUVA444P12BE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Pixel::YUVA444P12LE => ffi::AV_PIX_FMT_YUVA444P12LE,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Pixel::NV24 => ffi::AV_PIX_FMT_NV24,
+            // #[cfg(feature = "ffmpeg_4_2")]
+            Pixel::NV42 => ffi::AV_PIX_FMT_NV42,
+
+            // #[cfg(feature = "ffmpeg_4_3")]
+            Pixel::VULKAN => ffi::AV_PIX_FMT_VULKAN,
+            // #[cfg(feature = "ffmpeg_4_3")]
+            Pixel::Y210BE => ffi::AV_PIX_FMT_Y210BE,
+            // #[cfg(feature = "ffmpeg_4_3")]
+            Pixel::Y210LE => ffi::AV_PIX_FMT_Y210LE,
+
+            // #[cfg(feature = "ffmpeg_4_4")]
+            Pixel::X2RGB10LE => ffi::AV_PIX_FMT_X2RGB10LE,
+            // #[cfg(feature = "ffmpeg_4_4")]
+            Pixel::X2RGB10BE => ffi::AV_PIX_FMT_X2RGB10BE,
+
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::X2BGR10LE => ffi::AV_PIX_FMT_X2BGR10LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::X2BGR10BE => ffi::AV_PIX_FMT_X2BGR10BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P210BE => ffi::AV_PIX_FMT_P210BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P210LE => ffi::AV_PIX_FMT_P210LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P410BE => ffi::AV_PIX_FMT_P410BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P410LE => ffi::AV_PIX_FMT_P410LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P216BE => ffi::AV_PIX_FMT_P216BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P216LE => ffi::AV_PIX_FMT_P216LE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P416BE => ffi::AV_PIX_FMT_P416BE,
+            // #[cfg(feature = "ffmpeg_5_0")]
+            Pixel::P416LE => ffi::AV_PIX_FMT_P416LE,
 
             #[cfg(feature = "ffmpeg6")]
-            Pixel::VUYA => AV_PIX_FMT_VUYA,
+            Pixel::VUYA => ffi::AV_PIX_FMT_VUYA,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::RGBAF16BE => AV_PIX_FMT_RGBAF16BE,
+            Pixel::RGBAF16BE => ffi::AV_PIX_FMT_RGBAF16BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::RGBAF16LE => AV_PIX_FMT_RGBAF16LE,
+            Pixel::RGBAF16LE => ffi::AV_PIX_FMT_RGBAF16LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::VUYX => AV_PIX_FMT_VUYX,
+            Pixel::VUYX => ffi::AV_PIX_FMT_VUYX,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::P012LE => AV_PIX_FMT_P012LE,
+            Pixel::P012LE => ffi::AV_PIX_FMT_P012LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::P012BE => AV_PIX_FMT_P012BE,
+            Pixel::P012BE => ffi::AV_PIX_FMT_P012BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::Y212BE => AV_PIX_FMT_Y212BE,
+            Pixel::Y212BE => ffi::AV_PIX_FMT_Y212BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::Y212LE => AV_PIX_FMT_Y212LE,
+            Pixel::Y212LE => ffi::AV_PIX_FMT_Y212LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::XV30BE => AV_PIX_FMT_XV30BE,
+            Pixel::XV30BE => ffi::AV_PIX_FMT_XV30BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::XV30LE => AV_PIX_FMT_XV30LE,
+            Pixel::XV30LE => ffi::AV_PIX_FMT_XV30LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::XV36BE => AV_PIX_FMT_XV36BE,
+            Pixel::XV36BE => ffi::AV_PIX_FMT_XV36BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::XV36LE => AV_PIX_FMT_XV36LE,
+            Pixel::XV36LE => ffi::AV_PIX_FMT_XV36LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::RGBF32BE => AV_PIX_FMT_RGBF32BE,
+            Pixel::RGBF32BE => ffi::AV_PIX_FMT_RGBF32BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::RGBF32LE => AV_PIX_FMT_RGBF32LE,
+            Pixel::RGBF32LE => ffi::AV_PIX_FMT_RGBF32LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::RGBAF32BE => AV_PIX_FMT_RGBAF32BE,
+            Pixel::RGBAF32BE => ffi::AV_PIX_FMT_RGBAF32BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::RGBAF32LE => AV_PIX_FMT_RGBAF32LE,
+            Pixel::RGBAF32LE => ffi::AV_PIX_FMT_RGBAF32LE,
 
             #[cfg(feature = "ffmpeg6")]
-            Pixel::P212BE => AV_PIX_FMT_P212BE,
+            Pixel::P212BE => ffi::AV_PIX_FMT_P212BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::P212LE => AV_PIX_FMT_P212LE,
+            Pixel::P212LE => ffi::AV_PIX_FMT_P212LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::P412BE => AV_PIX_FMT_P412BE,
+            Pixel::P412BE => ffi::AV_PIX_FMT_P412BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::P412LE => AV_PIX_FMT_P412LE,
+            Pixel::P412LE => ffi::AV_PIX_FMT_P412LE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::GBRAP14BE => AV_PIX_FMT_GBRAP14BE,
+            Pixel::GBRAP14BE => ffi::AV_PIX_FMT_GBRAP14BE,
             #[cfg(feature = "ffmpeg6")]
-            Pixel::GBRAP14LE => AV_PIX_FMT_GBRAP14LE,
+            Pixel::GBRAP14LE => ffi::AV_PIX_FMT_GBRAP14LE,
 
             #[cfg(feature = "ffmpeg7")]
-            Pixel::D3D12 => AV_PIX_FMT_D3D12,
+            Pixel::D3D12 => ffi::AV_PIX_FMT_D3D12,
 
-            _ => {
-                panic!("Unsupported pixel type");
-            }
+            // #[cfg(feature = "rpi")]
+            // Pixel::SAND128 => ffi::AV_PIX_FMT_SAND128,
+            // #[cfg(feature = "rpi")]
+            // Pixel::SAND64_10 => ffi::AV_PIX_FMT_SAND64_10,
+            // #[cfg(feature = "rpi")]
+            // Pixel::SAND64_16 => ffi::AV_PIX_FMT_SAND64_16,
+            // #[cfg(feature = "rpi")]
+            // Pixel::RPI4_8 => ffi::AV_PIX_FMT_RPI4_8,
+            // #[cfg(feature = "rpi")]
+            // Pixel::RPI4_10 => ffi::AV_PIX_FMT_RPI4_10,
+
+            _ => panic!("unknown pixel format"),
         }
     }
 }

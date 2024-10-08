@@ -13,13 +13,8 @@ use rsmpeg::ffi::{self,
     AVERROR_OUTPUT_CHANGED, AVERROR_PATCHWELCOME, AVERROR_PROTOCOL_NOT_FOUND,
     AVERROR_STREAM_NOT_FOUND, AVERROR_UNKNOWN, AV_ERROR_MAX_STRING_SIZE,
 };
-use libc::{c_char, c_int};
 
-// Export POSIX error codes so that users can do something like
-//
-//   if error == (Error::Other { errno: EAGAIN }) {
-//       ...
-//   }
+use libc::{c_char, c_int};
 pub use libc::{
     E2BIG, EACCES, EADDRINUSE, EADDRNOTAVAIL, EAFNOSUPPORT, EAGAIN, EALREADY, EBADF, EBADMSG,
     EBUSY, ECANCELED, ECHILD, ECONNABORTED, ECONNREFUSED, ECONNRESET, EDEADLK, EDESTADDRREQ, EDOM,
@@ -30,6 +25,7 @@ pub use libc::{
     EOPNOTSUPP, EOVERFLOW, EOWNERDEAD, EPERM, EPIPE, EPROTO, EPROTONOSUPPORT, EPROTOTYPE, ERANGE,
     EROFS, ESPIPE, ESRCH, ETIMEDOUT, ETXTBSY, EWOULDBLOCK, EXDEV,
 };
+
 #[cfg(not(any(target_os = "freebsd", target_os = "wasi")))]
 pub use libc::{ENODATA, ENOSR, ENOSTR, ETIME};
 

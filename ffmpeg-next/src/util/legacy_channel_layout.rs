@@ -60,17 +60,17 @@ bitflags! {
         const STEREO_DOWNMIX     = ffi::AV_CH_LAYOUT_STEREO_DOWNMIX;
 
         #[cfg(feature = "ffmpeg6")]
-        const _3POINT1POINT2      = AV_CH_LAYOUT_3POINT1POINT2;
+        const _3POINT1POINT2      = ffi::AV_CH_LAYOUT_3POINT1POINT2;
         #[cfg(feature = "ffmpeg6")]
-        const _5POINT1POINT2_BACK = AV_CH_LAYOUT_5POINT1POINT2_BACK;
+        const _5POINT1POINT2_BACK = ffi::AV_CH_LAYOUT_5POINT1POINT2_BACK;
         #[cfg(feature = "ffmpeg6")]
-        const _5POINT1POINT4_BACK = AV_CH_LAYOUT_5POINT1POINT4_BACK;
+        const _5POINT1POINT4_BACK = ffi::AV_CH_LAYOUT_5POINT1POINT4_BACK;
         #[cfg(feature = "ffmpeg6")]
-        const _7POINT1POINT2      = AV_CH_LAYOUT_7POINT1POINT2;
+        const _7POINT1POINT2      = ffi::AV_CH_LAYOUT_7POINT1POINT2;
         #[cfg(feature = "ffmpeg6")]
-        const _7POINT1POINT4_BACK = AV_CH_LAYOUT_7POINT1POINT4_BACK;
+        const _7POINT1POINT4_BACK = ffi::AV_CH_LAYOUT_7POINT1POINT4_BACK;
         #[cfg(feature = "ffmpeg6")]
-        const CUBE = AV_CH_LAYOUT_CUBE;
+        const CUBE = ffi::AV_CH_LAYOUT_CUBE;
     }
 }
 

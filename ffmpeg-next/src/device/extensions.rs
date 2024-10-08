@@ -1,11 +1,14 @@
 use std::marker::PhantomData;
 use std::ptr;
 
-use crate::device;
-use rsmpeg::ffi;
-use crate::format::context::common::Context;
 use libc::c_int;
-use crate::Error;
+use rsmpeg::ffi;
+
+use crate::{
+    device,
+    format::context::common::Context,
+    Error,
+};
 
 impl Context {
     pub fn devices(&self) -> Result<DeviceIter, Error> {

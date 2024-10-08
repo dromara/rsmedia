@@ -39,45 +39,48 @@ macro_rules! define_layout {
 }
 
 impl ChannelLayout {
-    // TODO:
+    // TODO: temporary solution, need to implement all the layouts
     define_layout!(MONO, 1, 0);
     define_layout!(STEREO, 2, 0);
-    // define_layout!(_2POINT1, 3, AV_CH_LAYOUT_2POINT1);
-    // define_layout!(_2_1, 3, AV_CH_LAYOUT_2_1);
-    // define_layout!(SURROUND, 3, AV_CH_LAYOUT_SURROUND);
-    // define_layout!(_3POINT1, 4, AV_CH_LAYOUT_3POINT1);
-    // define_layout!(_4POINT0, 4, AV_CH_LAYOUT_4POINT0);
-    // define_layout!(_4POINT1, 5, AV_CH_LAYOUT_4POINT1);
-    // define_layout!(_2_2, 4, AV_CH_LAYOUT_2_2);
-    // define_layout!(QUAD, 4, AV_CH_LAYOUT_QUAD);
-    // define_layout!(_5POINT0, 5, AV_CH_LAYOUT_5POINT0);
-    // define_layout!(_5POINT1, 6, AV_CH_LAYOUT_5POINT1);
-    // define_layout!(_5POINT0_BACK, 5, AV_CH_LAYOUT_5POINT0_BACK);
-    // define_layout!(_5POINT1_BACK, 6, AV_CH_LAYOUT_5POINT1_BACK);
-    // define_layout!(_6POINT0, 6, AV_CH_LAYOUT_6POINT0);
-    // define_layout!(_6POINT0_FRONT, 6, AV_CH_LAYOUT_6POINT0_FRONT);
-    // define_layout!(_3POINT1POINT2, 6, AV_CH_LAYOUT_3POINT1POINT2);
-    // define_layout!(HEXAGONAL, 6, AV_CH_LAYOUT_HEXAGONAL);
-    // define_layout!(_6POINT1, 7, AV_CH_LAYOUT_6POINT1);
-    // define_layout!(_6POINT1_BACK, 7, AV_CH_LAYOUT_6POINT1_BACK);
-    // define_layout!(_6POINT1_FRONT, 7, AV_CH_LAYOUT_6POINT1_FRONT);
-    // define_layout!(_7POINT0, 7, AV_CH_LAYOUT_7POINT0);
-    // define_layout!(_7POINT0_FRONT, 7, AV_CH_LAYOUT_7POINT0_FRONT);
-    // define_layout!(_7POINT1, 8, AV_CH_LAYOUT_7POINT1);
-    // define_layout!(_7POINT1_WIDE, 8, AV_CH_LAYOUT_7POINT1_WIDE);
-    // define_layout!(_7POINT1_WIDE_BACK, 8, AV_CH_LAYOUT_7POINT1_WIDE_BACK);
-    // define_layout!(_5POINT1POINT2_BACK, 8, AV_CH_LAYOUT_5POINT1POINT2_BACK);
-    // define_layout!(OCTAGONAL, 8, AV_CH_LAYOUT_OCTAGONAL);
-    // define_layout!(CUBE, 8, AV_CH_LAYOUT_CUBE);
-    // define_layout!(_5POINT1POINT4_BACK, 10, AV_CH_LAYOUT_5POINT1POINT4_BACK);
-    // define_layout!(_7POINT1POINT2, 10, AV_CH_LAYOUT_7POINT1POINT2);
-    // define_layout!(_7POINT1POINT4_BACK, 12, AV_CH_LAYOUT_7POINT1POINT4_BACK);
-    // define_layout!(_7POINT2POINT3, 12, AV_CH_LAYOUT_7POINT2POINT3);
-    // define_layout!(_9POINT1POINT4_BACK, 14, AV_CH_LAYOUT_9POINT1POINT4_BACK);
-    // define_layout!(HEXADECAGONAL, 16, AV_CH_LAYOUT_HEXADECAGONAL);
-    // define_layout!(STEREO_DOWNMIX, 2, AV_CH_LAYOUT_STEREO_DOWNMIX);
-    // define_layout!(_22POINT2, 24, AV_CH_LAYOUT_22POINT2);
-    // define_layout!(_7POINT1_TOP_BACK, 8, AV_CH_LAYOUT_5POINT1POINT2_BACK);
+    // src is following:
+    // define_layout!(MONO, 1, ffi::AV_CH_LAYOUT_MONO);
+    // define_layout!(STEREO, 2, ffi::AV_CH_LAYOUT_STEREO);
+    // define_layout!(_2POINT1, 3, ffi::AV_CH_LAYOUT_2POINT1);
+    // define_layout!(_2_1, 3, ffi::AV_CH_LAYOUT_2_1);
+    // define_layout!(SURROUND, 3, ffi::AV_CH_LAYOUT_SURROUND);
+    // define_layout!(_3POINT1, 4, ffi::AV_CH_LAYOUT_3POINT1);
+    // define_layout!(_4POINT0, 4, ffi::AV_CH_LAYOUT_4POINT0);
+    // define_layout!(_4POINT1, 5, ffi::AV_CH_LAYOUT_4POINT1);
+    // define_layout!(_2_2, 4, ffi::AV_CH_LAYOUT_2_2);
+    // define_layout!(QUAD, 4, ffi::AV_CH_LAYOUT_QUAD);
+    // define_layout!(_5POINT0, 5, ffi::AV_CH_LAYOUT_5POINT0);
+    // define_layout!(_5POINT1, 6, ffi::AV_CH_LAYOUT_5POINT1);
+    // define_layout!(_5POINT0_BACK, 5, ffi::AV_CH_LAYOUT_5POINT0_BACK);
+    // define_layout!(_5POINT1_BACK, 6, ffi::AV_CH_LAYOUT_5POINT1_BACK);
+    // define_layout!(_6POINT0, 6, ffi::AV_CH_LAYOUT_6POINT0);
+    // define_layout!(_6POINT0_FRONT, 6, ffi::AV_CH_LAYOUT_6POINT0_FRONT);
+    // define_layout!(_3POINT1POINT2, 6, ffi::AV_CH_LAYOUT_3POINT1POINT2);
+    // define_layout!(HEXAGONAL, 6, ffi::AV_CH_LAYOUT_HEXAGONAL);
+    // define_layout!(_6POINT1, 7, ffi::AV_CH_LAYOUT_6POINT1);
+    // define_layout!(_6POINT1_BACK, 7, ffi::AV_CH_LAYOUT_6POINT1_BACK);
+    // define_layout!(_6POINT1_FRONT, 7, ffi::AV_CH_LAYOUT_6POINT1_FRONT);
+    // define_layout!(_7POINT0, 7, ffi::AV_CH_LAYOUT_7POINT0);
+    // define_layout!(_7POINT0_FRONT, 7, ffi::AV_CH_LAYOUT_7POINT0_FRONT);
+    // define_layout!(_7POINT1, 8, ffi::AV_CH_LAYOUT_7POINT1);
+    // define_layout!(_7POINT1_WIDE, 8, ffi::AV_CH_LAYOUT_7POINT1_WIDE);
+    // define_layout!(_7POINT1_WIDE_BACK, 8, ffi::AV_CH_LAYOUT_7POINT1_WIDE_BACK);
+    // define_layout!(_5POINT1POINT2_BACK, 8, ffi::AV_CH_LAYOUT_5POINT1POINT2_BACK);
+    // define_layout!(OCTAGONAL, 8, ffi::AV_CH_LAYOUT_OCTAGONAL);
+    // define_layout!(CUBE, 8, ffi::AV_CH_LAYOUT_CUBE);
+    // define_layout!(_5POINT1POINT4_BACK, 10, ffi::AV_CH_LAYOUT_5POINT1POINT4_BACK);
+    // define_layout!(_7POINT1POINT2, 10, ffi::AV_CH_LAYOUT_7POINT1POINT2);
+    // define_layout!(_7POINT1POINT4_BACK, 12, ffi::AV_CH_LAYOUT_7POINT1POINT4_BACK);
+    // define_layout!(_7POINT2POINT3, 12, ffi::AV_CH_LAYOUT_7POINT2POINT3);
+    // define_layout!(_9POINT1POINT4_BACK, 14, ffi::AV_CH_LAYOUT_9POINT1POINT4_BACK);
+    // define_layout!(HEXADECAGONAL, 16, ffi::AV_CH_LAYOUT_HEXADECAGONAL);
+    // define_layout!(STEREO_DOWNMIX, 2, ffi::AV_CH_LAYOUT_STEREO_DOWNMIX);
+    // define_layout!(_22POINT2, 24, ffi::AV_CH_LAYOUT_22POINT2);
+    // define_layout!(_7POINT1_TOP_BACK, 8, ffi::AV_CH_LAYOUT_5POINT1POINT2_BACK);
 
     #[inline]
     pub fn channels(&self) -> i32 {

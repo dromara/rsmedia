@@ -13,6 +13,7 @@ impl From<ffi::SwrFilterType> for Filter {
             ffi::SWR_FILTER_TYPE_CUBIC => Filter::Cubic,
             ffi::SWR_FILTER_TYPE_BLACKMAN_NUTTALL => Filter::BlackmanNuttall,
             ffi::SWR_FILTER_TYPE_KAISER => Filter::Kaiser,
+
             //  non-exhaustive patterns: `3_u32..=u32::MAX` not covered
             3_u32..=u32::MAX => todo!(),
         }

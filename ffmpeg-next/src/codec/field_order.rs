@@ -19,6 +19,7 @@ impl From<ffi::AVFieldOrder> for FieldOrder {
             ffi::AV_FIELD_BB => FieldOrder::BB,
             ffi::AV_FIELD_TB => FieldOrder::TB,
             ffi::AV_FIELD_BT => FieldOrder::BT,
+
             // non-exhaustive patterns: `6_u32..=u32::MAX` not covered
             6_u32..=u32::MAX => todo!(),
         }

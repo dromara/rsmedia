@@ -2,15 +2,21 @@ use std::any::Any;
 use std::ptr;
 use std::rc::Rc;
 
-use super::decoder::Decoder;
-use super::encoder::Encoder;
-use super::{threading, Debug, Flags, Id, Parameters};
+use super::{
+    decoder::Decoder,
+    encoder::Encoder,
+    threading, Compliance, Debug, Flags, Id, Parameters,
+};
 
-use crate::media;
-use {crate::Codec, crate::Error, crate::Rational};
+use crate::{
+    media,
+    Codec,
+    Error,
+    Rational,
+};
 
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 pub struct Context {
     ptr: *mut ffi::AVCodecContext,
@@ -96,11 +102,11 @@ impl Context {
         unsafe { Id::from((*self.as_ptr()).codec_id) }
     }
 
-    // pub fn compliance(&mut self, value: Compliance) {
-    //     unsafe {
-    //         (*self.as_mut_ptr()).strict_std_compliance = value.into();
-    //     }
-    // }
+    pub fn compliance(&mut self, value: Compliance) {
+        unsafe {
+            (*self.as_mut_ptr()).strict_std_compliance = value.into();
+        }
+    }
 
     pub fn debug(&mut self, value: Debug) {
         unsafe {
@@ -126,6 +132,7 @@ impl Context {
                 count: (*self.as_ptr()).thread_count as usize,
                 #[cfg(not(feature = "ffmpeg7"))]
                 safe: (*self.as_ptr()).thread_safe_callbacks != 0,
+                safe: true,
             }
         }
     }

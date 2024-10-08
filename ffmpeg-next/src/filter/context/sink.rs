@@ -1,7 +1,8 @@
-use super::Context;
-use rsmpeg::ffi;
 use libc::c_int;
-use {crate::Error, crate::Frame, crate::Rational};
+use rsmpeg::ffi;
+
+use super::Context;
+use crate::{Error, Frame, Rational};
 
 pub struct Sink<'a> {
     ctx: &'a mut Context,

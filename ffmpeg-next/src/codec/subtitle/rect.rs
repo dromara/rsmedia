@@ -89,7 +89,6 @@ impl<'a> Bitmap<'a> {
     // #[cfg(not(feature = "ffmpeg_5_0"))]
     // pub fn picture(&self, format: crate::format::Pixel) -> Picture<'a> {
     //     unsafe {
-    //         // TODO:
     //         Picture::wrap(
     //             &(*self.as_ptr()).pict as *const _ as *mut _,
     //             format,

@@ -1,12 +1,17 @@
 use std::ptr;
+use std::ffi::c_void;
+
+use libc::c_int;
+use rsmpeg::ffi;
 
 use super::Delay;
-use rsmpeg::ffi;
-use libc::c_int;
-use std::ffi::c_void;
-use crate::util::format;
-use crate::Dictionary;
-use {crate::frame, crate::ChannelLayout, crate::Error};
+use crate::{
+    frame,
+    util::format,
+    ChannelLayout,
+    Dictionary,
+    Error,
+};
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Definition {

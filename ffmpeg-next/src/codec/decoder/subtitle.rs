@@ -1,11 +1,14 @@
 use std::ops::{Deref, DerefMut};
 
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 use super::Opened;
-use crate::codec::Context;
-use {crate::packet, crate::Error};
+use crate::{
+    codec::Context,
+    packet,
+    Error,
+};
 
 pub struct Subtitle(pub Opened);
 

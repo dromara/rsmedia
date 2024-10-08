@@ -43,6 +43,8 @@ pub use codec::codec::Codec;
 pub use codec::discard::Discard;
 pub use codec::field_order::FieldOrder;
 pub use codec::packet::{self, Packet};
+#[cfg(not(feature = "ffmpeg7"))]
+pub use codec::picture::Picture;
 pub use codec::subtitle::{self, Subtitle};
 pub use codec::threading;
 pub use codec::{decoder, encoder};
@@ -58,22 +60,27 @@ fn init_error() {
     util::error::register_all();
 }
 
+// #[cfg(all(feature = "format", not(feature = "ffmpeg_5_0")))]
 fn init_format() {
     format::register_all();
 }
 
+// #[cfg(feature = "device")]
 fn init_device() {
     device::register_all();
 }
 
+// #[cfg(all(feature = "filter", not(feature = "ffmpeg_5_0")))]
 fn init_filter() {
     filter::register_all();
 }
 
 pub fn init() -> Result<(), Error> {
     init_error();
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     init_format();
     init_device();
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     init_filter();
 
     Ok(())

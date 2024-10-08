@@ -7,7 +7,6 @@ bitflags! {
         const NO_FILE       = ffi::AVFMT_NOFILE as i32;
         const NEED_NUMBER   = ffi::AVFMT_NEEDNUMBER as i32;
         const SHOW_IDS      = ffi::AVFMT_SHOW_IDS as i32;
-        // TODO:
         // #[cfg(not(feature = "ffmpeg_4_0"))]
         // const RAW_PICTURE   = ffi::AVFMT_RAWPICTURE;
         const GLOBAL_HEADER = ffi::AVFMT_GLOBALHEADER as i32;

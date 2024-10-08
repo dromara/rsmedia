@@ -28,6 +28,7 @@ impl From<ffi::AVSubtitleType> for Type {
             ffi::SUBTITLE_BITMAP => Type::Bitmap,
             ffi::SUBTITLE_TEXT => Type::Text,
             ffi::SUBTITLE_ASS => Type::Ass,
+
             // non-exhaustive patterns: `4_u32..=u32::MAX` not covered
             4_u32..=u32::MAX => todo!(),
         }

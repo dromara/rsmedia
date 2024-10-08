@@ -19,11 +19,14 @@ pub enum Primaries {
     SMPTE428,
     SMPTE431,
     SMPTE432,
+    // #[cfg(not(feature = "ffmpeg_4_3"))]
     JEDEC_P22,
+    // #[cfg(feature = "ffmpeg_4_3")]
     EBU3213,
 }
 
 impl Primaries {
+    // #[cfg(feature = "ffmpeg_4_3")]
     pub const JEDEC_P22: Primaries = Primaries::EBU3213;
 
     pub fn name(&self) -> Option<&'static str> {
@@ -57,9 +60,12 @@ impl From<ffi::AVColorPrimaries> for Primaries {
             ffi::AVCOL_PRI_SMPTE428 => Primaries::SMPTE428,
             ffi::AVCOL_PRI_SMPTE431 => Primaries::SMPTE431,
             ffi::AVCOL_PRI_SMPTE432 => Primaries::SMPTE432,
+            // #[cfg(not(feature = "ffmpeg_4_3"))]
             ffi::AVCOL_PRI_JEDEC_P22 => Primaries::JEDEC_P22,
-            //
-            13_u32..=21_u32 | 24_u32..=u32::MAX => todo!(),
+            // #[cfg(feature = "ffmpeg_4_3")]
+            // ffi::AVCOL_PRI_EBU3213 => Primaries::EBU3213,
+
+           _ => panic!("Unknown primaries"),
         }
     }
 }
@@ -82,7 +88,9 @@ impl From<Primaries> for ffi::AVColorPrimaries {
             Primaries::SMPTE428 => ffi::AVCOL_PRI_SMPTE428,
             Primaries::SMPTE431 => ffi::AVCOL_PRI_SMPTE431,
             Primaries::SMPTE432 => ffi::AVCOL_PRI_SMPTE432,
+            // #[cfg(not(feature = "ffmpeg_4_3"))]
             Primaries::JEDEC_P22 => ffi::AVCOL_PRI_JEDEC_P22,
+            // #[cfg(feature = "ffmpeg_4_3")]
             Primaries::EBU3213 => ffi::AVCOL_PRI_EBU3213,
         }
     }

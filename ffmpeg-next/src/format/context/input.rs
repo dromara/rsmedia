@@ -2,12 +2,17 @@ use std::ffi::CString;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use super::common::Context;
-use super::destructor;
 use rsmpeg::ffi;
-use crate::util::range::Range;
-use crate::Codec;
-use {crate::Error, crate::Packet, crate::Stream};
+
+use super::{common::Context, destructor};
+
+use crate::{
+    util::range::Range,
+    Codec,
+    Error,
+    Packet,
+    Stream,
+};
 
 pub struct Input {
     ptr: *mut ffi::AVFormatContext,
@@ -42,6 +47,7 @@ impl Input {
         }
     }
 
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn video_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).video_codec;
@@ -54,6 +60,7 @@ impl Input {
         }
     }
 
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn audio_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).audio_codec;
@@ -66,6 +73,7 @@ impl Input {
         }
     }
 
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn subtitle_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).subtitle_codec;
@@ -78,6 +86,7 @@ impl Input {
         }
     }
 
+    // #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn data_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).data_codec;

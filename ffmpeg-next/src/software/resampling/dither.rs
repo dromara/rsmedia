@@ -33,6 +33,7 @@ impl From<ffi::SwrDitherType> for Dither {
             ffi::SWR_DITHER_NS_LOW_SHIBATA => Dither::NoiseShapingLowShibata,
             ffi::SWR_DITHER_NS_HIGH_SHIBATA => Dither::NoiseShapingHighShibata,
             ffi::SWR_DITHER_NB => Dither::None,
+
             // non-exhaustive patterns: `4_u32..=63_u32` and `73_u32..=u32::MAX` not covered
             4_u32..=63_u32 | 73_u32..=u32::MAX => todo!(),
         }

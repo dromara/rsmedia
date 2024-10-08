@@ -84,6 +84,7 @@ impl From<ffi::AVSampleFormat> for Sample {
             ffi::AV_SAMPLE_FMT_DBLP => Sample::F64(Type::Planar),
 
             ffi::AV_SAMPLE_FMT_NB => Sample::None,
+
             i32::MIN..=-2_i32 | 13_i32..=i32::MAX => todo!(),
         }
     }

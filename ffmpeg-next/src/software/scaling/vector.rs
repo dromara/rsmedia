@@ -50,6 +50,28 @@ impl<'a> Vector<'a> {
         }
     }
 
+    #[cfg(not(feature = "ffmpeg7"))]
+    pub fn value(value: f64, length: usize) -> Self {
+        unsafe {
+            Vector {
+                ptr: ffi::sws_getConstVec(value as c_double, length as c_int),
+                _own: true,
+                _marker: PhantomData,
+            }
+        }
+    }
+
+    #[cfg(not(feature = "ffmpeg7"))]
+    pub fn identity() -> Self {
+        unsafe {
+            Vector {
+                ptr: ffi::sws_getIdentityVec(),
+                _own: true,
+                _marker: PhantomData,
+            }
+        }
+    }
+
     pub fn scale(&mut self, scalar: f64) {
         unsafe {
             ffi::sws_scaleVec(self.as_mut_ptr(), scalar as c_double);
@@ -59,6 +81,34 @@ impl<'a> Vector<'a> {
     pub fn normalize(&mut self, height: f64) {
         unsafe {
             ffi::sws_normalizeVec(self.as_mut_ptr(), height as c_double);
+        }
+    }
+
+    #[cfg(not(feature = "ffmpeg7"))]
+    pub fn conv(&mut self, other: &Vector) {
+        unsafe {
+            ffi::sws_convVec(self.as_mut_ptr(), other.as_ptr() as *mut _);
+        }
+    }
+
+    #[cfg(not(feature = "ffmpeg7"))]
+    pub fn add(&mut self, other: &Vector) {
+        unsafe {
+            ffi::sws_addVec(self.as_mut_ptr(), other.as_ptr() as *mut _);
+        }
+    }
+
+    #[cfg(not(feature = "ffmpeg7"))]
+    pub fn sub(&mut self, other: &Vector) {
+        unsafe {
+            ffi::sws_subVec(self.as_mut_ptr(), other.as_ptr() as *mut _);
+        }
+    }
+
+    #[cfg(not(feature = "ffmpeg7"))]
+    pub fn shift(&mut self, value: usize) {
+        unsafe {
+            ffi::sws_shiftVec(self.as_mut_ptr(), value as c_int);
         }
     }
 
@@ -73,6 +123,18 @@ impl<'a> Vector<'a> {
     }
 }
 
+#[cfg(not(feature = "ffmpeg7"))]
+impl<'a> Clone for Vector<'a> {
+    fn clone(&self) -> Self {
+        unsafe {
+            Vector {
+                ptr: ffi::sws_cloneVec(self.as_ptr() as *mut _),
+                _own: true,
+                _marker: PhantomData,
+            }
+        }
+    }
+}
 
 impl<'a> Drop for Vector<'a> {
     fn drop(&mut self) {

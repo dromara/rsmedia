@@ -1,9 +1,10 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use super::{Audio, Capabilities, Id, Profile, Video};
 use rsmpeg::ffi;
-use {crate::media, crate::Error};
+
+use super::{Audio, Capabilities, Id, Profile, Video};
+use crate::{media, Error};
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct Codec {

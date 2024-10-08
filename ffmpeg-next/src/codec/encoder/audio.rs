@@ -4,9 +4,14 @@ use std::ptr;
 use rsmpeg::ffi;
 
 use super::Encoder as Super;
-use crate::codec::{traits, Context};
-use crate::util::format;
-use {crate::ChannelLayout, crate::Dictionary, crate::Error};
+
+use crate::{
+    codec::{traits, Context},
+    util::format,
+    ChannelLayout,
+    Dictionary,
+    Error,
+};
 
 pub struct Audio(pub Super);
 

@@ -10,8 +10,9 @@ pub use self::audio::Audio;
 pub mod flag;
 pub use self::flag::Flags;
 
+use crate::{Dictionary, DictionaryRef};
+
 use rsmpeg::ffi;
-use {crate::Dictionary, crate::DictionaryRef};
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Packet {

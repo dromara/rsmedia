@@ -2,7 +2,7 @@ pub mod scaling;
 pub mod resampling;
 
 #[inline]
-pub fn scale(
+pub fn scaler(
     format: crate::format::Pixel,
     flags: scaling::Flags,
     (in_width, in_height): (u32, u32),
@@ -14,7 +14,7 @@ pub fn scale(
 }
 
 #[inline]
-pub fn convert(
+pub fn converter(
     (width, height): (u32, u32),
     input: crate::format::Pixel,
     output: crate::format::Pixel,
@@ -31,7 +31,7 @@ pub fn convert(
 }
 
 #[inline]
-pub fn resample(
+pub fn resampler(
     (in_format, in_layout, in_rate): (crate::format::Sample, crate::ChannelLayout, u32),
     (out_format, out_layout, out_rate): (crate::format::Sample, crate::ChannelLayout, u32),
 ) -> Result<resampling::Context, crate::Error> {

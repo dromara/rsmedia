@@ -3,10 +3,13 @@
 use std::ffi::CString;
 use std::mem;
 
-use rsmpeg::ffi;
 use libc::{c_int, c_void};
-use crate::util::format;
-use {crate::ChannelLayout, crate::Error, crate::Rational};
+use rsmpeg::ffi;
+
+use crate::{
+    util::format,
+    ChannelLayout, Error, Rational,
+};
 
 macro_rules! check {
     ($expr:expr) => {

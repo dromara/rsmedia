@@ -23,10 +23,14 @@ pub enum Type {
     Duration,
     Color,
     ChannelLayout,
+
     #[cfg(feature = "ffmpeg7")]
     FlagArray,
     c_ulong,
     bool,
+
+    #[cfg(feature = "ffmpeg7")]
+    UInt,
 }
 
 impl From<ffi::AVOptionType> for Type {
@@ -51,10 +55,17 @@ impl From<ffi::AVOptionType> for Type {
             ffi::AV_OPT_TYPE_VIDEO_RATE => Type::VideoRate,
             ffi::AV_OPT_TYPE_DURATION => Type::Duration,
             ffi::AV_OPT_TYPE_COLOR => Type::Color,
+
             #[cfg(not(feature = "ffmpeg7"))]
             ffi::AV_OPT_TYPE_CHANNEL_LAYOUT => Type::ChannelLayout,
+
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AV_OPT_TYPE_CHLAYOUT => Type::ChannelLayout,
             #[cfg(feature = "ffmpeg7")]
             ffi::AV_OPT_TYPE_FLAG_ARRAY => Type::FlagArray,
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AV_OPT_TYPE_UINT => Type::UInt,
+
             // non-exhaustive patterns: `0_u32`, `19_u32..=65535_u32` and `65537_u32..=u32::MAX` not covered
             0_u32 | 19_u32..=65535_u32 | 65537_u32..=u32::MAX => todo!(),
         }
@@ -83,12 +94,16 @@ impl From<Type> for ffi::AVOptionType {
             Type::VideoRate => ffi::AV_OPT_TYPE_VIDEO_RATE,
             Type::Duration => ffi::AV_OPT_TYPE_DURATION,
             Type::Color => ffi::AV_OPT_TYPE_COLOR,
+
             #[cfg(not(feature = "ffmpeg7"))]
             Type::ChannelLayout => ffi::AV_OPT_TYPE_CHANNEL_LAYOUT,
+
             #[cfg(feature = "ffmpeg7")]
             Type::ChannelLayout => ffi::AV_OPT_TYPE_CHLAYOUT,
             #[cfg(feature = "ffmpeg7")]
             Type::FlagArray => ffi::AV_OPT_TYPE_FLAG_ARRAY,
+            #[cfg(feature = "ffmpeg7")]
+            Type::UInt => ffi::AV_OPT_TYPE_UINT,
         }
     }
 }

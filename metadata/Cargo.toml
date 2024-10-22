@@ -1,0 +1,35 @@
+[package]
+name = "metadata"
+edition = "2021"
+version = "0.1.9"
+authors = ["Zhiming Wang <i@zhimingwang.org>"]
+description = "Media file metadata for human consumption"
+documentation = "https://docs.rs/metadata"
+homepage = "https://github.com/zmwangx/metadata#readme"
+repository = "https://github.com/zmwangx/metadata"
+readme = "README.md"
+keywords = ["ffmpeg", "multimedia", "video", "audio"]
+categories = ["command-line-utilities", "multimedia"]
+license = "MIT"
+
+[lib]
+name = "metadata"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+digest = { version = "0.9", features = ["std"] }
+env_logger = "0.7"
+handlebars = "3.5"
+lazy_static = "1.4"
+libc = "0.2"
+log = "0.4"
+regex = "1.10"
+serde = "1.0"
+sha2 = "0.9"
+serde_derive = "1.0"
+ffmpeg-next = { path = "../ffmpeg-next" }
+
+[dev-dependencies]
+quickcheck = "0.9"
+tempfile = "3.10"

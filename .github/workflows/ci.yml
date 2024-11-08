@@ -18,7 +18,7 @@ jobs:
 
     strategy:
       matrix:
-        ffmpeg_version: ["4.3", "4.4", "5.0", "5.1", "6.0", "6.1", "7.0"]
+        ffmpeg_version: ["4.3", "4.4", "5.0", "5.1", "6.0", "6.1", "7.0", "7.1"]
       fail-fast: false
 
     steps:
@@ -27,8 +27,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt update
-          apt install -y --no-install-recommends clang curl pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ca-certificates clang curl pkg-config
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@v1
@@ -96,7 +96,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:6-ubuntu
+    container: jrottenberg/ffmpeg:7.1-ubuntu
 
     steps:
       - name: Checkout
@@ -104,8 +104,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt update
-          apt install -y --no-install-recommends clang curl pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ca-certificates clang curl pkg-config
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@v1
@@ -117,7 +117,7 @@ jobs:
 
   lints:
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:6-ubuntu
+    container: jrottenberg/ffmpeg:7.1-ubuntu
 
     steps:
       - name: Checkout
@@ -125,8 +125,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt update
-          apt install -y --no-install-recommends clang curl pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ca-certificates clang curl pkg-config
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@v1

@@ -1063,6 +1063,7 @@ dependencies = [
 [[package]]
 name = "rsmpeg"
 version = "0.15.1+ffmpeg.7.0"
+source = "git+https://github.com/larksuite/rsmpeg?branch=master#0319be747095398f481fdf23b562c57dd0ff52c0"
 dependencies = [
  "paste",
  "rusty_ffmpeg",

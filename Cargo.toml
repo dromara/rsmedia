@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-ffmpeg-next = { path = "./ffmpeg-next" }
+ffmpeg = { path = "./ffmpeg" }
 ndarray = { version = "0.16", optional = true }
 tracing = "0.1"
 url = "2"

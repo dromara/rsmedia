@@ -28,7 +28,7 @@ regex = "1.10"
 serde = "1.0"
 sha2 = "0.9"
 serde_derive = "1.0"
-ffmpeg-next = { path = "../ffmpeg-next" }
+ffmpeg = { path = "../ffmpeg" }
 
 [dev-dependencies]
 quickcheck = "0.9"

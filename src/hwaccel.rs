@@ -1,4 +1,4 @@
-extern crate ffmpeg_next as ffmpeg;
+
 
 use crate::error::Error;
 use crate::ffi_hwaccel;

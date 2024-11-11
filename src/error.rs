@@ -1,4 +1,4 @@
-extern crate ffmpeg_next as ffmpeg;
+
 
 use ffmpeg::Error as FfmpegError;
 

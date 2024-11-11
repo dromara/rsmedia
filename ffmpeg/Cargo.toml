@@ -1,5 +1,5 @@
 [package]
-name    = "ffmpeg-next"
+name    = "ffmpeg"
 version = "7.0.4"
 edition = "2021"
 authors = ["meh. <meh@schizofreni.co>", "Zhiming Wang <i@zhimingwang.org>"]
@@ -8,7 +8,8 @@ license = "WTFPL"
 description   = "Safe FFmpeg wrapper (FFmpeg 4 compatible fork of the ffmpeg crate)"
 documentation = "https://docs.rs/ffmpeg-next"
 homepage      = "https://github.com/zmwangx/rust-ffmpeg#readme"
-repository    = "https://github.com/zmwangx/rust-ffmpeg"
+repository    = "https://github.com/zmwangx/rust-ffmpeg, https://github.com/zmwangx/rust-ffmpeg-sys"
+
 readme        = "README.md"
 keywords      = ["ffmpeg", "multimedia", "video", "audio"]
 categories    = ["multimedia"]

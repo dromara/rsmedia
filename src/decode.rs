@@ -1,4 +1,4 @@
-extern crate ffmpeg_next as ffmpeg;
+
 
 use ffmpeg::codec::decoder::Video as AvDecoder;
 use ffmpeg::codec::Context as AvContext;

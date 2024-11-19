@@ -1,42 +1,21 @@
 <h1 align="center">
-  <code>video-rs</code>
+  <code>rsmedia</code>
 </h1>
 <p align="center">High-level video toolkit based on ffmpeg.</p>
 
-## 🎬 Introduction
+> see also: (https://github.com/oddity-ai/video-rs)
 
-`video-rs` is a general-purpose video library for Rust that uses the
-`libav`-family libraries from `ffmpeg`. It aims to provide a stable and Rusty
-interface to many common video tasks such as reading, writing, muxing, encoding
-and decoding.
-
-## 🛠 S️️tatus
-
-⚠️ This project is still a work-in-progress, and will contain bugs. Some parts
-of the API have not been flushed out yet. Use with caution.
-
-Also check out our other video/audio project
-[`rave`](https://github.com/oddity-ai/rave). `rave` is still in development,
-but its eventual goal is to replace `video-rs` and provide a fully featured
-media library without depending on ffmpeg.
-
-## 📦 Setup
-
-First, install the `ffmpeg` libraries. The `ffmpeg-next` project has
-[excellent instructions](https://github.com/zmwangx/rust-ffmpeg/wiki/Notes-on-building#dependencies)
-on this (`video-rs` depends on the `ffmpeg-next` crate).
-
-Then, add the following to your dependencies in `Cargo.toml`:
+## usage
 
 ```toml
-video-rs = "0.10"
+rsmedia = "0.10"
 ```
 
 Use the `ndarray` feature to be able to use raw frames with the
 [`ndarray`](https://github.com/rust-ndarray/ndarray) crate:
 
 ```toml
-video-rs = { version = "0.10", features = ["ndarray"] }
+rsmedia = { version = "0.10", features = ["ndarray"] }
 ```
 
 ## 📖 Examples
@@ -44,26 +23,65 @@ video-rs = { version = "0.10", features = ["ndarray"] }
 Decode a video and print the RGB value for the top left pixel:
 
 ```rust
-use video_rs::decode::Decoder;
-use video_rs::Url;
+use std::error::Error;
+use rsmedia::decode::Decoder;
+use url::Url;
+use image::{ImageBuffer, Rgb};
+use tokio::task;
 
-fn main() {
-    video_rs::init().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>>  {
+    rsmedia::init()?;
 
-    let source =
-        "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-            .parse::<Url>()
-            .unwrap();
+    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4".parse::<Url>().unwrap();
     let mut decoder = Decoder::new(source).expect("failed to create decoder");
 
+    let output_folder = "frames_video_rs";
+    std::fs::create_dir_all(output_folder).expect("failed to create output directory");
+
+    let (width, height) = decoder.size();
+    let frame_rate = decoder.frame_rate(); // Assuming 30 FPS if not available
+
+    let max_duration = 20.0; // Max duration in seconds
+    let max_frames = (frame_rate * max_duration).ceil() as usize;
+
+    let mut frame_count = 0;
+    let mut elapsed_time = 0.0;
+    let mut tasks = vec![];
+
     for frame in decoder.decode_iter() {
-        if let Ok((_, frame)) = frame {
-            let rgb = frame.slice(ndarray::s![0, 0, ..]).to_slice().unwrap();
-            println!("pixel at 0, 0: {}, {}, {}", rgb[0], rgb[1], rgb[2],);
+        if let Ok((_timestamp, frame)) = frame {
+            if elapsed_time > max_duration {
+                break;
+            }
+
+            let rgb = frame.slice(ndarray::s![.., .., 0..3]).to_slice().unwrap();
+
+            let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, rgb.to_vec())
+                .expect("failed to create image buffer");
+
+            let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);
+
+            let task = task::spawn_blocking(move || {
+                img.save(&frame_path).expect("failed to save frame");
+            });
+
+            tasks.push(task);
+
+            frame_count += 1;
+            elapsed_time += 1.0 / frame_rate;
         } else {
             break;
         }
     }
+
+    // Await all tasks to finish
+    for task in tasks {
+        task.await.expect("task failed");
+    }
+
+    println!("Saved {} frames in the '{}' directory", frame_count, output_folder);
+    Ok(())
 }
 ```
 
@@ -71,14 +89,12 @@ Encode a 🌈 video, using `ndarray` to create each frame:
 
 ```rust
 use std::path::Path;
-
 use ndarray::Array3;
-
-use video_rs::encode::{Encoder, Settings};
-use video_rs::time::Time;
+use rsmedia::encode::{Encoder, Settings};
+use rsmedia::time::Time;
 
 fn main() {
-    video_rs::init().unwrap();
+    rsmedia::init().unwrap();
 
     let settings = Settings::preset_h264_yuv420p(1280, 720, false);
     let mut encoder =
@@ -139,59 +155,3 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
     ]
 }
 ```
-
-## 🪲 Debugging
-
-Ffmpeg does not always produce useful error messages directly. It is
-recommended to turn on tracing if you run into an issue to see if there is
-extra information present in the log messages.
-
-Add the following packages to `Cargo.toml`:
-
-```toml
-[dependencies]
-tracing = "0.1"
-tracing-subscriber = "0.3"
-```
-
-And add the following to your main functions:
-
-```rust
-fn main() {
-    tracing_subscriber::fmt::init();
-
-    // ...
-}
-```
-
-Set the `RUST_LOG` environment variable to display tracing messages:
-
-```sh
-RUST_LOG=video=debug cargo run
-```
-
-## ✨ Credits
-
-`video-rs` only exists thanks to the following organizations and people:
-
-* All [contributors](https://github.com/oddity-ai/video-rs/graphs/contributors) for their work!
-* [Provincie Utrecht](https://www.provincie-utrecht.nl/) for supporting this project as part of the "Situational Awareness Software" project.
-* [zmwangx](https://github.com/zmwangx) for maintaining [rust-ffmpeg](https://github.com/zmwangx/rust-ffmpeg).
-* The [FFmpeg project](https://ffmpeg.org/) for `ffmpeg` and the `ffmpeg` libraries.
-
-## ⚖️ License
-
-Licensed under either of
-
- * Apache License, Version 2.0
-   ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license
-   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
-
-## Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.

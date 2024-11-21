@@ -74,7 +74,7 @@ impl Options {
         Self(opts)
     }
 
-    /// Convert back to ffmpeg native dictionary, which can be used with `ffmpeg_next` functions.
+    /// Convert back to ffmpeg native dictionary, which can be used with `ffmpeg` functions.
     pub(super) fn to_dict(&self) -> AvDictionary {
         self.0.clone()
     }

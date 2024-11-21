@@ -132,6 +132,7 @@ impl Context {
                 count: (*self.as_ptr()).thread_count as usize,
                 #[cfg(not(feature = "ffmpeg7"))]
                 safe: (*self.as_ptr()).thread_safe_callbacks != 0,
+                #[cfg(not(feature = "ffmpeg6"))]
                 safe: true,
             }
         }

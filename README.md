@@ -3,7 +3,11 @@
 </h1>
 <p align="center">High-level video toolkit based on ffmpeg.</p>
 
-> see also: (https://github.com/oddity-ai/video-rs)
+> see also: 
+> 
+> https://github.com/oddity-ai/video-rs
+> 
+> https://github.com/remotia/remotia-ffmpeg-codecs
 
 ## usage
 

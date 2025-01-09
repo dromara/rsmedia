@@ -41,7 +41,7 @@ macro_rules! define_layout {
 impl ChannelLayout {
     define_layout!(MONO, 1, 1);
     define_layout!(STEREO, 2, 2);
-    //? FIXMEc
+    //? FIXME
     // define_layout!(MONO, 1, AV_CH_LAYOUT_MONO);
     // define_layout!(STEREO, 2, AV_CH_LAYOUT_STEREO);
     // define_layout!(_2POINT1, 3, AV_CH_LAYOUT_2POINT1);

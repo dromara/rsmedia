@@ -1,5 +1,5 @@
-use rsmpeg::ffi::*;
 use libc::c_int;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub struct Config {
@@ -53,7 +53,7 @@ pub enum Type {
 
 impl From<c_int> for Type {
     fn from(value: c_int) -> Type {
-        match value as u32{
+        match value as u32 {
             FF_THREAD_FRAME => Type::Frame,
             FF_THREAD_SLICE => Type::Slice,
 

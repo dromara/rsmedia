@@ -10,8 +10,13 @@ edition = "2021"
 repository = "https://github.com/oddity-ai/video-rs"
 readme = "README.md"
 
+[features]
+default = ["ffmpeg7"]
+ffmpeg6 = ["ffmpeg/ffmpeg6"]
+ffmpeg7 = ["ffmpeg/ffmpeg7"]
+
 [dependencies]
-ffmpeg = { path = "./ffmpeg" }
+ffmpeg = { path = "./ffmpeg", default-features = true }
 ndarray = { version = "0.16", optional = true }
 tracing = "0.1"
 url = "2"

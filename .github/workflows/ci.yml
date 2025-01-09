@@ -58,7 +58,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
     
       - name: Build
-        run: cargo build
+        run: cargo build --no-default-features --features ffmpeg7 --verbose
 
   build-windows:
     name: build / windows / latest ffmpeg
@@ -81,7 +81,7 @@ jobs:
           mv ffmpeg-*/* ffmpeg/
           Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg`n"
           Add-Content $env:GITHUB_ENV "FFMPEG_INCLUDE_DIR=${pwd}\ffmpeg\include`n"
-          Add-Content $env:GITHUB_ENV "FFMPEG_LIB_DIR=${pwd}\ffmpeg\lib`n"
+          Add-Content $env:GITHUB_ENV "FFMPEG_LIBS_DIR=${pwd}\ffmpeg\lib`n"
           Add-Content $env:GITHUB_ENV "FFMPEG_DLL_PATH=${pwd}\ffmpeg\bin`n"
           Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin`n"
 
@@ -89,7 +89,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: cargo build
+        run: cargo build --no-default-features --features ffmpeg7 --verbose
 
   test:
     runs-on: ubuntu-latest

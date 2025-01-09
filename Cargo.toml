@@ -16,7 +16,7 @@ ffmpeg6 = ["ffmpeg/ffmpeg6"]
 ffmpeg7 = ["ffmpeg/ffmpeg7"]
 
 [dependencies]
-ffmpeg = { path = "./ffmpeg", default-features = true }
+ffmpeg = { path = "./ffmpeg", default-features = false }
 ndarray = { version = "0.16", optional = true }
 tracing = "0.1"
 url = "2"

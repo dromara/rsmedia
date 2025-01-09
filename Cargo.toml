@@ -12,8 +12,8 @@ readme = "README.md"
 
 [features]
 default = ["ffmpeg7"]
-ffmpeg6 = ["ffmpeg/ffmpeg6"]
-ffmpeg7 = ["ffmpeg/ffmpeg7"]
+ffmpeg6 = ["ffmpeg/ffmpeg6", "ffmpeg/link_system_ffmpeg"]
+ffmpeg7 = ["ffmpeg/ffmpeg7", "ffmpeg/link_system_ffmpeg"]
 
 [dependencies]
 ffmpeg = { path = "./ffmpeg", default-features = false }

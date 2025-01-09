@@ -13,17 +13,17 @@ keywords      = ["ffmpeg", "multimedia", "video", "audio"]
 categories    = ["multimedia"]
 
 [features]
+# Use FFmpeg 7 by default
+default = ["ffmpeg7", "link_system_ffmpeg"]
+
+# Note that ffmpeg{x}
 ffmpeg6 = ["rsmpeg/ffmpeg6"]
 ffmpeg7 = ["rsmpeg/ffmpeg7"]
+
 # Try linking ffmpeg with pkg-config.
 link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg"]
 # Try linking ffmpeg with vcpkg.
 link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
-
-default = [
-    "ffmpeg7",
-    "link_system_ffmpeg"
-]
 
 [dependencies]
 libc     = "0.2"

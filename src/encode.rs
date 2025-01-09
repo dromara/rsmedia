@@ -1,5 +1,3 @@
-
-
 use ffmpeg::codec::codec::Codec as AvCodec;
 use ffmpeg::codec::encoder::video::Encoder as AvEncoder;
 use ffmpeg::codec::encoder::video::Video as AvVideo;

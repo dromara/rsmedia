@@ -11,10 +11,7 @@ use super::{MotionEstimation, Prediction};
 
 use crate::{
     codec::{traits, Context},
-    color,
-    Dictionary,
-    Error,
-    Rational,
+    color, Dictionary, Error, Rational,
 };
 
 pub struct Video(pub Super);

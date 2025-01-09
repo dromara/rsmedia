@@ -1,10 +1,6 @@
 use rsmpeg::ffi;
 
-use crate::{
-    DictionaryRef,
-    Rational,
-    format::context::common::Context
-};
+use crate::{format::context::common::Context, DictionaryRef, Rational};
 
 // WARNING: index refers to the offset in the chapters array (starting from 0)
 // it is not necessarly equal to the id (which may start at 1)

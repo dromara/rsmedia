@@ -7,8 +7,7 @@ use rsmpeg::ffi;
 
 use super::Frame;
 use crate::{
-    color,
-    picture,
+    color, picture,
     util::{chroma, format},
     Rational,
 };

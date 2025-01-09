@@ -1,6 +1,6 @@
 use super::Id;
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 #[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
@@ -189,7 +189,9 @@ impl From<(Id, c_int)> for Profile {
                 ffi::FF_PROFILE_H264_CONSTRAINED => Profile::H264(H264::Constrained),
                 ffi::FF_PROFILE_H264_INTRA => Profile::H264(H264::Intra),
                 ffi::FF_PROFILE_H264_BASELINE => Profile::H264(H264::Baseline),
-                ffi::FF_PROFILE_H264_CONSTRAINED_BASELINE => Profile::H264(H264::ConstrainedBaseline),
+                ffi::FF_PROFILE_H264_CONSTRAINED_BASELINE => {
+                    Profile::H264(H264::ConstrainedBaseline)
+                }
                 ffi::FF_PROFILE_H264_MAIN => Profile::H264(H264::Main),
                 ffi::FF_PROFILE_H264_EXTENDED => Profile::H264(H264::Extended),
                 ffi::FF_PROFILE_H264_HIGH => Profile::H264(H264::High),
@@ -315,7 +317,9 @@ impl From<Profile> for c_int {
             Profile::H264(H264::Constrained) => ffi::FF_PROFILE_H264_CONSTRAINED as i32,
             Profile::H264(H264::Intra) => ffi::FF_PROFILE_H264_INTRA as i32,
             Profile::H264(H264::Baseline) => ffi::FF_PROFILE_H264_BASELINE as i32,
-            Profile::H264(H264::ConstrainedBaseline) => ffi::FF_PROFILE_H264_CONSTRAINED_BASELINE as i32,
+            Profile::H264(H264::ConstrainedBaseline) => {
+                ffi::FF_PROFILE_H264_CONSTRAINED_BASELINE as i32
+            }
             Profile::H264(H264::Main) => ffi::FF_PROFILE_H264_MAIN as i32,
             Profile::H264(H264::Extended) => ffi::FF_PROFILE_H264_EXTENDED as i32,
             Profile::H264(H264::High) => ffi::FF_PROFILE_H264_HIGH as i32,
@@ -324,7 +328,9 @@ impl From<Profile> for c_int {
             Profile::H264(H264::High422) => ffi::FF_PROFILE_H264_HIGH_422 as i32,
             Profile::H264(H264::High422Intra) => ffi::FF_PROFILE_H264_HIGH_422_INTRA as i32,
             Profile::H264(H264::High444) => ffi::FF_PROFILE_H264_HIGH_444 as i32,
-            Profile::H264(H264::High444Predictive) => ffi::FF_PROFILE_H264_HIGH_444_PREDICTIVE as i32,
+            Profile::H264(H264::High444Predictive) => {
+                ffi::FF_PROFILE_H264_HIGH_444_PREDICTIVE as i32
+            }
             Profile::H264(H264::High444Intra) => ffi::FF_PROFILE_H264_HIGH_444_INTRA as i32,
             Profile::H264(H264::CAVLC444) => ffi::FF_PROFILE_H264_CAVLC_444 as i32,
 
@@ -339,20 +345,34 @@ impl From<Profile> for c_int {
             Profile::MPEG4(MPEG4::Main) => ffi::FF_PROFILE_MPEG4_MAIN as i32,
             Profile::MPEG4(MPEG4::NBit) => ffi::FF_PROFILE_MPEG4_N_BIT as i32,
             Profile::MPEG4(MPEG4::ScalableTexture) => ffi::FF_PROFILE_MPEG4_SCALABLE_TEXTURE as i32,
-            Profile::MPEG4(MPEG4::SimpleFaceAnimation) => ffi::FF_PROFILE_MPEG4_SIMPLE_FACE_ANIMATION as i32,
-            Profile::MPEG4(MPEG4::BasicAnimatedTexture) => ffi::FF_PROFILE_MPEG4_BASIC_ANIMATED_TEXTURE as i32,
+            Profile::MPEG4(MPEG4::SimpleFaceAnimation) => {
+                ffi::FF_PROFILE_MPEG4_SIMPLE_FACE_ANIMATION as i32
+            }
+            Profile::MPEG4(MPEG4::BasicAnimatedTexture) => {
+                ffi::FF_PROFILE_MPEG4_BASIC_ANIMATED_TEXTURE as i32
+            }
             Profile::MPEG4(MPEG4::Hybrid) => ffi::FF_PROFILE_MPEG4_HYBRID as i32,
-            Profile::MPEG4(MPEG4::AdvancedRealTime) => ffi::FF_PROFILE_MPEG4_ADVANCED_REAL_TIME as i32,
+            Profile::MPEG4(MPEG4::AdvancedRealTime) => {
+                ffi::FF_PROFILE_MPEG4_ADVANCED_REAL_TIME as i32
+            }
             Profile::MPEG4(MPEG4::CoreScalable) => ffi::FF_PROFILE_MPEG4_CORE_SCALABLE as i32,
             Profile::MPEG4(MPEG4::AdvancedCoding) => ffi::FF_PROFILE_MPEG4_ADVANCED_CODING as i32,
             Profile::MPEG4(MPEG4::AdvancedCore) => ffi::FF_PROFILE_MPEG4_ADVANCED_CORE as i32,
-            Profile::MPEG4(MPEG4::AdvancedScalableTexture) => ffi::FF_PROFILE_MPEG4_ADVANCED_SCALABLE_TEXTURE as i32,
+            Profile::MPEG4(MPEG4::AdvancedScalableTexture) => {
+                ffi::FF_PROFILE_MPEG4_ADVANCED_SCALABLE_TEXTURE as i32
+            }
             Profile::MPEG4(MPEG4::SimpleStudio) => ffi::FF_PROFILE_MPEG4_SIMPLE_STUDIO as i32,
             Profile::MPEG4(MPEG4::AdvancedSimple) => ffi::FF_PROFILE_MPEG4_ADVANCED_SIMPLE as i32,
 
-            Profile::JPEG2000(JPEG2000::CStreamRestriction0) => ffi::FF_PROFILE_JPEG2000_CSTREAM_RESTRICTION_0 as i32,
-            Profile::JPEG2000(JPEG2000::CStreamRestriction1) => ffi::FF_PROFILE_JPEG2000_CSTREAM_RESTRICTION_1 as i32,
-            Profile::JPEG2000(JPEG2000::CStreamNoRestriction) => ffi::FF_PROFILE_JPEG2000_CSTREAM_NO_RESTRICTION as i32,
+            Profile::JPEG2000(JPEG2000::CStreamRestriction0) => {
+                ffi::FF_PROFILE_JPEG2000_CSTREAM_RESTRICTION_0 as i32
+            }
+            Profile::JPEG2000(JPEG2000::CStreamRestriction1) => {
+                ffi::FF_PROFILE_JPEG2000_CSTREAM_RESTRICTION_1 as i32
+            }
+            Profile::JPEG2000(JPEG2000::CStreamNoRestriction) => {
+                ffi::FF_PROFILE_JPEG2000_CSTREAM_NO_RESTRICTION as i32
+            }
             Profile::JPEG2000(JPEG2000::DCinema2K) => ffi::FF_PROFILE_JPEG2000_DCINEMA_2K as i32,
             Profile::JPEG2000(JPEG2000::DCinema4K) => ffi::FF_PROFILE_JPEG2000_DCINEMA_4K as i32,
 

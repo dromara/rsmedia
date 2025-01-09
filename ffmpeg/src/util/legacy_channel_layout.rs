@@ -1,5 +1,5 @@
-use rsmpeg::ffi;
 use libc::c_ulonglong;
+use rsmpeg::ffi;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -82,7 +82,9 @@ impl ChannelLayout {
 
     pub fn default(number: i32) -> ChannelLayout {
         unsafe {
-            ChannelLayout::from_bits_truncate(ffi::av_get_default_channel_layout(number) as c_ulonglong)
+            ChannelLayout::from_bits_truncate(
+                ffi::av_get_default_channel_layout(number) as c_ulonglong
+            )
         }
     }
 }

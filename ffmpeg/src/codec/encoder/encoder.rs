@@ -5,13 +5,7 @@ use libc::c_int;
 use rsmpeg::ffi;
 
 use super::{audio, subtitle, video};
-use crate::{
-    codec::Context,
-    media,
-    packet,
-    Error,
-    Frame,
-};
+use crate::{codec::Context, media, packet, Error, Frame};
 
 pub struct Encoder(pub Context);
 

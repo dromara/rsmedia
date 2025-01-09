@@ -2,9 +2,9 @@ use std::ffi::{CStr, CString};
 use std::ptr;
 
 use super::{Context, Filter};
-use rsmpeg::ffi;
-use libc::c_int;
 use crate::Error;
+use libc::c_int;
+use rsmpeg::ffi;
 
 pub struct Graph {
     ptr: *mut ffi::AVFilterGraph,

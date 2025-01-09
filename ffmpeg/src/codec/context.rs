@@ -3,17 +3,10 @@ use std::ptr;
 use std::rc::Rc;
 
 use super::{
-    decoder::Decoder,
-    encoder::Encoder,
-    threading, Compliance, Debug, Flags, Id, Parameters,
+    decoder::Decoder, encoder::Encoder, threading, Compliance, Debug, Flags, Id, Parameters,
 };
 
-use crate::{
-    media,
-    Codec,
-    Error,
-    Rational,
-};
+use crate::{media, Codec, Error, Rational};
 
 use libc::c_int;
 use rsmpeg::ffi;

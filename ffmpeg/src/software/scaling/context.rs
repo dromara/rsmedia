@@ -1,14 +1,10 @@
 use std::ptr;
 
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 use super::Flags;
-use crate::{
-    util::format,
-    frame,
-    Error,
-};
+use crate::{frame, util::format, Error};
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub struct Definition {

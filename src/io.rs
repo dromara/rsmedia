@@ -1,5 +1,3 @@
-
-
 use ffmpeg::codec::packet::Packet as AvPacket;
 use ffmpeg::format::context::{Input as AvInput, Output as AvOutput};
 use ffmpeg::media::Type as AvMediaType;

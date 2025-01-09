@@ -1,5 +1,3 @@
-
-
 use ffmpeg::codec::decoder::Video as AvDecoder;
 use ffmpeg::codec::Context as AvContext;
 use ffmpeg::format::pixel::Pixel as AvPixel;

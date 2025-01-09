@@ -6,10 +6,7 @@ use rsmpeg::ffi;
 use super::{Audio, Check, Conceal, Opened, Subtitle, Video};
 use crate::{
     codec::{traits, Context},
-    Dictionary,
-    Discard,
-    Error,
-    Rational,
+    Dictionary, Discard, Error, Rational,
 };
 
 pub struct Decoder(pub Context);

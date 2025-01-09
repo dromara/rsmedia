@@ -6,10 +6,7 @@ use std::mem;
 use libc::{c_int, c_void};
 use rsmpeg::ffi;
 
-use crate::{
-    util::format,
-    ChannelLayout, Error, Rational,
-};
+use crate::{util::format, ChannelLayout, Error, Rational};
 
 macro_rules! check {
     ($expr:expr) => {

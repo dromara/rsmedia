@@ -1,5 +1,5 @@
-pub mod scaling;
 pub mod resampling;
+pub mod scaling;
 
 #[inline]
 pub fn scaler(

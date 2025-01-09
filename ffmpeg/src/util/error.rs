@@ -3,10 +3,10 @@ use std::ffi::CStr;
 use std::fmt;
 use std::io;
 
-use rsmpeg::ffi::{self,
-    AVERROR_BSF_NOT_FOUND, AVERROR_BUFFER_TOO_SMALL, AVERROR_BUG,
-    AVERROR_BUG2, AVERROR_DECODER_NOT_FOUND, AVERROR_DEMUXER_NOT_FOUND, AVERROR_ENCODER_NOT_FOUND,
-    AVERROR_EOF, AVERROR_EXIT, AVERROR_EXPERIMENTAL, AVERROR_EXTERNAL, AVERROR_FILTER_NOT_FOUND,
+use rsmpeg::ffi::{
+    self, AVERROR_BSF_NOT_FOUND, AVERROR_BUFFER_TOO_SMALL, AVERROR_BUG, AVERROR_BUG2,
+    AVERROR_DECODER_NOT_FOUND, AVERROR_DEMUXER_NOT_FOUND, AVERROR_ENCODER_NOT_FOUND, AVERROR_EOF,
+    AVERROR_EXIT, AVERROR_EXPERIMENTAL, AVERROR_EXTERNAL, AVERROR_FILTER_NOT_FOUND,
     AVERROR_HTTP_BAD_REQUEST, AVERROR_HTTP_FORBIDDEN, AVERROR_HTTP_NOT_FOUND,
     AVERROR_HTTP_OTHER_4XX, AVERROR_HTTP_SERVER_ERROR, AVERROR_HTTP_UNAUTHORIZED,
     AVERROR_INPUT_CHANGED, AVERROR_INVALIDDATA, AVERROR_MUXER_NOT_FOUND, AVERROR_OPTION_NOT_FOUND,
@@ -207,7 +207,8 @@ fn index(error: &Error) -> usize {
 }
 
 // XXX: the length has to be synced with the number of errors
-static mut STRINGS: [[c_char; AV_ERROR_MAX_STRING_SIZE as usize]; 27] = [[0; AV_ERROR_MAX_STRING_SIZE as usize]; 27];
+static mut STRINGS: [[c_char; AV_ERROR_MAX_STRING_SIZE as usize]; 27] =
+    [[0; AV_ERROR_MAX_STRING_SIZE as usize]; 27];
 
 pub fn register_all() {
     unsafe {
@@ -363,7 +364,10 @@ mod tests {
             Into::<c_int>::into(Error::from(ffi::AVERROR(EAGAIN as u32))),
             ffi::AVERROR(EAGAIN as u32)
         );
-        assert_eq!(Error::from(ffi::AVERROR(EAGAIN as u32)), Error::Other { errno: EAGAIN });
+        assert_eq!(
+            Error::from(ffi::AVERROR(EAGAIN as u32)),
+            Error::Other { errno: EAGAIN }
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

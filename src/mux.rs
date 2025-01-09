@@ -1,5 +1,3 @@
-
-
 use ffmpeg::codec::Id as AvCodecId;
 use ffmpeg::{Error as AvError, Rational as AvRational};
 

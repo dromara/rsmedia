@@ -10,8 +10,8 @@ pub use self::rect_mut::{AssMut, BitmapMut, RectMut, TextMut};
 use std::marker::PhantomData;
 use std::mem;
 
-use rsmpeg::ffi;
 use libc::{c_uint, size_t};
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Type {
@@ -103,11 +103,12 @@ impl Subtitle {
             self.0.num_rects += 1;
             self.0.rects = ffi::av_realloc(
                 self.0.rects as *mut _,
-                (mem::size_of::<*const ffi::AVSubtitleRect>() * self.0.num_rects as usize) as size_t,
+                (mem::size_of::<*const ffi::AVSubtitleRect>() * self.0.num_rects as usize)
+                    as size_t,
             ) as *mut _;
 
-            let rect =
-                ffi::av_mallocz(mem::size_of::<ffi::AVSubtitleRect>() as size_t) as *mut ffi::AVSubtitleRect;
+            let rect = ffi::av_mallocz(mem::size_of::<ffi::AVSubtitleRect>() as size_t)
+                as *mut ffi::AVSubtitleRect;
             (*rect).type_ = kind.into();
 
             *self.0.rects.offset((self.0.num_rects - 1) as isize) = rect;

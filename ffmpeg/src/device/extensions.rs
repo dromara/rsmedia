@@ -4,11 +4,7 @@ use std::ptr;
 use libc::c_int;
 use rsmpeg::ffi;
 
-use crate::{
-    device,
-    format::context::common::Context,
-    Error,
-};
+use crate::{device, format::context::common::Context, Error};
 
 impl Context {
     pub fn devices(&self) -> Result<DeviceIter, Error> {

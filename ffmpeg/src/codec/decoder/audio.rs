@@ -1,12 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use super::Opened;
-use crate::{
-    codec::Context,
-    util::format,
-    AudioService,
-    ChannelLayout,
-};
+use crate::{codec::Context, util::format, AudioService, ChannelLayout};
 
 pub struct Audio(pub Opened);
 

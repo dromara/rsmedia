@@ -5,17 +5,15 @@ use libc::c_int;
 use super::{slice, Opened};
 
 use crate::{
-    color,
-    Rational,
-    FieldOrder,
     codec::Context,
-    util::{chroma, format}
+    color,
+    util::{chroma, format},
+    FieldOrder, Rational,
 };
 
 pub struct Video(pub Opened);
 
 impl Video {
-
     pub fn width(&self) -> u32 {
         unsafe { (*self.as_ptr()).width as u32 }
     }

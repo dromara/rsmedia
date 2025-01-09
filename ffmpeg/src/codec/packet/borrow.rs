@@ -2,8 +2,8 @@ use std::mem;
 use std::ptr;
 
 use super::Ref;
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 pub struct Borrow<'a> {
     packet: ffi::AVPacket,

@@ -29,7 +29,12 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
             let empty = CString::new("").unwrap();
-            let entry = ffi::av_dict_get(self.ptr, empty.as_ptr(), self.cur, ffi::AV_DICT_IGNORE_SUFFIX as i32);
+            let entry = ffi::av_dict_get(
+                self.ptr,
+                empty.as_ptr(),
+                self.cur,
+                ffi::AV_DICT_IGNORE_SUFFIX as i32,
+            );
 
             if !entry.is_null() {
                 let key = from_utf8_unchecked(CStr::from_ptr((*entry).key).to_bytes());

@@ -1,5 +1,3 @@
-
-
 use crate::ffi::init_logging;
 
 /// Initialize global ffmpeg settings. This also intializes the

@@ -1,14 +1,16 @@
-use std::error::Error;
-use rsmedia::decode::Decoder;
-use url::Url;
 use image::{ImageBuffer, Rgb};
+use rsmedia::decode::Decoder;
+use std::error::Error;
 use tokio::task;
+use url::Url;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>>  {
+async fn main() -> Result<(), Box<dyn Error>> {
     rsmedia::init()?;
 
-    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4".parse::<Url>().unwrap();
+    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
+        .parse::<Url>()
+        .unwrap();
     let mut decoder = Decoder::new(source).expect("failed to create decoder");
 
     let output_folder = "frames_video_rs";
@@ -32,8 +34,9 @@ async fn main() -> Result<(), Box<dyn Error>>  {
 
             let rgb = frame.slice(ndarray::s![.., .., 0..3]).to_slice().unwrap();
 
-            let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, rgb.to_vec())
-                .expect("failed to create image buffer");
+            let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
+                ImageBuffer::from_raw(width, height, rgb.to_vec())
+                    .expect("failed to create image buffer");
 
             let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);
 
@@ -55,6 +58,9 @@ async fn main() -> Result<(), Box<dyn Error>>  {
         task.await.expect("task failed");
     }
 
-    println!("Saved {} frames in the '{}' directory", frame_count, output_folder);
+    println!(
+        "Saved {} frames in the '{}' directory",
+        frame_count, output_folder
+    );
     Ok(())
 }

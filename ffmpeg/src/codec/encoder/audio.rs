@@ -8,9 +8,7 @@ use super::Encoder as Super;
 use crate::{
     codec::{traits, Context},
     util::format,
-    ChannelLayout,
-    Dictionary,
-    Error,
+    ChannelLayout, Dictionary, Error,
 };
 
 pub struct Audio(pub Super);

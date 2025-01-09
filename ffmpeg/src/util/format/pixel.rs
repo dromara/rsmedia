@@ -552,7 +552,6 @@ impl From<ffi::AVPixelFormat> for Pixel {
             // ffi::AV_PIX_FMT_VAAPI_VLD => Pixel::VAAPI_VLD,
             // #[cfg(any(not(feature = "ff_api_vaapi"), feature = "ffmpeg_5_0"))]
             // ffi::AV_PIX_FMT_VAAPI => Pixel::VAAPI,
-
             ffi::AV_PIX_FMT_YUV420P16LE => Pixel::YUV420P16LE,
             ffi::AV_PIX_FMT_YUV420P16BE => Pixel::YUV420P16BE,
             ffi::AV_PIX_FMT_YUV422P16LE => Pixel::YUV422P16LE,
@@ -586,7 +585,6 @@ impl From<ffi::AVPixelFormat> for Pixel {
             ffi::AV_PIX_FMT_YUV422P9LE => Pixel::YUV422P9LE,
             // #[cfg(not(feature = "ffmpeg_4_0"))]
             // ffi::AV_PIX_FMT_VDA_VLD => Pixel::VDA_VLD,
-
             ffi::AV_PIX_FMT_GBRP => Pixel::GBRP,
             ffi::AV_PIX_FMT_GBRP9BE => Pixel::GBRP9BE,
             ffi::AV_PIX_FMT_GBRP9LE => Pixel::GBRP9LE,
@@ -631,7 +629,6 @@ impl From<ffi::AVPixelFormat> for Pixel {
 
             // #[cfg(not(feature = "ffmpeg_4_0"))]
             // ffi::AV_PIX_FMT_VDA => Pixel::VDA,
-
             ffi::AV_PIX_FMT_YA16BE => Pixel::YA16BE,
             ffi::AV_PIX_FMT_YA16LE => Pixel::YA16LE,
 
@@ -834,7 +831,6 @@ impl From<ffi::AVPixelFormat> for Pixel {
             // ffi::AV_PIX_FMT_RPI4_8 => Pixel::RPI4_8,
             // #[cfg(feature = "rpi")]
             // ffi::AV_PIX_FMT_RPI4_10 => Pixel::RPI4_10,
-
             _ => panic!("Unsupported pixel type"),
         }
     }
@@ -1060,7 +1056,6 @@ impl From<Pixel> for ffi::AVPixelFormat {
             // --- defaults
             // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg7")))]
             // Pixel::XVMC => ffi::AV_PIX_FMT_XVMC,
-
             Pixel::RGB32 => ffi::AV_PIX_FMT_RGB32,
             Pixel::RGB32_1 => ffi::AV_PIX_FMT_RGB32_1,
             Pixel::BGR32 => ffi::AV_PIX_FMT_BGR32,
@@ -1263,7 +1258,6 @@ impl From<Pixel> for ffi::AVPixelFormat {
             // Pixel::RPI4_8 => ffi::AV_PIX_FMT_RPI4_8,
             // #[cfg(feature = "rpi")]
             // Pixel::RPI4_10 => ffi::AV_PIX_FMT_RPI4_10,
-
             _ => panic!("unknown pixel format"),
         }
     }

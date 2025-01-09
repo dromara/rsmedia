@@ -4,11 +4,7 @@ use libc::c_int;
 use rsmpeg::ffi;
 
 use super::Opened;
-use crate::{
-    codec::Context,
-    packet,
-    Error,
-};
+use crate::{codec::Context, packet, Error};
 
 pub struct Subtitle(pub Opened);
 

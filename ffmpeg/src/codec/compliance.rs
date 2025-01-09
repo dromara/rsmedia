@@ -1,5 +1,5 @@
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Compliance {

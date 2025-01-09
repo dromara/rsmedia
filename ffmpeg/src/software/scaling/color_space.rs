@@ -1,5 +1,5 @@
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum ColorSpace {
@@ -17,7 +17,7 @@ impl From<c_int> for ColorSpace {
     fn from(value: c_int) -> ColorSpace {
         match value as u32 {
             ffi::SWS_CS_ITU709 => ColorSpace::ITU709,
-            ffi:: SWS_CS_FCC => ColorSpace::FCC,
+            ffi::SWS_CS_FCC => ColorSpace::FCC,
             ffi::SWS_CS_DEFAULT => ColorSpace::Default,
             ffi::SWS_CS_SMPTE240M => ColorSpace::SMPTE240M,
 

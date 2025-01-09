@@ -7,15 +7,7 @@ use rsmpeg::ffi;
 
 use super::{common::Context, destructor};
 
-use crate::{
-    codec,
-    codec::traits,
-    ChapterMut,
-    Dictionary,
-    Error,
-    Rational,
-    StreamMut
-};
+use crate::{codec, codec::traits, ChapterMut, Dictionary, Error, Rational, StreamMut};
 
 pub struct Output {
     ptr: *mut ffi::AVFormatContext,

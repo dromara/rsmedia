@@ -1,5 +1,5 @@
-use rsmpeg::ffi;
 use libc::c_uint;
+use rsmpeg::ffi;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]

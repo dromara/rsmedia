@@ -1,10 +1,5 @@
-pub use crate::util::format::{pixel, Pixel, sample, Sample};
-use crate::{
-    util::interrupt,
-    Dictionary,
-    Error,
-    Format,
-};
+pub use crate::util::format::{pixel, sample, Pixel, Sample};
+use crate::{util::interrupt, Dictionary, Error, Format};
 
 pub mod stream;
 
@@ -92,10 +87,13 @@ pub fn open<P: AsRef<Path> + ?Sized>(path: &P, format: &Format) -> Result<Contex
                 ptr::null(),
                 path.as_ptr(),
             ) {
-                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32) {
-                    0 => Ok(Context::Output(context::Output::wrap(ps))),
-                    e => Err(Error::from(e)),
-                },
+                0 => {
+                    match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32)
+                    {
+                        0 => Ok(Context::Output(context::Output::wrap(ps))),
+                        e => Err(Error::from(e)),
+                    }
+                }
 
                 e => Err(Error::from(e)),
             },
@@ -140,10 +138,13 @@ pub fn open_with<P: AsRef<Path> + ?Sized>(
                 ptr::null(),
                 path.as_ptr(),
             ) {
-                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32) {
-                    0 => Ok(Context::Output(context::Output::wrap(ps))),
-                    e => Err(Error::from(e)),
-                },
+                0 => {
+                    match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32)
+                    {
+                        0 => Ok(Context::Output(context::Output::wrap(ps))),
+                        e => Err(Error::from(e)),
+                    }
+                }
 
                 e => Err(Error::from(e)),
             },
@@ -227,7 +228,12 @@ pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<context::Output, Erro
         let mut ps = ptr::null_mut();
         let path = from_path(path);
 
-        match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
+        match ffi::avformat_alloc_output_context2(
+            &mut ps,
+            ptr::null_mut(),
+            ptr::null(),
+            path.as_ptr(),
+        ) {
             0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32) {
                 0 => Ok(context::Output::wrap(ps)),
                 e => Err(Error::from(e)),
@@ -247,7 +253,12 @@ pub fn output_with<P: AsRef<Path> + ?Sized>(
         let path = from_path(path);
         let mut opts = options.disown();
 
-        match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
+        match ffi::avformat_alloc_output_context2(
+            &mut ps,
+            ptr::null_mut(),
+            ptr::null(),
+            path.as_ptr(),
+        ) {
             0 => {
                 let res = ffi::avio_open2(
                     &mut (*ps).pb,

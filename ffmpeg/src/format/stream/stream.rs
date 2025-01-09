@@ -5,9 +5,7 @@ use super::Disposition;
 use crate::{
     codec::{self, packet},
     format::context::common::Context,
-    DictionaryRef,
-    Discard,
-    Rational
+    DictionaryRef, Discard, Rational,
 };
 
 #[derive(Debug)]

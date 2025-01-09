@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 use std::mem;
 use std::slice;
 
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 use super::{Borrow, Flags, Mut, Ref, SideData};
 

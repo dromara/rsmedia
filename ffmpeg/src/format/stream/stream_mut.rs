@@ -4,13 +4,7 @@ use std::ops::Deref;
 use rsmpeg::ffi;
 
 use super::Stream;
-use crate::{
-    codec,
-    format::context::common::Context,
-    Dictionary,
-    Rational,
-};
-
+use crate::{codec, format::context::common::Context, Dictionary, Rational};
 
 pub struct StreamMut<'a> {
     context: &'a mut Context,

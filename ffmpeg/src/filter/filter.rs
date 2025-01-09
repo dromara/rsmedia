@@ -22,7 +22,6 @@ impl Filter {
         self.ptr
     }
 
-
     pub fn name(&self) -> &str {
         unsafe { from_utf8_unchecked(CStr::from_ptr((*self.as_ptr()).name).to_bytes()) }
     }

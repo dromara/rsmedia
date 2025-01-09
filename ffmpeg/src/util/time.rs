@@ -1,5 +1,5 @@
-use rsmpeg::ffi;
 use crate::Error;
+use rsmpeg::ffi;
 
 #[inline(always)]
 pub fn current() -> i64 {

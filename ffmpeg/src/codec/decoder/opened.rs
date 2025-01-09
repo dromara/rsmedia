@@ -6,11 +6,7 @@ use rsmpeg::ffi;
 use super::{Audio, Decoder, Subtitle, Video};
 use crate::{
     codec::{Context, Profile},
-    media,
-    packet,
-    Error,
-    Frame,
-    Rational,
+    media, packet, Error, Frame, Rational,
 };
 
 pub struct Opened(pub Decoder);

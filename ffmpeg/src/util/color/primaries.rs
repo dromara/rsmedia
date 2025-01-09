@@ -64,8 +64,7 @@ impl From<ffi::AVColorPrimaries> for Primaries {
             ffi::AVCOL_PRI_JEDEC_P22 => Primaries::JEDEC_P22,
             // #[cfg(feature = "ffmpeg_4_3")]
             // ffi::AVCOL_PRI_EBU3213 => Primaries::EBU3213,
-
-           _ => panic!("Unknown primaries"),
+            _ => panic!("Unknown primaries"),
         }
     }
 }

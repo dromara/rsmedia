@@ -1,5 +1,3 @@
-
-
 use std::env;
 
 use ffmpeg::{codec, encoder, format, log, media, Rational};

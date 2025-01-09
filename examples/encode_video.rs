@@ -1,7 +1,7 @@
-use std::path::Path;
 use ndarray::Array3;
 use rsmedia::encode::{Encoder, Settings};
 use rsmedia::time::Time;
+use std::path::Path;
 
 fn main() {
     rsmedia::init().unwrap();

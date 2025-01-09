@@ -1,14 +1,13 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 use super::Encoder as Super;
 use crate::{
     codec::{traits, Context},
-    Dictionary,
-    Error
+    Dictionary, Error,
 };
 
 pub struct Subtitle(pub Super);

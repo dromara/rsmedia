@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use std::slice;
 
-use rsmpeg::ffi;
 use libc::{c_double, c_int};
+use rsmpeg::ffi;
 
 pub struct Vector<'a> {
     ptr: *mut ffi::SwsVector,

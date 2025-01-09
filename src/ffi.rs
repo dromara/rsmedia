@@ -1,5 +1,3 @@
-
-
 #[cfg(feature = "ndarray")]
 use ndarray::Array3;
 
@@ -90,7 +88,8 @@ pub fn output_raw_buf_end(output: &mut Output) -> Vec<u8> {
         // `buffer_raw` through a ptr ptr. It also returns the size of that buffer.
         let output_pb = (*output.as_mut_ptr()).pb;
         let mut buffer_raw: *mut u8 = std::ptr::null_mut();
-        let buffer_size = ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
+        let buffer_size =
+            ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
 
         // Reset the `pb` field or `avformat_close` will try to free it!
         ((*output.as_mut_ptr()).pb) = std::ptr::null_mut::<ffi::AVIOContext>();
@@ -420,7 +419,8 @@ pub fn sdp(output: &Output) -> Result<String, Error> {
         let mut buf: [std::ffi::c_char; BUF_SIZE as usize] = [0; BUF_SIZE as usize];
         let buf_ptr = &mut buf as *mut std::ffi::c_char;
         let mut output_format_context = output.as_ptr();
-        let output_format_context_ptr = &mut output_format_context as *mut *const ffi::AVFormatContext;
+        let output_format_context_ptr =
+            &mut output_format_context as *mut *const ffi::AVFormatContext;
         // WARNING! Casting from const ptr to mutable ptr here!
         let output_format_context_ptr = output_format_context_ptr as *mut *mut ffi::AVFormatContext;
         let ret = ffi::av_sdp_create(output_format_context_ptr, 1, buf_ptr, BUF_SIZE);
@@ -482,7 +482,9 @@ unsafe extern "C" fn log_callback(
     let val_u32 = level_no as u32;
     let event_would_log = match val_u32 {
         // These are all error states.
-        ffi::AV_LOG_PANIC | ffi::AV_LOG_FATAL | ffi::AV_LOG_ERROR => tracing::enabled!(tracing::Level::ERROR),
+        ffi::AV_LOG_PANIC | ffi::AV_LOG_FATAL | ffi::AV_LOG_ERROR => {
+            tracing::enabled!(tracing::Level::ERROR)
+        }
         ffi::AV_LOG_WARNING => tracing::enabled!(tracing::Level::WARN),
         ffi::AV_LOG_INFO => tracing::enabled!(tracing::Level::INFO),
         // There is no "verbose" in `log`, so we just put it in the "debug" category.

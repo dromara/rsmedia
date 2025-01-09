@@ -4,8 +4,8 @@ use std::slice;
 use std::str::from_utf8_unchecked;
 
 use super::Frame;
-use rsmpeg::ffi;
 use crate::DictionaryRef;
+use rsmpeg::ffi;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Type {
@@ -73,7 +73,9 @@ impl Type {
     #[inline]
     pub fn name(&self) -> &'static str {
         unsafe {
-            from_utf8_unchecked(CStr::from_ptr(ffi::av_frame_side_data_name((*self).into())).to_bytes())
+            from_utf8_unchecked(
+                CStr::from_ptr(ffi::av_frame_side_data_name((*self).into())).to_bytes(),
+            )
         }
     }
 }
@@ -171,7 +173,7 @@ impl From<Type> for ffi::AVFrameSideDataType {
             // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
             Type::QPTableProperties => panic!("not implemented"), // ffi::AV_FRAME_DATA_QP_TABLE_PROPERTIES,
             // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
-            Type::QPTableData => panic!("not implemented"),      // ffi::AV_FRAME_DATA_QP_TABLE_DATA,
+            Type::QPTableData => panic!("not implemented"), // ffi::AV_FRAME_DATA_QP_TABLE_DATA,
             // #[cfg(feature = "ffmpeg_4_1")]
             Type::S12M_TIMECODE => ffi::AV_FRAME_DATA_S12M_TIMECODE,
 

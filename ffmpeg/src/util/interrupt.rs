@@ -1,8 +1,8 @@
 use std::panic;
 use std::process;
 
-use rsmpeg::ffi;
 use libc::{c_int, c_void};
+use rsmpeg::ffi;
 
 pub struct Interrupt {
     pub interrupt: ffi::AVIOInterruptCB,

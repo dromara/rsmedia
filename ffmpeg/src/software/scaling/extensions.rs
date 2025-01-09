@@ -1,11 +1,5 @@
 use super::{Context, Flags};
-use crate::{
-    util::format,
-    decoder,
-    frame,
-    Error,
-};
-
+use crate::{decoder, frame, util::format, Error};
 
 #[cfg(not(feature = "ffmpeg7"))]
 use Picture;

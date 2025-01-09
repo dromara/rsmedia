@@ -2,8 +2,8 @@ use std::any::Any;
 use std::rc::Rc;
 
 use super::{Context, Id};
-use rsmpeg::ffi;
 use crate::media;
+use rsmpeg::ffi;
 
 pub struct Parameters {
     ptr: *mut ffi::AVCodecParameters,

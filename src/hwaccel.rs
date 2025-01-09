@@ -1,5 +1,3 @@
-
-
 use crate::error::Error;
 use crate::ffi_hwaccel;
 
@@ -101,36 +99,18 @@ impl HardwareAccelerationDeviceType {
 impl From<HardwareAccelerationDeviceType> for ffmpeg::ffi::AVHWDeviceType {
     fn from(value: HardwareAccelerationDeviceType) -> Self {
         match value {
-            HardwareAccelerationDeviceType::Vdpau => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_VDPAU
-            }
-            HardwareAccelerationDeviceType::Cuda => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_CUDA
-            }
-            HardwareAccelerationDeviceType::VaApi => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_VAAPI
-            }
-            HardwareAccelerationDeviceType::Dxva2 => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_DXVA2
-            }
-            HardwareAccelerationDeviceType::Qsv => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_QSV
-            }
+            HardwareAccelerationDeviceType::Vdpau => ffmpeg::ffi::AV_HWDEVICE_TYPE_VDPAU,
+            HardwareAccelerationDeviceType::Cuda => ffmpeg::ffi::AV_HWDEVICE_TYPE_CUDA,
+            HardwareAccelerationDeviceType::VaApi => ffmpeg::ffi::AV_HWDEVICE_TYPE_VAAPI,
+            HardwareAccelerationDeviceType::Dxva2 => ffmpeg::ffi::AV_HWDEVICE_TYPE_DXVA2,
+            HardwareAccelerationDeviceType::Qsv => ffmpeg::ffi::AV_HWDEVICE_TYPE_QSV,
             HardwareAccelerationDeviceType::VideoToolbox => {
                 ffmpeg::ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX
             }
-            HardwareAccelerationDeviceType::D3D11Va => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D11VA
-            }
-            HardwareAccelerationDeviceType::Drm => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_DRM
-            }
-            HardwareAccelerationDeviceType::OpenCl => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL
-            }
-            HardwareAccelerationDeviceType::MediaCodec => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC
-            }
+            HardwareAccelerationDeviceType::D3D11Va => ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D11VA,
+            HardwareAccelerationDeviceType::Drm => ffmpeg::ffi::AV_HWDEVICE_TYPE_DRM,
+            HardwareAccelerationDeviceType::OpenCl => ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL,
+            HardwareAccelerationDeviceType::MediaCodec => ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC,
             HardwareAccelerationDeviceType::D3D12Va => {
                 unimplemented!()
             }

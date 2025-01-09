@@ -15,8 +15,14 @@ impl Delay {
             Delay {
                 seconds: ffi::swr_get_delay(context.as_ptr() as *mut _, 1),
                 milliseconds: ffi::swr_get_delay(context.as_ptr() as *mut _, 1000),
-                input: ffi::swr_get_delay(context.as_ptr() as *mut _, i64::from(context.input().rate)),
-                output: ffi::swr_get_delay(context.as_ptr() as *mut _, i64::from(context.output().rate)),
+                input: ffi::swr_get_delay(
+                    context.as_ptr() as *mut _,
+                    i64::from(context.input().rate),
+                ),
+                output: ffi::swr_get_delay(
+                    context.as_ptr() as *mut _,
+                    i64::from(context.output().rate),
+                ),
             }
         }
     }

@@ -1,5 +1,3 @@
-
-
 use crate::hwaccel::HardwareAccelerationDeviceType;
 
 pub struct HardwareDeviceContext {
@@ -41,9 +39,8 @@ impl Drop for HardwareDeviceContext {
 
 pub fn hwdevice_list_available_device_types() -> Vec<HardwareAccelerationDeviceType> {
     let mut hwdevice_types = Vec::new();
-    let mut hwdevice_type = unsafe {
-        ffmpeg::ffi::av_hwdevice_iterate_types(ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE)
-    };
+    let mut hwdevice_type =
+        unsafe { ffmpeg::ffi::av_hwdevice_iterate_types(ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE) };
     while hwdevice_type != ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE {
         hwdevice_types.push(HardwareAccelerationDeviceType::from(hwdevice_type).unwrap());
         hwdevice_type = unsafe { ffmpeg::ffi::av_hwdevice_iterate_types(hwdevice_type) };

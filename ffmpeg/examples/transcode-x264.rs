@@ -15,8 +15,6 @@
 //   transcode-x264 input.flv output.mp4
 //   transcode-x264 input.mkv output.mkv 'preset=veryslow,crf=18'
 
-
-
 use std::collections::HashMap;
 use std::env;
 use std::time::Instant;

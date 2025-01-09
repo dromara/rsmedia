@@ -28,7 +28,9 @@ impl Sample {
     #[inline]
     pub fn name(&self) -> &'static str {
         unsafe {
-            std::str::from_utf8_unchecked(CStr::from_ptr(ffi::av_get_sample_fmt_name((*self).into())).to_bytes())
+            std::str::from_utf8_unchecked(
+                CStr::from_ptr(ffi::av_get_sample_fmt_name((*self).into())).to_bytes(),
+            )
         }
     }
 

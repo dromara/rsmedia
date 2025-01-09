@@ -1,5 +1,3 @@
-
-
 use ffmpeg::codec::packet::Packet as AvPacket;
 use ffmpeg::Rational as AvRational;
 

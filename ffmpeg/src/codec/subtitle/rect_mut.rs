@@ -2,8 +2,8 @@ use std::ffi::CString;
 use std::ops::Deref;
 
 use super::{Ass, Bitmap, Flags, Text, Type};
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 pub enum RectMut<'a> {
     None(*mut ffi::AVSubtitleRect),

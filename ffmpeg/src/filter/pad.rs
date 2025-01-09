@@ -2,8 +2,8 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
 use crate::media;
+use rsmpeg::ffi;
 
 pub struct Pad<'a> {
     ptr: *const ffi::AVFilterPad,

@@ -1,5 +1,3 @@
-
-
 use std::time::Duration;
 
 use ffmpeg::util::mathematics::rescale::{Rescale, TIME_BASE};

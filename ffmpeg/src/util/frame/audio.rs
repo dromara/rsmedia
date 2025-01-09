@@ -3,10 +3,10 @@ use std::ops::{Deref, DerefMut};
 use std::slice;
 
 use super::Frame;
-use rsmpeg::ffi;
-use libc::c_int;
 use crate::util::format;
 use crate::ChannelLayout;
+use libc::c_int;
+use rsmpeg::ffi;
 
 #[derive(PartialEq, Eq)]
 pub struct Audio(Frame);
@@ -59,7 +59,8 @@ impl Audio {
     #[inline]
     pub fn set_format(&mut self, value: format::Sample) {
         unsafe {
-            (*self.as_mut_ptr()).format = mem::transmute::<ffi::AVSampleFormat, c_int>(value.into());
+            (*self.as_mut_ptr()).format =
+                mem::transmute::<ffi::AVSampleFormat, c_int>(value.into());
         }
     }
 

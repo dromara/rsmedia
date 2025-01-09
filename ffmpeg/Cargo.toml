@@ -26,5 +26,8 @@ default = [
 ]
 
 [dependencies]
+libc     = "0.2"
+bitflags = "2.6"
+image    = { version = "0.25", optional = true }
 rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", default-features = false }
 

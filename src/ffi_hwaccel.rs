@@ -92,8 +92,7 @@ pub fn codec_context_hwaccel_set_get_format(
     hw_pixfmt: ffmpeg::format::pixel::Pixel,
 ) {
     unsafe {
-        (*codec_context.as_mut_ptr()).opaque =
-            ffmpeg::ffi::AVPixelFormat::from(hw_pixfmt) as i32 as _;
+        (*codec_context.as_mut_ptr()).opaque = ffmpeg::ffi::AVPixelFormat::from(hw_pixfmt) as _;
         (*codec_context.as_mut_ptr()).get_format = Some(hwaccel_get_format);
     }
 }
@@ -114,7 +113,7 @@ unsafe extern "C" fn hwaccel_get_format(
 ) -> ffmpeg::ffi::AVPixelFormat {
     let mut p = pix_fmts;
     while *p != ffmpeg::ffi::AV_PIX_FMT_NONE {
-        if *p == std::mem::transmute::<i32, ffmpeg::ffi::AVPixelFormat>((*ctx).opaque as i32) {
+        if *p == ((*ctx).opaque as i32) as ffmpeg::ffi::AVPixelFormat {
             return *p;
         }
         p = p.add(1);

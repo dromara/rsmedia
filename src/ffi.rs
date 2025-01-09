@@ -329,8 +329,7 @@ pub fn convert_frame_to_ndarray_rgb24(frame: &mut Frame) -> Result<FrameArray, E
         let frame_ptr = frame.as_mut_ptr();
         let frame_width: i32 = (*frame_ptr).width;
         let frame_height: i32 = (*frame_ptr).height;
-        let frame_format =
-            std::mem::transmute::<std::ffi::c_int, ffi::AVPixelFormat>((*frame_ptr).format);
+        let frame_format = (*frame_ptr).format as ffi::AVPixelFormat;
         assert_eq!(frame_format, ffi::AV_PIX_FMT_RGB24);
 
         let mut frame_array =

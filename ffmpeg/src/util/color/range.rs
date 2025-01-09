@@ -30,8 +30,6 @@ impl From<ffi::AVColorRange> for Range {
             ffi::AVCOL_RANGE_MPEG => Range::MPEG,
             ffi::AVCOL_RANGE_JPEG => Range::JPEG,
             ffi::AVCOL_RANGE_NB => Range::Unspecified,
-
-            4_u32..=u32::MAX => todo!(),
         }
     }
 }

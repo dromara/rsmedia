@@ -62,8 +62,6 @@ impl From<ffi::AVColorTransferCharacteristic> for TransferCharacteristic {
             ffi::AVCOL_TRC_SMPTE2084 => TransferCharacteristic::SMPTE2084,
             ffi::AVCOL_TRC_SMPTE428 => TransferCharacteristic::SMPTE428,
             ffi::AVCOL_TRC_ARIB_STD_B67 => TransferCharacteristic::ARIB_STD_B67,
-
-            20_u32..=u32::MAX => todo!(),
         }
     }
 }

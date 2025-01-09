@@ -20,9 +20,6 @@ impl From<ffi::AVRounding> for Rounding {
             ffi::AV_ROUND_UP => Rounding::Up,
             ffi::AV_ROUND_NEAR_INF => Rounding::NearInfinity,
             ffi::AV_ROUND_PASS_MINMAX => Rounding::PassMinMax,
-
-            // non-exhaustive patterns: `4_u32`, `6_u32..=8191_u32` and `8193_u32..=u32::MAX` not covered
-            4_u32 | 6_u32..=8191_u32 | 8193_u32..=u32::MAX => todo!(),
         }
     }
 }

@@ -26,9 +26,6 @@ impl From<ffi::AVAudioServiceType> for AudioService {
             ffi::AV_AUDIO_SERVICE_TYPE_VOICE_OVER => AudioService::VoiceOver,
             ffi::AV_AUDIO_SERVICE_TYPE_KARAOKE => AudioService::Karaoke,
             ffi::AV_AUDIO_SERVICE_TYPE_NB => AudioService::Main,
-
-            // non-exhaustive patterns: `10_u32..=u32::MAX` not covered
-            10_u32..=u32::MAX => todo!(),
         }
     }
 }

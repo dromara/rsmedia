@@ -141,9 +141,6 @@ impl From<ffi::AVFrameSideDataType> for Type {
             ffi::AV_FRAME_DATA_LCEVC => Type::LCEVC,
             #[cfg(feature = "ffmpeg7")]
             ffi::AV_FRAME_DATA_VIEW_ID => Type::VIEW_ID,
-
-            //  non-exhaustive patterns: `16_u32..=u32::MAX` not covered
-            16_u32..=u32::MAX => todo!(),
         }
     }
 }

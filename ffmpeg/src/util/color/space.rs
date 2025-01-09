@@ -72,8 +72,6 @@ impl From<ffi::AVColorSpace> for Space {
             ffi::AVCOL_SPC_YCGCO_RE => Space::YCGCO_RE,
             #[cfg(feature = "ffmpeg7")]
             ffi::AVCOL_SPC_YCGCO_RO => Space::YCGCO_RO,
-
-            16_u32..=u32::MAX => todo!(),
         }
     }
 }

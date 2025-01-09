@@ -70,24 +70,19 @@ impl From<ffi::AVSampleFormat> for Sample {
     fn from(value: ffi::AVSampleFormat) -> Self {
         match value {
             ffi::AV_SAMPLE_FMT_NONE => Sample::None,
-
             ffi::AV_SAMPLE_FMT_U8 => Sample::U8(Type::Packed),
             ffi::AV_SAMPLE_FMT_S16 => Sample::I16(Type::Packed),
             ffi::AV_SAMPLE_FMT_S32 => Sample::I32(Type::Packed),
-            ffi::AV_SAMPLE_FMT_S64 => Sample::I64(Type::Packed),
             ffi::AV_SAMPLE_FMT_FLT => Sample::F32(Type::Packed),
             ffi::AV_SAMPLE_FMT_DBL => Sample::F64(Type::Packed),
-
             ffi::AV_SAMPLE_FMT_U8P => Sample::U8(Type::Planar),
             ffi::AV_SAMPLE_FMT_S16P => Sample::I16(Type::Planar),
             ffi::AV_SAMPLE_FMT_S32P => Sample::I32(Type::Planar),
-            ffi::AV_SAMPLE_FMT_S64P => Sample::I64(Type::Planar),
             ffi::AV_SAMPLE_FMT_FLTP => Sample::F32(Type::Planar),
             ffi::AV_SAMPLE_FMT_DBLP => Sample::F64(Type::Planar),
-
+            ffi::AV_SAMPLE_FMT_S64 => Sample::I64(Type::Packed),
+            ffi::AV_SAMPLE_FMT_S64P => Sample::I64(Type::Planar),
             ffi::AV_SAMPLE_FMT_NB => Sample::None,
-
-            i32::MIN..=-2_i32 | 13_i32..=i32::MAX => todo!(),
         }
     }
 }

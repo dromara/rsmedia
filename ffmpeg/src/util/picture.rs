@@ -24,9 +24,6 @@ impl From<ffi::AVPictureType> for Type {
             ffi::AV_PICTURE_TYPE_SI => Type::SI,
             ffi::AV_PICTURE_TYPE_SP => Type::SP,
             ffi::AV_PICTURE_TYPE_BI => Type::BI,
-
-            // non-exhaustive patterns: `8_u32..=u32::MAX` not covered
-            8_u32..=u32::MAX => todo!(),
         }
     }
 }

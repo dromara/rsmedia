@@ -21,9 +21,6 @@ impl From<ffi::AVMediaType> for Type {
             ffi::AVMEDIA_TYPE_SUBTITLE => Type::Subtitle,
             ffi::AVMEDIA_TYPE_ATTACHMENT => Type::Attachment,
             ffi::AVMEDIA_TYPE_NB => Type::Unknown,
-
-            //  non-exhaustive patterns: `i32::MIN..=-2_i32` and `6_i32..=i32::MAX` not covered
-            i32::MIN..=-2_i32 | 6_i32..=i32::MAX => todo!(),
         }
     }
 }

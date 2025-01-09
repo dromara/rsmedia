@@ -62,12 +62,9 @@ impl From<ffi::AVOptionType> for Type {
             #[cfg(feature = "ffmpeg7")]
             ffi::AV_OPT_TYPE_CHLAYOUT => Type::ChannelLayout,
             #[cfg(feature = "ffmpeg7")]
-            ffi::AV_OPT_TYPE_FLAG_ARRAY => Type::FlagArray,
-            #[cfg(feature = "ffmpeg7")]
             ffi::AV_OPT_TYPE_UINT => Type::UInt,
-
-            // non-exhaustive patterns: `0_u32`, `19_u32..=65535_u32` and `65537_u32..=u32::MAX` not covered
-            0_u32 | 19_u32..=65535_u32 | 65537_u32..=u32::MAX => todo!(),
+            #[cfg(feature = "ffmpeg7")]
+            ffi::AV_OPT_TYPE_FLAG_ARRAY => Type::FlagArray,
         }
     }
 }

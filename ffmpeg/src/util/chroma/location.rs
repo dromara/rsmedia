@@ -22,8 +22,6 @@ impl From<ffi::AVChromaLocation> for Location {
             ffi::AVCHROMA_LOC_BOTTOMLEFT => Location::BottomLeft,
             ffi::AVCHROMA_LOC_BOTTOM => Location::Bottom,
             ffi::AVCHROMA_LOC_NB => Location::Unspecified,
-
-            8_u32..=u32::MAX => todo!(),
         }
     }
 }

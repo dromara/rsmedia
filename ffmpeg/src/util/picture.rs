@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Type {
@@ -12,34 +12,38 @@ pub enum Type {
     BI,
 }
 
-impl From<ffi::AVPictureType> for Type {
+impl From<AVPictureType> for Type {
     #[inline(always)]
-    fn from(value: ffi::AVPictureType) -> Type {
+    fn from(value: AVPictureType) -> Type {
         match value {
-            ffi::AV_PICTURE_TYPE_NONE => Type::None,
-            ffi::AV_PICTURE_TYPE_I => Type::I,
-            ffi::AV_PICTURE_TYPE_P => Type::P,
-            ffi::AV_PICTURE_TYPE_B => Type::B,
-            ffi::AV_PICTURE_TYPE_S => Type::S,
-            ffi::AV_PICTURE_TYPE_SI => Type::SI,
-            ffi::AV_PICTURE_TYPE_SP => Type::SP,
-            ffi::AV_PICTURE_TYPE_BI => Type::BI,
+            AV_PICTURE_TYPE_NONE => Type::None,
+            AV_PICTURE_TYPE_I => Type::I,
+            AV_PICTURE_TYPE_P => Type::P,
+            AV_PICTURE_TYPE_B => Type::B,
+            AV_PICTURE_TYPE_S => Type::S,
+            AV_PICTURE_TYPE_SI => Type::SI,
+            AV_PICTURE_TYPE_SP => Type::SP,
+            AV_PICTURE_TYPE_BI => Type::BI,
+            _ => {
+                eprintln!("Unknown Type variant: {}", value);
+                Type::None
+            }
         }
     }
 }
 
-impl From<Type> for ffi::AVPictureType {
+impl From<Type> for AVPictureType {
     #[inline(always)]
-    fn from(value: Type) -> ffi::AVPictureType {
+    fn from(value: Type) -> AVPictureType {
         match value {
-            Type::None => ffi::AV_PICTURE_TYPE_NONE,
-            Type::I => ffi::AV_PICTURE_TYPE_I,
-            Type::P => ffi::AV_PICTURE_TYPE_P,
-            Type::B => ffi::AV_PICTURE_TYPE_B,
-            Type::S => ffi::AV_PICTURE_TYPE_S,
-            Type::SI => ffi::AV_PICTURE_TYPE_SI,
-            Type::SP => ffi::AV_PICTURE_TYPE_SP,
-            Type::BI => ffi::AV_PICTURE_TYPE_BI,
+            Type::None => AV_PICTURE_TYPE_NONE,
+            Type::I => AV_PICTURE_TYPE_I,
+            Type::P => AV_PICTURE_TYPE_P,
+            Type::B => AV_PICTURE_TYPE_B,
+            Type::S => AV_PICTURE_TYPE_S,
+            Type::SI => AV_PICTURE_TYPE_SI,
+            Type::SP => AV_PICTURE_TYPE_SP,
+            Type::BI => AV_PICTURE_TYPE_BI,
         }
     }
 }

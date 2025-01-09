@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use std::mem;
 
 use libc::{c_uint, size_t};
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Type {
@@ -21,36 +21,40 @@ pub enum Type {
     Ass,
 }
 
-impl From<ffi::AVSubtitleType> for Type {
-    fn from(value: ffi::AVSubtitleType) -> Type {
+impl From<AVSubtitleType> for Type {
+    fn from(value: AVSubtitleType) -> Type {
         match value {
-            ffi::SUBTITLE_NONE => Type::None,
-            ffi::SUBTITLE_BITMAP => Type::Bitmap,
-            ffi::SUBTITLE_TEXT => Type::Text,
-            ffi::SUBTITLE_ASS => Type::Ass,
+            SUBTITLE_NONE => Type::None,
+            SUBTITLE_BITMAP => Type::Bitmap,
+            SUBTITLE_TEXT => Type::Text,
+            SUBTITLE_ASS => Type::Ass,
+            _ => {
+                eprintln!("Unknown value: {}", value);
+                Type::None
+            }
         }
     }
 }
 
-impl From<Type> for ffi::AVSubtitleType {
-    fn from(value: Type) -> ffi::AVSubtitleType {
+impl From<Type> for AVSubtitleType {
+    fn from(value: Type) -> AVSubtitleType {
         match value {
-            Type::None => ffi::SUBTITLE_NONE,
-            Type::Bitmap => ffi::SUBTITLE_BITMAP,
-            Type::Text => ffi::SUBTITLE_TEXT,
-            Type::Ass => ffi::SUBTITLE_ASS,
+            Type::None => SUBTITLE_NONE,
+            Type::Bitmap => SUBTITLE_BITMAP,
+            Type::Text => SUBTITLE_TEXT,
+            Type::Ass => SUBTITLE_ASS,
         }
     }
 }
 
-pub struct Subtitle(ffi::AVSubtitle);
+pub struct Subtitle(AVSubtitle);
 
 impl Subtitle {
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVSubtitle {
+    pub unsafe fn as_ptr(&self) -> *const AVSubtitle {
         &self.0
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVSubtitle {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVSubtitle {
         &mut self.0
     }
 }
@@ -62,13 +66,13 @@ impl Subtitle {
 
     pub fn pts(&self) -> Option<i64> {
         match self.0.pts {
-            ffi::AV_NOPTS_VALUE => None,
+            AV_NOPTS_VALUE => None,
             pts => Some(pts),
         }
     }
 
     pub fn set_pts(&mut self, value: Option<i64>) {
-        self.0.pts = value.unwrap_or(ffi::AV_NOPTS_VALUE);
+        self.0.pts = value.unwrap_or(AV_NOPTS_VALUE);
     }
 
     pub fn start(&self) -> u32 {
@@ -98,14 +102,13 @@ impl Subtitle {
     pub fn add_rect(&mut self, kind: Type) -> RectMut {
         unsafe {
             self.0.num_rects += 1;
-            self.0.rects = ffi::av_realloc(
+            self.0.rects = av_realloc(
                 self.0.rects as *mut _,
-                (mem::size_of::<*const ffi::AVSubtitleRect>() * self.0.num_rects as usize)
-                    as size_t,
+                (mem::size_of::<*const AVSubtitleRect>() * self.0.num_rects as usize) as size_t,
             ) as *mut _;
 
-            let rect = ffi::av_mallocz(mem::size_of::<ffi::AVSubtitleRect>() as size_t)
-                as *mut ffi::AVSubtitleRect;
+            let rect =
+                av_mallocz(mem::size_of::<AVSubtitleRect>() as size_t) as *mut AVSubtitleRect;
             (*rect).type_ = kind.into();
 
             *self.0.rects.offset((self.0.num_rects - 1) as isize) = rect;
@@ -122,14 +125,14 @@ impl Default for Subtitle {
 }
 
 pub struct RectIter<'a> {
-    ptr: *const ffi::AVSubtitle,
+    ptr: *const AVSubtitle,
     cur: c_uint,
 
     _marker: PhantomData<&'a Subtitle>,
 }
 
 impl<'a> RectIter<'a> {
-    pub fn new(ptr: *const ffi::AVSubtitle) -> Self {
+    pub fn new(ptr: *const AVSubtitle) -> Self {
         RectIter {
             ptr,
             cur: 0,
@@ -166,14 +169,14 @@ impl<'a> Iterator for RectIter<'a> {
 impl<'a> ExactSizeIterator for RectIter<'a> {}
 
 pub struct RectMutIter<'a> {
-    ptr: *mut ffi::AVSubtitle,
+    ptr: *mut AVSubtitle,
     cur: c_uint,
 
     _marker: PhantomData<&'a Subtitle>,
 }
 
 impl<'a> RectMutIter<'a> {
-    pub fn new(ptr: *mut ffi::AVSubtitle) -> Self {
+    pub fn new(ptr: *mut AVSubtitle) -> Self {
         RectMutIter {
             ptr,
             cur: 0,

@@ -887,8 +887,7 @@ impl From<AVCodecID> for Id {
             AV_CODEC_ID_AVRP => Id::AVRP,
             AV_CODEC_ID_012V => Id::V012,
             AV_CODEC_ID_AVUI => Id::AVUI,
-            // #[cfg(not(feature = "ffmpeg7"))]
-            // AV_CODEC_ID_AYUV => Id::AYUV,
+
             AV_CODEC_ID_TARGA_Y216 => Id::TARGA_Y216,
             AV_CODEC_ID_V308 => Id::V308,
             AV_CODEC_ID_V408 => Id::V408,
@@ -1075,7 +1074,7 @@ impl From<AVCodecID> for Id {
             AV_CODEC_ID_DSS_SP => Id::DSS_SP,
 
             // #[cfg(feature = "ffmpeg_4_0")]
-            // AV_CODEC_ID_CODEC2 => Id::CODEC2,
+            AV_CODEC_ID_CODEC2 => Id::CODEC2,
             AV_CODEC_ID_FFWAVESYNTH => Id::FFWAVESYNTH,
             AV_CODEC_ID_SONIC => Id::SONIC,
             AV_CODEC_ID_SONIC_LS => Id::SONIC_LS,
@@ -1345,8 +1344,12 @@ impl From<AVCodecID> for Id {
             #[cfg(feature = "ffmpeg7")]
             AV_CODEC_ID_LCEVC => Id::LCEVC,
 
+            #[cfg(not(feature = "ffmpeg7"))]
+            AV_CODEC_ID_AYUV => Id::AYUV,
+
             _ => {
-                todo!("unimplemented codec id: {}", value)
+                eprintln!("Unknown codec id: {}", value);
+                Id::None
             }
         }
     }
@@ -1357,11 +1360,11 @@ impl From<Id> for AVCodecID {
         match value {
             Id::None => AV_CODEC_ID_NONE,
 
-            /* video codecs **/
+            /* video codecs */
             Id::MPEG1VIDEO => AV_CODEC_ID_MPEG1VIDEO,
             Id::MPEG2VIDEO => AV_CODEC_ID_MPEG2VIDEO,
             // #[cfg(all(feature = "ff_api_xvmc", not(feature = "ffmpeg_5_0")))]
-            // Id::MPEG2VIDEO_XVMC => AV_CODEC_ID_MPEG2VIDEO_XVMC,
+            Id::MPEG2VIDEO_XVMC => 0, //? AV_CODEC_ID_MPEG2VIDEO_XVMC,
             Id::H261 => AV_CODEC_ID_H261,
             Id::H263 => AV_CODEC_ID_H263,
             Id::RV10 => AV_CODEC_ID_RV10,
@@ -1578,7 +1581,7 @@ impl From<Id> for AVCodecID {
             Id::SHEERVIDEO => AV_CODEC_ID_SHEERVIDEO,
             Id::YLC => AV_CODEC_ID_YLC,
 
-            /* various PCM "codecs" **/
+            /* various PCM "codecs" */
             Id::PCM_S16LE => AV_CODEC_ID_PCM_S16LE,
             Id::PCM_S16BE => AV_CODEC_ID_PCM_S16BE,
             Id::PCM_U16LE => AV_CODEC_ID_PCM_U16LE,
@@ -1708,7 +1711,7 @@ impl From<Id> for AVCodecID {
             Id::GSM_MS => AV_CODEC_ID_GSM_MS,
             Id::ATRAC3 => AV_CODEC_ID_ATRAC3,
             // #[cfg(feature = "ff_api_voxware")]
-            // Id::VOXWARE => AV_CODEC_ID_VOXWARE,
+            Id::VOXWARE => 0, //? AV_CODEC_ID_VOXWARE,
             Id::APE => AV_CODEC_ID_APE,
             Id::NELLYMOSER => AV_CODEC_ID_NELLYMOSER,
             Id::MUSEPACK8 => AV_CODEC_ID_MUSEPACK8,
@@ -2016,10 +2019,6 @@ impl From<Id> for AVCodecID {
             Id::LC3 => AV_CODEC_ID_LC3,
             #[cfg(feature = "ffmpeg7")]
             Id::LCEVC => AV_CODEC_ID_LCEVC,
-
-            _ => {
-                todo!("Not implemented codec id: {}", value.name());
-            }
         }
     }
 }

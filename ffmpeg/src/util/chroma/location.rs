@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Location {
@@ -11,31 +11,35 @@ pub enum Location {
     Bottom,
 }
 
-impl From<ffi::AVChromaLocation> for Location {
-    fn from(value: ffi::AVChromaLocation) -> Self {
+impl From<AVChromaLocation> for Location {
+    fn from(value: AVChromaLocation) -> Self {
         match value {
-            ffi::AVCHROMA_LOC_UNSPECIFIED => Location::Unspecified,
-            ffi::AVCHROMA_LOC_LEFT => Location::Left,
-            ffi::AVCHROMA_LOC_CENTER => Location::Center,
-            ffi::AVCHROMA_LOC_TOPLEFT => Location::TopLeft,
-            ffi::AVCHROMA_LOC_TOP => Location::Top,
-            ffi::AVCHROMA_LOC_BOTTOMLEFT => Location::BottomLeft,
-            ffi::AVCHROMA_LOC_BOTTOM => Location::Bottom,
-            ffi::AVCHROMA_LOC_NB => Location::Unspecified,
+            AVCHROMA_LOC_UNSPECIFIED => Location::Unspecified,
+            AVCHROMA_LOC_LEFT => Location::Left,
+            AVCHROMA_LOC_CENTER => Location::Center,
+            AVCHROMA_LOC_TOPLEFT => Location::TopLeft,
+            AVCHROMA_LOC_TOP => Location::Top,
+            AVCHROMA_LOC_BOTTOMLEFT => Location::BottomLeft,
+            AVCHROMA_LOC_BOTTOM => Location::Bottom,
+            AVCHROMA_LOC_NB => Location::Unspecified,
+            _ => {
+                eprintln!("Unknown Location variant: {}", value);
+                Location::Unspecified
+            }
         }
     }
 }
 
-impl From<Location> for ffi::AVChromaLocation {
-    fn from(value: Location) -> ffi::AVChromaLocation {
+impl From<Location> for AVChromaLocation {
+    fn from(value: Location) -> AVChromaLocation {
         match value {
-            Location::Unspecified => ffi::AVCHROMA_LOC_UNSPECIFIED,
-            Location::Left => ffi::AVCHROMA_LOC_LEFT,
-            Location::Center => ffi::AVCHROMA_LOC_CENTER,
-            Location::TopLeft => ffi::AVCHROMA_LOC_TOPLEFT,
-            Location::Top => ffi::AVCHROMA_LOC_TOP,
-            Location::BottomLeft => ffi::AVCHROMA_LOC_BOTTOMLEFT,
-            Location::Bottom => ffi::AVCHROMA_LOC_BOTTOM,
+            Location::Unspecified => AVCHROMA_LOC_UNSPECIFIED,
+            Location::Left => AVCHROMA_LOC_LEFT,
+            Location::Center => AVCHROMA_LOC_CENTER,
+            Location::TopLeft => AVCHROMA_LOC_TOPLEFT,
+            Location::Top => AVCHROMA_LOC_TOP,
+            Location::BottomLeft => AVCHROMA_LOC_BOTTOMLEFT,
+            Location::Bottom => AVCHROMA_LOC_BOTTOM,
         }
     }
 }

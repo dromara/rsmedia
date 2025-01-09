@@ -2,9 +2,10 @@ use std::ffi::{CStr, CString};
 use std::ops::Index;
 use std::ptr;
 use std::slice;
+use std::str::from_utf8_unchecked;
 
 use libc::{c_int, c_void};
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Sample {
@@ -28,25 +29,23 @@ impl Sample {
     #[inline]
     pub fn name(&self) -> &'static str {
         unsafe {
-            std::str::from_utf8_unchecked(
-                CStr::from_ptr(ffi::av_get_sample_fmt_name((*self).into())).to_bytes(),
-            )
+            from_utf8_unchecked(CStr::from_ptr(av_get_sample_fmt_name((*self).into())).to_bytes())
         }
     }
 
     #[inline]
     pub fn packed(&self) -> Self {
-        unsafe { Sample::from(ffi::av_get_packed_sample_fmt((*self).into())) }
+        unsafe { Sample::from(av_get_packed_sample_fmt((*self).into())) }
     }
 
     #[inline]
     pub fn planar(&self) -> Self {
-        unsafe { Sample::from(ffi::av_get_planar_sample_fmt((*self).into())) }
+        unsafe { Sample::from(av_get_planar_sample_fmt((*self).into())) }
     }
 
     #[inline]
     pub fn is_planar(&self) -> bool {
-        unsafe { ffi::av_sample_fmt_is_planar((*self).into()) == 1 }
+        unsafe { av_sample_fmt_is_planar((*self).into()) == 1 }
     }
 
     #[inline]
@@ -56,7 +55,7 @@ impl Sample {
 
     #[inline]
     pub fn bytes(&self) -> usize {
-        unsafe { ffi::av_get_bytes_per_sample((*self).into()) as usize }
+        unsafe { av_get_bytes_per_sample((*self).into()) as usize }
     }
 
     #[inline]
@@ -65,24 +64,31 @@ impl Sample {
     }
 }
 
-impl From<ffi::AVSampleFormat> for Sample {
+impl From<AVSampleFormat> for Sample {
     #[inline]
-    fn from(value: ffi::AVSampleFormat) -> Self {
+    fn from(value: AVSampleFormat) -> Self {
         match value {
-            ffi::AV_SAMPLE_FMT_NONE => Sample::None,
-            ffi::AV_SAMPLE_FMT_U8 => Sample::U8(Type::Packed),
-            ffi::AV_SAMPLE_FMT_S16 => Sample::I16(Type::Packed),
-            ffi::AV_SAMPLE_FMT_S32 => Sample::I32(Type::Packed),
-            ffi::AV_SAMPLE_FMT_FLT => Sample::F32(Type::Packed),
-            ffi::AV_SAMPLE_FMT_DBL => Sample::F64(Type::Packed),
-            ffi::AV_SAMPLE_FMT_U8P => Sample::U8(Type::Planar),
-            ffi::AV_SAMPLE_FMT_S16P => Sample::I16(Type::Planar),
-            ffi::AV_SAMPLE_FMT_S32P => Sample::I32(Type::Planar),
-            ffi::AV_SAMPLE_FMT_FLTP => Sample::F32(Type::Planar),
-            ffi::AV_SAMPLE_FMT_DBLP => Sample::F64(Type::Planar),
-            ffi::AV_SAMPLE_FMT_S64 => Sample::I64(Type::Packed),
-            ffi::AV_SAMPLE_FMT_S64P => Sample::I64(Type::Planar),
-            ffi::AV_SAMPLE_FMT_NB => Sample::None,
+            AV_SAMPLE_FMT_NONE => Sample::None,
+
+            AV_SAMPLE_FMT_U8 => Sample::U8(Type::Packed),
+            AV_SAMPLE_FMT_S16 => Sample::I16(Type::Packed),
+            AV_SAMPLE_FMT_S32 => Sample::I32(Type::Packed),
+            AV_SAMPLE_FMT_S64 => Sample::I64(Type::Packed),
+            AV_SAMPLE_FMT_FLT => Sample::F32(Type::Packed),
+            AV_SAMPLE_FMT_DBL => Sample::F64(Type::Packed),
+
+            AV_SAMPLE_FMT_U8P => Sample::U8(Type::Planar),
+            AV_SAMPLE_FMT_S16P => Sample::I16(Type::Planar),
+            AV_SAMPLE_FMT_S32P => Sample::I32(Type::Planar),
+            AV_SAMPLE_FMT_S64P => Sample::I64(Type::Planar),
+            AV_SAMPLE_FMT_FLTP => Sample::F32(Type::Planar),
+            AV_SAMPLE_FMT_DBLP => Sample::F64(Type::Planar),
+
+            AV_SAMPLE_FMT_NB => Sample::None,
+            _ => {
+                eprintln!("Unknown value: {}", value);
+                Sample::None
+            }
         }
     }
 }
@@ -93,30 +99,30 @@ impl From<&'static str> for Sample {
         unsafe {
             let value = CString::new(value).unwrap();
 
-            Sample::from(ffi::av_get_sample_fmt(value.as_ptr()))
+            Sample::from(av_get_sample_fmt(value.as_ptr()))
         }
     }
 }
 
-impl From<Sample> for ffi::AVSampleFormat {
+impl From<Sample> for AVSampleFormat {
     #[inline]
-    fn from(value: Sample) -> ffi::AVSampleFormat {
+    fn from(value: Sample) -> AVSampleFormat {
         match value {
-            Sample::None => ffi::AV_SAMPLE_FMT_NONE,
+            Sample::None => AV_SAMPLE_FMT_NONE,
 
-            Sample::U8(Type::Packed) => ffi::AV_SAMPLE_FMT_U8,
-            Sample::I16(Type::Packed) => ffi::AV_SAMPLE_FMT_S16,
-            Sample::I32(Type::Packed) => ffi::AV_SAMPLE_FMT_S32,
-            Sample::I64(Type::Packed) => ffi::AV_SAMPLE_FMT_S64,
-            Sample::F32(Type::Packed) => ffi::AV_SAMPLE_FMT_FLT,
-            Sample::F64(Type::Packed) => ffi::AV_SAMPLE_FMT_DBL,
+            Sample::U8(Type::Packed) => AV_SAMPLE_FMT_U8,
+            Sample::I16(Type::Packed) => AV_SAMPLE_FMT_S16,
+            Sample::I32(Type::Packed) => AV_SAMPLE_FMT_S32,
+            Sample::I64(Type::Packed) => AV_SAMPLE_FMT_S64,
+            Sample::F32(Type::Packed) => AV_SAMPLE_FMT_FLT,
+            Sample::F64(Type::Packed) => AV_SAMPLE_FMT_DBL,
 
-            Sample::U8(Type::Planar) => ffi::AV_SAMPLE_FMT_U8P,
-            Sample::I16(Type::Planar) => ffi::AV_SAMPLE_FMT_S16P,
-            Sample::I32(Type::Planar) => ffi::AV_SAMPLE_FMT_S32P,
-            Sample::I64(Type::Planar) => ffi::AV_SAMPLE_FMT_S64P,
-            Sample::F32(Type::Planar) => ffi::AV_SAMPLE_FMT_FLTP,
-            Sample::F64(Type::Planar) => ffi::AV_SAMPLE_FMT_DBLP,
+            Sample::U8(Type::Planar) => AV_SAMPLE_FMT_U8P,
+            Sample::I16(Type::Planar) => AV_SAMPLE_FMT_S16P,
+            Sample::I32(Type::Planar) => AV_SAMPLE_FMT_S32P,
+            Sample::I64(Type::Planar) => AV_SAMPLE_FMT_S64P,
+            Sample::F32(Type::Planar) => AV_SAMPLE_FMT_FLTP,
+            Sample::F64(Type::Planar) => AV_SAMPLE_FMT_DBLP,
         }
     }
 }
@@ -135,7 +141,7 @@ impl Buffer {
     #[inline]
     pub fn size(format: Sample, channels: u16, samples: usize, align: bool) -> usize {
         unsafe {
-            ffi::av_samples_get_buffer_size(
+            av_samples_get_buffer_size(
                 ptr::null_mut(),
                 i32::from(channels),
                 samples as c_int,
@@ -158,7 +164,7 @@ impl Buffer {
                 size: 0,
             };
 
-            ffi::av_samples_alloc_array_and_samples(
+            av_samples_alloc_array_and_samples(
                 &mut buf.buffer,
                 &mut buf.size,
                 i32::from(channels),
@@ -197,7 +203,7 @@ impl Clone for Buffer {
     #[inline]
     fn clone_from(&mut self, source: &Self) {
         unsafe {
-            ffi::av_samples_copy(
+            av_samples_copy(
                 self.buffer,
                 source.buffer as *const *mut u8,
                 0,
@@ -214,7 +220,7 @@ impl Drop for Buffer {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            ffi::av_freep(self.buffer as *mut c_void);
+            av_freep(self.buffer as *mut c_void);
         }
     }
 }

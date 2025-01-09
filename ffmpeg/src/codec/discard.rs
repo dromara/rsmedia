@@ -21,9 +21,10 @@ impl From<ffi::AVDiscard> for Discard {
             ffi::AVDISCARD_NONINTRA => Discard::NonIntra,
             ffi::AVDISCARD_NONKEY => Discard::NonKey,
             ffi::AVDISCARD_ALL => Discard::All,
-
-            // non-exhaustive patterns: `i32::MIN..=-17_i32`, `-15_i32..=-1_i32`, `1_i32..=7_i32` and 5 more not covered
-            _ => todo!("unknown discard value {}", value),
+            _ => {
+                eprintln!("Unknown Discard variant: {}", value);
+                Discard::None
+            }
         }
     }
 }

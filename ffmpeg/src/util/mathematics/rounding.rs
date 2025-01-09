@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Rounding {
@@ -10,30 +10,34 @@ pub enum Rounding {
     PassMinMax,
 }
 
-impl From<ffi::AVRounding> for Rounding {
+impl From<AVRounding> for Rounding {
     #[inline(always)]
-    fn from(value: ffi::AVRounding) -> Self {
+    fn from(value: AVRounding) -> Self {
         match value {
-            ffi::AV_ROUND_ZERO => Rounding::Zero,
-            ffi::AV_ROUND_INF => Rounding::Infinity,
-            ffi::AV_ROUND_DOWN => Rounding::Down,
-            ffi::AV_ROUND_UP => Rounding::Up,
-            ffi::AV_ROUND_NEAR_INF => Rounding::NearInfinity,
-            ffi::AV_ROUND_PASS_MINMAX => Rounding::PassMinMax,
+            AV_ROUND_ZERO => Rounding::Zero,
+            AV_ROUND_INF => Rounding::Infinity,
+            AV_ROUND_DOWN => Rounding::Down,
+            AV_ROUND_UP => Rounding::Up,
+            AV_ROUND_NEAR_INF => Rounding::NearInfinity,
+            AV_ROUND_PASS_MINMAX => Rounding::PassMinMax,
+            _ => {
+                eprintln!("Unknown Rounding variant: {}", value);
+                Rounding::Zero
+            }
         }
     }
 }
 
-impl From<Rounding> for ffi::AVRounding {
+impl From<Rounding> for AVRounding {
     #[inline(always)]
-    fn from(value: Rounding) -> ffi::AVRounding {
+    fn from(value: Rounding) -> AVRounding {
         match value {
-            Rounding::Zero => ffi::AV_ROUND_ZERO,
-            Rounding::Infinity => ffi::AV_ROUND_INF,
-            Rounding::Down => ffi::AV_ROUND_DOWN,
-            Rounding::Up => ffi::AV_ROUND_UP,
-            Rounding::NearInfinity => ffi::AV_ROUND_NEAR_INF,
-            Rounding::PassMinMax => ffi::AV_ROUND_PASS_MINMAX,
+            Rounding::Zero => AV_ROUND_ZERO,
+            Rounding::Infinity => AV_ROUND_INF,
+            Rounding::Down => AV_ROUND_DOWN,
+            Rounding::Up => AV_ROUND_UP,
+            Rounding::NearInfinity => AV_ROUND_NEAR_INF,
+            Rounding::PassMinMax => AV_ROUND_PASS_MINMAX,
         }
     }
 }

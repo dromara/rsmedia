@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Engine {
@@ -6,21 +6,25 @@ pub enum Engine {
     SoundExchange,
 }
 
-impl From<ffi::SwrEngine> for Engine {
-    fn from(value: ffi::SwrEngine) -> Engine {
+impl From<SwrEngine> for Engine {
+    fn from(value: SwrEngine) -> Engine {
         match value {
-            ffi::SWR_ENGINE_SWR => Engine::Software,
-            ffi::SWR_ENGINE_SOXR => Engine::SoundExchange,
-            ffi::SWR_ENGINE_NB => Engine::Software,
+            SWR_ENGINE_SWR => Engine::Software,
+            SWR_ENGINE_SOXR => Engine::SoundExchange,
+            SWR_ENGINE_NB => Engine::Software,
+            _ => {
+                eprintln!("Unknown Engine variant: {}", value);
+                Engine::Software
+            }
         }
     }
 }
 
-impl From<Engine> for ffi::SwrEngine {
-    fn from(value: Engine) -> ffi::SwrEngine {
+impl From<Engine> for SwrEngine {
+    fn from(value: Engine) -> SwrEngine {
         match value {
-            Engine::Software => ffi::SWR_ENGINE_SWR,
-            Engine::SoundExchange => ffi::SWR_ENGINE_SOXR,
+            Engine::Software => SWR_ENGINE_SWR,
+            Engine::SoundExchange => SWR_ENGINE_SOXR,
         }
     }
 }

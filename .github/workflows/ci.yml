@@ -54,61 +54,70 @@ jobs:
       - name: Build
         run: cargo build
 
-  build-windows:
-    name: build / windows / latest ffmpeg
-    runs-on: windows-latest
+build-windows:
+  name: build / windows / latest ffmpeg
+  runs-on: windows-latest
 
-    env:
-      FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      RUST_BACKTRACE: 1
+  env:
+    FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
+    RUST_BACKTRACE: 1
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      # 添加 vcpkg 缓存
-      - name: Cache vcpkg
-        id: cache-vcpkg
-        uses: actions/cache@v3
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          key: vcpkg-${{ runner.os }}
+    - name: Cache vcpkg
+      id: cache-vcpkg
+      uses: actions/cache@v3
+      with:
+        path: ${{ github.workspace }}/vcpkg
+        key: vcpkg-${{ runner.os }}
 
-      # 安装 vcpkg 和 FFmpeg
-      - name: Install vcpkg and FFmpeg
-        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
+    - name: Install dependencies
+      shell: pwsh
+      run: |
+        # 设置 Visual Studio LLVM 路径
+        $VCINSTALLDIR = $(& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath)
+        Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=${VCINSTALLDIR}\VC\Tools\LLVM\x64\bin`n"
+        
+        # 下载并解压 FFmpeg
+        Invoke-WebRequest "${env:FFMPEG_DOWNLOAD_URL}" -OutFile ffmpeg-release-full-shared.7z
+        7z x ffmpeg-release-full-shared.7z
+        mv ffmpeg-*/* ffmpeg/
+        
+        # 设置 FFmpeg 环境变量
+        Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg`n"
+        Add-Content $env:GITHUB_ENV "FFMPEG_INCLUDE_DIR=${pwd}\ffmpeg\include`n"
+        Add-Content $env:GITHUB_ENV "FFMPEG_LIB_DIR=${pwd}\ffmpeg\lib`n"
+        Add-Content $env:GITHUB_ENV "FFMPEG_DLL_PATH=${pwd}\ffmpeg\bin`n"
+        Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin`n"
+        
+        # 安装 vcpkg（如果缓存未命中）
+        if (-not (Test-Path vcpkg)) {
           git clone https://github.com/microsoft/vcpkg --depth 1
           ./vcpkg/bootstrap-vcpkg.bat
           ./vcpkg/vcpkg.exe install ffmpeg:x64-windows-static-md
+        }
+        Add-Content $env:GITHUB_ENV "VCPKG_ROOT=${pwd}\vcpkg`n"
 
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1
-        with:
-          version: "10.0"
-          directory: ${{ github.workspace }}/clang
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: x64-windows-msvc
 
-      - name: Setup Environment
-        shell: pwsh
-        run: |
-          $VCINSTALLDIR = $(& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath)
-          echo "LIBCLANG_PATH=${{ github.workspace }}/clang/lib" >> $env:GITHUB_ENV
-          echo "LLVM_CONFIG_PATH=${{ github.workspace }}/clang/bin/llvm-config" >> $env:GITHUB_ENV
+    - name: Build
+      env:
+        VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      run: |
+        cargo build --no-default-features --features ffmpeg7,link_vcpkg_ffmpeg --verbose
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          target: x64-windows-msvc
-
-      - name: Build
-        env:
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
-          LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: |
-          cargo build --no-default-features --features ffmpeg7,link_vcpkg_ffmpeg
+    # 可选：运行测试
+    - name: Test
+      if: success()
+      env:
+        VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      run: |
+        cargo test --no-default-features --features ffmpeg7,link_vcpkg_ffmpeg --verbose
 
   test:
     runs-on: ubuntu-latest

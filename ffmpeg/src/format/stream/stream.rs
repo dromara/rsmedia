@@ -1,5 +1,5 @@
 use libc::c_int;
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 use super::Disposition;
 use crate::{
@@ -19,7 +19,7 @@ impl<'a> Stream<'a> {
         Stream { context, index }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVStream {
+    pub unsafe fn as_ptr(&self) -> *const AVStream {
         *(*self.context.as_ptr()).streams.add(self.index)
     }
 }

@@ -1,11 +1,10 @@
+use super::{Format, Input, Output};
+use rsmpeg::ffi::*;
 use std::ptr;
 
-use super::{Format, Input, Output};
-use rsmpeg::ffi;
-
 pub struct Iter {
-    input: *mut ffi::AVInputFormat,
-    output: *mut ffi::AVOutputFormat,
+    input: *mut AVInputFormat,
+    output: *mut AVOutputFormat,
     step: Step,
 }
 
@@ -38,7 +37,7 @@ impl Iterator for Iter {
         unsafe {
             match self.step {
                 Step::Input => {
-                    let ptr = ffi::av_iformat_next(self.input);
+                    let ptr = av_iformat_next(self.input);
 
                     if ptr.is_null() && !self.input.is_null() {
                         self.step = Step::Output;
@@ -52,7 +51,7 @@ impl Iterator for Iter {
                 }
 
                 Step::Output => {
-                    let ptr = ffi::av_oformat_next(self.output);
+                    let ptr = av_oformat_next(self.output);
 
                     if ptr.is_null() && !self.output.is_null() {
                         self.step = Step::Done;

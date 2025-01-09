@@ -2,7 +2,8 @@ use super::{Context, Flags};
 use crate::{decoder, frame, util::format, Error};
 
 #[cfg(not(feature = "ffmpeg7"))]
-use Picture;
+use crate::Picture;
+
 #[cfg(not(feature = "ffmpeg7"))]
 impl<'a> Picture<'a> {
     #[inline]

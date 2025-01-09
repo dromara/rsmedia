@@ -13,9 +13,10 @@ pub use self::subtitle::Encoder as Subtitle;
 pub mod motion_estimation;
 pub use self::motion_estimation::MotionEstimation;
 
-// #[cfg(not(feature = "ffmpeg_5_0"))]
-// pub mod prediction;
-// pub use self::prediction::Prediction;
+#[cfg(not(feature = "ffmpeg7"))]
+pub mod prediction;
+#[cfg(not(feature = "ffmpeg7"))]
+pub use self::prediction::Prediction;
 
 pub mod comparison;
 pub use self::comparison::Comparison;
@@ -25,12 +26,10 @@ pub use self::decision::Decision;
 
 use std::ffi::CString;
 
-use crate::{
-    codec::{Context, Id},
-    Codec,
-};
-
-use rsmpeg::ffi;
+use crate::codec::Context;
+use crate::codec::Id;
+use crate::Codec;
+use rsmpeg::ffi::*;
 
 pub fn new() -> Encoder {
     Context::new().encoder()
@@ -38,10 +37,9 @@ pub fn new() -> Encoder {
 
 pub fn find(id: Id) -> Option<Codec> {
     unsafe {
-        // We get a clippy warning in 4.4 but not in 5.0 and newer,
-        // so we allow that cast to not complicate the code
+        // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
         #[allow(clippy::unnecessary_cast)]
-        let ptr = ffi::avcodec_find_encoder(id.into()) as *mut ffi::AVCodec;
+        let ptr = avcodec_find_encoder(id.into()) as *mut AVCodec;
 
         if ptr.is_null() {
             None
@@ -55,7 +53,7 @@ pub fn find_by_name(name: &str) -> Option<Codec> {
     unsafe {
         let name = CString::new(name).unwrap();
         #[allow(clippy::unnecessary_cast)]
-        let ptr = ffi::avcodec_find_encoder_by_name(name.as_ptr()) as *mut ffi::AVCodec;
+        let ptr = avcodec_find_encoder_by_name(name.as_ptr()) as *mut AVCodec;
 
         if ptr.is_null() {
             None

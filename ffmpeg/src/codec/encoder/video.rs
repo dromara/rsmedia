@@ -2,17 +2,17 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use libc::{c_float, c_int};
-use rsmpeg::ffi;
+use rsmpeg::ffi::*;
 
 use super::Encoder as Super;
 use super::{Comparison, Decision};
 #[cfg(not(feature = "ffmpeg7"))]
 use super::{MotionEstimation, Prediction};
 
-use crate::{
-    codec::{traits, Context},
-    color, Dictionary, Error, Rational,
-};
+use crate::codec::{traits, Context};
+use crate::{color, format, Dictionary, Error, Rational};
+#[cfg(not(feature = "ffmpeg7"))]
+use crate::{frame, packet};
 
 pub struct Video(pub Super);
 
@@ -20,7 +20,7 @@ impl Video {
     #[inline]
     pub fn open(mut self) -> Result<Encoder, Error> {
         unsafe {
-            match ffi::avcodec_open2(self.as_mut_ptr(), ptr::null(), ptr::null_mut()) {
+            match avcodec_open2(self.as_mut_ptr(), ptr::null(), ptr::null_mut()) {
                 0 => Ok(Encoder(self)),
                 e => Err(Error::from(e)),
             }
@@ -31,7 +31,7 @@ impl Video {
     pub fn open_as<E: traits::Encoder>(mut self, codec: E) -> Result<Encoder, Error> {
         unsafe {
             if let Some(codec) = codec.encoder() {
-                match ffi::avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), ptr::null_mut()) {
+                match avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), ptr::null_mut()) {
                     0 => Ok(Encoder(self)),
                     e => Err(Error::from(e)),
                 }
@@ -45,7 +45,7 @@ impl Video {
     pub fn open_with(mut self, options: Dictionary) -> Result<Encoder, Error> {
         unsafe {
             let mut opts = options.disown();
-            let res = ffi::avcodec_open2(self.as_mut_ptr(), ptr::null(), &mut opts);
+            let res = avcodec_open2(self.as_mut_ptr(), ptr::null(), &mut opts);
 
             Dictionary::own(opts);
 
@@ -65,7 +65,7 @@ impl Video {
         unsafe {
             if let Some(codec) = codec.encoder() {
                 let mut opts = options.disown();
-                let res = ffi::avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), &mut opts);
+                let res = avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), &mut opts);
 
                 Dictionary::own(opts);
 
@@ -111,15 +111,15 @@ impl Video {
     }
 
     #[inline]
-    pub fn set_format(&mut self, value: crate::format::Pixel) {
+    pub fn set_format(&mut self, value: format::Pixel) {
         unsafe {
             (*self.as_mut_ptr()).pix_fmt = value.into();
         }
     }
 
     #[inline]
-    pub fn format(&self) -> crate::format::Pixel {
-        unsafe { crate::format::Pixel::from((*self.as_ptr()).pix_fmt) }
+    pub fn format(&self) -> format::Pixel {
+        unsafe { format::Pixel::from((*self.as_ptr()).pix_fmt) }
     }
 
     // #[inline]
@@ -200,13 +200,13 @@ impl Video {
         }
     }
 
-    #[inline]
-    #[cfg(not(feature = "ffmpeg7"))]
-    pub fn set_prediction(&mut self, value: Prediction) {
-        unsafe {
-            (*self.as_mut_ptr()).prediction_method = value.into();
-        }
-    }
+    // #[inline]
+    // #[cfg(not(feature = "ffmpeg7"))]
+    // pub fn set_prediction(&mut self, value: Prediction) {
+    //     unsafe {
+    //         (*self.as_mut_ptr()).prediction_method = value.into();
+    //     }
+    // }
 
     #[inline]
     pub fn set_aspect_ratio<R: Into<Rational>>(&mut self, value: R) {
@@ -257,13 +257,13 @@ impl Video {
         }
     }
 
-    #[inline]
-    #[cfg(not(feature = "ffmpeg7"))]
-    pub fn set_pre_me(&mut self, value: MotionEstimation) {
-        unsafe {
-            (*self.as_mut_ptr()).pre_me = value.into();
-        }
-    }
+    // #[inline]
+    // #[cfg(not(feature = "ffmpeg7"))]
+    // pub fn set_pre_me(&mut self, value: MotionEstimation) {
+    //     unsafe {
+    //         (*self.as_mut_ptr()).pre_me = value.into();
+    //     }
+    // }
 
     #[inline]
     pub fn set_me_pre_comparison(&mut self, value: Comparison) {

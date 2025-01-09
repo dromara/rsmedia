@@ -14,19 +14,15 @@ jobs:
   build-linux:
     name: build / linux / ffmpeg ${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
+    container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu2404
 
     strategy:
       matrix:
         include:
           # FFmpeg 6.x
-          - ffmpeg_version: "6.0"
-            feature: "ffmpeg6"
           - ffmpeg_version: "6.1"
             feature: "ffmpeg6"
           # FFmpeg 7.x
-          - ffmpeg_version: "7.0"
-            feature: "ffmpeg7"
           - ffmpeg_version: "7.1"
             feature: "ffmpeg7"
       fail-fast: false

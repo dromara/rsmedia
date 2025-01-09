@@ -475,7 +475,7 @@ unsafe extern "C" fn log_callback(
     avcl: *mut std::ffi::c_void,
     level_no: std::ffi::c_int,
     fmt: *const std::ffi::c_char,
-    #[cfg(all(target_arch = "x86_64", target_family = "unix"))] vl: *mut __va_list_tag,
+    #[cfg(all(target_arch = "x86_64", target_family = "unix"))] vl: *mut ffi::__va_list_tag,
     #[cfg(not(all(target_arch = "x86_64", target_family = "unix")))] vl: ffi::va_list,
 ) {
     // Check whether or not the message would be printed at all.

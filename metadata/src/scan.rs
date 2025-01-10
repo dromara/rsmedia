@@ -1,7 +1,6 @@
-use crate::ffmpeg;
-use crate::ffmpeg::ffi;
-use crate::ffmpeg::codec::context::Context;
-use crate::ffmpeg::format::context::Input;
+use ffmpeg::codec::context::Context;
+use ffmpeg::ffi;
+use ffmpeg::format::context::Input;
 
 use std::fmt;
 use std::io;
@@ -42,7 +41,7 @@ pub fn get_scan_type(input: &mut Input) -> io::Result<Option<ScanType>> {
         ffi::AV_FIELD_UNKNOWN => Ok(Some(ScanType::LikelyProgressive)),
         ffi::AV_FIELD_TT | ffi::AV_FIELD_BB | ffi::AV_FIELD_TB | ffi::AV_FIELD_BT => {
             Ok(Some(ScanType::Interlaced))
-        },
+        }
         _ => panic!("Unsupported AV field order"),
     }
 }

@@ -1,8 +1,8 @@
-use crate::ffmpeg::codec::{self, Context, Parameters};
-use crate::ffmpeg::color;
-use crate::ffmpeg::util::format::pixel::Pixel;
-use crate::ffmpeg::util::rational::Rational;
-use crate::ffmpeg::Stream;
+use ffmpeg::codec::{self, Context, Parameters};
+use ffmpeg::color;
+use ffmpeg::util::format::pixel::Pixel;
+use ffmpeg::util::rational::Rational;
+use ffmpeg::Stream;
 use std::io;
 
 use crate::prejudice;
@@ -60,7 +60,7 @@ impl VideoMetadata {
         let video = codec_ctx.decoder().video()?;
 
         let _codec = codec_par.id();
-        let codec_desc = prejudice::codec_description(&codec_par);
+        let codec_desc = prejudice::codec_description(codec_par);
 
         let _pixel_fmt = video.format();
         let pixel_fmt = _pixel_fmt.descriptor().map(|d| d.name().to_string());
@@ -90,8 +90,7 @@ impl VideoMetadata {
             }
         }]
         .iter()
-        .filter(|v| v.is_some())
-        .map(|v| v.clone().unwrap())
+        .filter_map(|v| v.clone())
         .collect::<Vec<_>>()
         .join(", ");
 

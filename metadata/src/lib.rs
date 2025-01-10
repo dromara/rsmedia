@@ -1,5 +1,3 @@
-
-
 #[macro_use]
 extern crate handlebars;
 #[macro_use]
@@ -19,6 +17,7 @@ extern crate quickcheck;
 #[cfg(test)]
 extern crate tempfile;
 
+pub mod cli;
 pub mod media_file;
 pub mod prejudice;
 pub mod render;
@@ -26,8 +25,8 @@ pub mod scan;
 pub mod stream;
 pub mod tags;
 pub mod util;
-pub mod cli;
 
+pub use crate::cli::Cli;
 pub use crate::media_file::MediaFileMetadata;
 pub use crate::render::Render;
 pub use crate::scan::ScanType;
@@ -36,4 +35,3 @@ pub use crate::stream::{
     UnknownMetadata, VideoMetadata,
 };
 pub use crate::tags::{Tags, ToTags};
-pub use crate::cli::Cli;

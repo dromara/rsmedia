@@ -1,5 +1,5 @@
-use crate::ffmpeg::codec::{self, Parameters};
-use crate::ffmpeg::DictionaryRef;
+use ffmpeg::codec::{self, Parameters};
+use ffmpeg::DictionaryRef;
 use std::io;
 
 use crate::prejudice;
@@ -27,7 +27,7 @@ impl SubtitleMetadata {
             .map(str::to_string);
 
         let _codec = codec_par.id();
-        let codec_desc = prejudice::codec_description(&codec_par);
+        let codec_desc = prejudice::codec_description(codec_par);
 
         Ok(SubtitleMetadata {
             index,

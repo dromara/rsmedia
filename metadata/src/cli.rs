@@ -1,4 +1,4 @@
-use clap::{Parser};
+use clap::Parser;
 
 /// Media file metadata for human consumption.
 #[derive(Parser, Debug)]
@@ -14,7 +14,7 @@ pub struct Cli {
 
     /// Print all metadata tags
     #[arg(short = 'A', long = "all-tags")]
-    pub  all_tags: bool,
+    pub all_tags: bool,
 
     /// Media file(s)
     #[arg(required = true)]

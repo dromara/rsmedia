@@ -1,6 +1,5 @@
 extern crate metadata;
 
-
 extern crate tempfile;
 
 use metadata::{MediaFileMetadata, Render};

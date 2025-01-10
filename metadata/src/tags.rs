@@ -1,4 +1,4 @@
-use crate::ffmpeg::DictionaryRef;
+use ffmpeg::DictionaryRef;
 use regex::Regex;
 
 pub type Tags = Vec<(String, String)>;
@@ -9,7 +9,7 @@ pub trait ToTags {
     fn to_filtered_tags(&self) -> Tags {
         self.to_tags()
             .iter()
-            .filter(|(k, _)| !Self::tag_is_boring(&k))
+            .filter(|(k, _)| !Self::tag_is_boring(k))
             .cloned()
             .collect()
     }
@@ -25,7 +25,7 @@ pub trait ToTags {
     }
 }
 
-impl<'a> ToTags for DictionaryRef<'a> {
+impl ToTags for DictionaryRef<'_> {
     fn to_tags(&self) -> Vec<(String, String)> {
         self.iter()
             // Filter out empty tags.

@@ -3,19 +3,18 @@
 // formats and codecs are not listed here because the stock names are
 // good enough.
 
-use crate::ffmpeg;
-use crate::ffmpeg::codec::parameters::Parameters;
-use crate::ffmpeg::codec::profile::{Profile, AAC, H264, HEVC, VP9};
-use crate::ffmpeg::codec::Id;
-use crate::ffmpeg::format::Input;
+use ffmpeg::codec::parameters::Parameters;
+use ffmpeg::codec::profile::{Profile, AAC, H264, HEVC, VP9};
+use ffmpeg::codec::Id;
+use ffmpeg::format::Input;
 use std::ffi::CStr;
 use std::path::Path;
 use std::str::from_utf8_unchecked;
 
 // Assumes ASCII!
 fn capitalize(s: String) -> String {
-    if s == "" {
-        return "".to_string();
+    if s.is_empty() {
+        return String::new();
     }
     s.chars().next().unwrap().to_ascii_uppercase().to_string() + &(s.clone())[1..s.len()]
 }

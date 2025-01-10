@@ -1,8 +1,7 @@
-use crate::ffmpeg;
-use crate::ffmpeg::codec::decoder::audio::Audio;
-use crate::ffmpeg::codec::{self, Context, Parameters};
-use crate::ffmpeg::util::channel_layout::ChannelLayout;
-use crate::ffmpeg::DictionaryRef;
+use ffmpeg::codec::decoder::audio::Audio;
+use ffmpeg::codec::{self, Context, Parameters};
+use ffmpeg::util::channel_layout::ChannelLayout;
+use ffmpeg::DictionaryRef;
 use libc;
 use std::io;
 use std::str::from_utf8_unchecked;
@@ -47,7 +46,7 @@ impl AudioMetadata {
             .map(str::to_string);
 
         let _codec = codec_par.id();
-        let codec_desc = prejudice::codec_description(&codec_par);
+        let codec_desc = prejudice::codec_description(codec_par);
 
         let _sample_rate = audio.rate();
         let sample_rate = format!("{} Hz", _sample_rate);

@@ -1,6 +1,5 @@
-use crate::ffmpeg;
-use crate::ffmpeg::media::Type;
-use crate::ffmpeg::util::rational::Rational;
+use ffmpeg::media::Type;
+use ffmpeg::util::rational::Rational;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -240,11 +239,7 @@ impl MediaFileMetadata {
     }
 
     pub fn include_tags(&mut self, on: bool) -> &mut MediaFileMetadata {
-        if on {
-            self.options.include_tags = true;
-        } else {
-            self.options.include_tags = false;
-        }
+        self.options.include_tags = on;
         self
     }
 

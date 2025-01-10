@@ -1,8 +1,6 @@
-extern crate metadata;
-
 extern crate clap;
 extern crate env_logger;
-
+extern crate metadata;
 
 use crate::clap::Parser;
 use metadata::{Cli, MediaFileMetadata, Render};

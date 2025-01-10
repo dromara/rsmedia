@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 use std::mem;
 use std::slice;
 
-use crate::Error;
 use crate::format;
+use crate::Error;
 use libc::{c_int, size_t};
 use sys::ffi::*;
 

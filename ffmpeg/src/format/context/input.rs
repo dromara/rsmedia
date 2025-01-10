@@ -6,7 +6,7 @@ use sys::ffi;
 
 use super::{common::Context, destructor};
 
-use crate::{util::range::Range, Codec, Error, Packet, Stream};
+use crate::{util::range::Range, Error, Packet, Stream};
 
 pub struct Input {
     ptr: *mut ffi::AVFormatContext,

@@ -18,11 +18,11 @@ pub use self::format::{Input, Output};
 
 pub mod network;
 
+use libc::c_int;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::ptr;
 use std::str::from_utf8_unchecked;
-use libc::c_int;
 use sys::ffi::*;
 
 // #[cfg(not(feature = "ffmpeg5"))]

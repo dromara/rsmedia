@@ -8,7 +8,7 @@ extern crate bitflags;
 extern crate libc;
 
 pub extern crate rusty_ffmpeg as sys;
-pub use sys::ffi as ffi;
+pub use sys::ffi;
 
 #[cfg(feature = "image")]
 extern crate image;
@@ -95,13 +95,12 @@ fn init_filter() {
     filter::register_all();
 }
 
-
 pub fn init() -> Result<(), Error> {
     init_error();
-    #[cfg(not(feature = "ffmpeg5"))]
+    // #[cfg(not(feature = "ffmpeg5"))]
     init_format();
     init_device();
-    #[cfg(not(feature = "ffmpeg5"))]
+    // #[cfg(not(feature = "ffmpeg5"))]
     init_filter();
 
     Ok(())

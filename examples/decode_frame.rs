@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let frame_rate = decoder.frame_rate(); // Assuming 30 FPS if not available
 
     let max_duration = 20.0; // Max duration in seconds
-    let max_frames = (frame_rate * max_duration).ceil() as usize;
+    let _max_frames = (frame_rate * max_duration).ceil() as usize;
 
     let mut frame_count = 0;
     let mut elapsed_time = 0.0;

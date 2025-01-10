@@ -2,9 +2,9 @@
 
 use crate::{util::format, ChannelLayout, Error, Rational};
 use libc::{c_int, c_void};
-use sys::ffi::*;
 use std::ffi::CString;
 use std::mem;
+use sys::ffi::*;
 
 macro_rules! check {
     ($expr:expr) => {

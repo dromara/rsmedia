@@ -4,8 +4,8 @@ pub use self::level::Level;
 pub mod flag;
 pub use self::flag::Flags;
 
-use sys::ffi;
 use std::convert::TryInto;
+use sys::ffi;
 
 pub fn set_level(value: Level) {
     unsafe { ffi::av_log_set_level(value.into()) }

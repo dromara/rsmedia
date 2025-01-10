@@ -1,8 +1,8 @@
-use sys::ffi::*;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::slice;
 use std::str::from_utf8_unchecked;
+use sys::ffi::*;
 
 use super::Frame;
 use crate::DictionaryRef;

@@ -1,6 +1,6 @@
-use sys::ffi;
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
+use sys::ffi;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Primaries {

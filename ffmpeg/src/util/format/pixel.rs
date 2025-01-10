@@ -1,8 +1,8 @@
-use sys::ffi::*;
 use std::error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
 use std::str::{from_utf8_unchecked, FromStr};
+use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Pixel {

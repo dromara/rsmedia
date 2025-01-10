@@ -345,25 +345,25 @@ pub enum Pixel {
     // #[cfg(feature = "ffmpeg_4_4")]
     X2RGB10BE,
 
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     X2BGR10LE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     X2BGR10BE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P210BE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P210LE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P410BE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P410LE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P216BE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P216LE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P416BE,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     P416LE,
 
     #[cfg(feature = "ffmpeg6")]
@@ -752,25 +752,25 @@ impl From<AVPixelFormat> for Pixel {
             // #[cfg(feature = "ffmpeg_4_4")]
             AV_PIX_FMT_X2RGB10BE => Pixel::X2RGB10BE,
 
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_X2BGR10LE => Pixel::X2BGR10LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_X2BGR10BE => Pixel::X2BGR10BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P210BE => Pixel::P210BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P210LE => Pixel::P210LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P410BE => Pixel::P410BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P410LE => Pixel::P410LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P216BE => Pixel::P216BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P216LE => Pixel::P216LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P416BE => Pixel::P416BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_PIX_FMT_P416LE => Pixel::P416LE,
 
             #[cfg(feature = "ffmpeg6")]
@@ -1180,25 +1180,25 @@ impl From<Pixel> for AVPixelFormat {
             // #[cfg(feature = "ffmpeg_4_4")]
             Pixel::X2RGB10BE => AV_PIX_FMT_X2RGB10BE,
 
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::X2BGR10LE => AV_PIX_FMT_X2BGR10LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::X2BGR10BE => AV_PIX_FMT_X2BGR10BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P210BE => AV_PIX_FMT_P210BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P210LE => AV_PIX_FMT_P210LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P410BE => AV_PIX_FMT_P410BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P410LE => AV_PIX_FMT_P410LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P216BE => AV_PIX_FMT_P216BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P216LE => AV_PIX_FMT_P216LE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P416BE => AV_PIX_FMT_P416BE,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Pixel::P416LE => AV_PIX_FMT_P416LE,
 
             #[cfg(feature = "ffmpeg6")]

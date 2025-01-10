@@ -1,5 +1,7 @@
-pub use crate::util::format::{pixel, sample, Pixel, Sample};
-use crate::{util::interrupt, Dictionary, Error, Format};
+pub use crate::util::format::{pixel, Pixel};
+pub use crate::util::format::{sample, Sample};
+use crate::util::interrupt;
+use crate::{Dictionary, Error, Format};
 
 pub mod stream;
 
@@ -20,39 +22,40 @@ use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::ptr;
 use std::str::from_utf8_unchecked;
+use libc::c_int;
+use sys::ffi::*;
 
-use sys::ffi;
-
-// #[cfg(not(feature = "ffmpeg_5_0"))]
+// #[cfg(not(feature = "ffmpeg5"))]
 pub fn register_all() {
     // unsafe {
-    //     ffi::av_register_all();
+    //     // av_register_all 在 FFmpeg 4.0 之后已被废弃
+    //     av_register_all();
     // }
 }
 
-// #[cfg(not(feature = "ffmpeg_5_0"))]
+// #[cfg(not(feature = "ffmpeg5"))]
 // pub fn register(format: &Format) {
 //     match *format {
 //         Format::Input(ref format) => unsafe {
-//             ffi::av_register_input_format(format.as_ptr() as *mut _);
+//             av_register_input_format(format.as_ptr() as *mut _);
 //         },
 //
 //         Format::Output(ref format) => unsafe {
-//             ffi::av_register_output_format(format.as_ptr() as *mut _);
+//             av_register_output_format(format.as_ptr() as *mut _);
 //         },
 //     }
 // }
 
 pub fn version() -> u32 {
-    unsafe { ffi::avformat_version() }
+    unsafe { avformat_version() }
 }
 
 pub fn configuration() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avformat_configuration()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(avformat_configuration()).to_bytes()) }
 }
 
 pub fn license() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avformat_license()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(avformat_license()).to_bytes()) }
 }
 
 // XXX: use to_cstring when stable
@@ -67,13 +70,13 @@ pub fn open<P: AsRef<Path> + ?Sized>(path: &P, format: &Format) -> Result<Contex
         let path = from_path(path);
 
         match *format {
-            Format::Input(ref format) => match ffi::avformat_open_input(
+            Format::Input(ref format) => match avformat_open_input(
                 &mut ps,
                 path.as_ptr(),
                 format.as_ptr() as *mut _,
                 ptr::null_mut(),
             ) {
-                0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+                0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
                     r if r >= 0 => Ok(Context::Input(context::Input::wrap(ps))),
                     e => Err(Error::from(e)),
                 },
@@ -81,19 +84,16 @@ pub fn open<P: AsRef<Path> + ?Sized>(path: &P, format: &Format) -> Result<Contex
                 e => Err(Error::from(e)),
             },
 
-            Format::Output(ref format) => match ffi::avformat_alloc_output_context2(
+            Format::Output(ref format) => match avformat_alloc_output_context2(
                 &mut ps,
                 format.as_ptr() as *mut _,
                 ptr::null(),
                 path.as_ptr(),
             ) {
-                0 => {
-                    match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32)
-                    {
-                        0 => Ok(Context::Output(context::Output::wrap(ps))),
-                        e => Err(Error::from(e)),
-                    }
-                }
+                0 => match avio_open(&mut (*ps).pb, path.as_ptr(), AVIO_FLAG_WRITE as c_int) {
+                    0 => Ok(Context::Output(context::Output::wrap(ps))),
+                    e => Err(Error::from(e)),
+                },
 
                 e => Err(Error::from(e)),
             },
@@ -113,7 +113,7 @@ pub fn open_with<P: AsRef<Path> + ?Sized>(
 
         match *format {
             Format::Input(ref format) => {
-                let res = ffi::avformat_open_input(
+                let res = avformat_open_input(
                     &mut ps,
                     path.as_ptr(),
                     format.as_ptr() as *mut _,
@@ -123,7 +123,7 @@ pub fn open_with<P: AsRef<Path> + ?Sized>(
                 Dictionary::own(opts);
 
                 match res {
-                    0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+                    0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
                         r if r >= 0 => Ok(Context::Input(context::Input::wrap(ps))),
                         e => Err(Error::from(e)),
                     },
@@ -132,19 +132,16 @@ pub fn open_with<P: AsRef<Path> + ?Sized>(
                 }
             }
 
-            Format::Output(ref format) => match ffi::avformat_alloc_output_context2(
+            Format::Output(ref format) => match avformat_alloc_output_context2(
                 &mut ps,
                 format.as_ptr() as *mut _,
                 ptr::null(),
                 path.as_ptr(),
             ) {
-                0 => {
-                    match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32)
-                    {
-                        0 => Ok(Context::Output(context::Output::wrap(ps))),
-                        e => Err(Error::from(e)),
-                    }
-                }
+                0 => match avio_open(&mut (*ps).pb, path.as_ptr(), AVIO_FLAG_WRITE as c_int) {
+                    0 => Ok(Context::Output(context::Output::wrap(ps))),
+                    e => Err(Error::from(e)),
+                },
 
                 e => Err(Error::from(e)),
             },
@@ -157,11 +154,11 @@ pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<context::Input, Error>
         let mut ps = ptr::null_mut();
         let path = from_path(path);
 
-        match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut()) {
-            0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+        match avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut()) {
+            0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
                 r if r >= 0 => Ok(context::Input::wrap(ps)),
                 e => {
-                    ffi::avformat_close_input(&mut ps);
+                    avformat_close_input(&mut ps);
                     Err(Error::from(e))
                 }
             },
@@ -179,15 +176,15 @@ pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
         let mut ps = ptr::null_mut();
         let path = from_path(path);
         let mut opts = options.disown();
-        let res = ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), &mut opts);
+        let res = avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), &mut opts);
 
         Dictionary::own(opts);
 
         match res {
-            0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+            0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
                 r if r >= 0 => Ok(context::Input::wrap(ps)),
                 e => {
-                    ffi::avformat_close_input(&mut ps);
+                    avformat_close_input(&mut ps);
                     Err(Error::from(e))
                 }
             },
@@ -205,15 +202,15 @@ where
     F: FnMut() -> bool,
 {
     unsafe {
-        let mut ps = ffi::avformat_alloc_context();
+        let mut ps = avformat_alloc_context();
         let path = from_path(path);
         (*ps).interrupt_callback = interrupt::new(Box::new(closure)).interrupt;
 
-        match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut()) {
-            0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+        match avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut()) {
+            0 => match avformat_find_stream_info(ps, ptr::null_mut()) {
                 r if r >= 0 => Ok(context::Input::wrap(ps)),
                 e => {
-                    ffi::avformat_close_input(&mut ps);
+                    avformat_close_input(&mut ps);
                     Err(Error::from(e))
                 }
             },
@@ -228,13 +225,8 @@ pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<context::Output, Erro
         let mut ps = ptr::null_mut();
         let path = from_path(path);
 
-        match ffi::avformat_alloc_output_context2(
-            &mut ps,
-            ptr::null_mut(),
-            ptr::null(),
-            path.as_ptr(),
-        ) {
-            0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32) {
+        match avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
+            0 => match avio_open(&mut (*ps).pb, path.as_ptr(), AVIO_FLAG_WRITE as c_int) {
                 0 => Ok(context::Output::wrap(ps)),
                 e => Err(Error::from(e)),
             },
@@ -253,17 +245,12 @@ pub fn output_with<P: AsRef<Path> + ?Sized>(
         let path = from_path(path);
         let mut opts = options.disown();
 
-        match ffi::avformat_alloc_output_context2(
-            &mut ps,
-            ptr::null_mut(),
-            ptr::null(),
-            path.as_ptr(),
-        ) {
+        match avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
             0 => {
-                let res = ffi::avio_open2(
+                let res = avio_open2(
                     &mut (*ps).pb,
                     path.as_ptr(),
-                    ffi::AVIO_FLAG_WRITE as i32,
+                    AVIO_FLAG_WRITE as c_int,
                     ptr::null(),
                     &mut opts,
                 );
@@ -290,13 +277,13 @@ pub fn output_as<P: AsRef<Path> + ?Sized>(
         let path = from_path(path);
         let format = CString::new(format).unwrap();
 
-        match ffi::avformat_alloc_output_context2(
+        match avformat_alloc_output_context2(
             &mut ps,
             ptr::null_mut(),
             format.as_ptr(),
             path.as_ptr(),
         ) {
-            0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as i32) {
+            0 => match avio_open(&mut (*ps).pb, path.as_ptr(), AVIO_FLAG_WRITE as c_int) {
                 0 => Ok(context::Output::wrap(ps)),
                 e => Err(Error::from(e)),
             },
@@ -317,17 +304,17 @@ pub fn output_as_with<P: AsRef<Path> + ?Sized>(
         let format = CString::new(format).unwrap();
         let mut opts = options.disown();
 
-        match ffi::avformat_alloc_output_context2(
+        match avformat_alloc_output_context2(
             &mut ps,
             ptr::null_mut(),
             format.as_ptr(),
             path.as_ptr(),
         ) {
             0 => {
-                let res = ffi::avio_open2(
+                let res = avio_open2(
                     &mut (*ps).pb,
                     path.as_ptr(),
-                    ffi::AVIO_FLAG_WRITE as i32,
+                    AVIO_FLAG_WRITE as c_int,
                     ptr::null(),
                     &mut opts,
                 );

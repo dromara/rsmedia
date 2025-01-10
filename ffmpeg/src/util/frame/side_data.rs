@@ -48,14 +48,14 @@ pub enum Type {
     // #[cfg(feature = "ffmpeg_4_4")]
     FILM_GRAIN_PARAMS,
 
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     DETECTION_BBOXES,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     DOVI_RPU_BUFFER,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     DOVI_METADATA,
 
-    // #[cfg(feature = "ffmpeg_5_1")]
+    #[cfg(feature = "ffmpeg5")]
     DYNAMIC_HDR_VIVID,
 
     #[cfg(feature = "ffmpeg6")]
@@ -120,14 +120,14 @@ impl From<AVFrameSideDataType> for Type {
             // #[cfg(feature = "ffmpeg_4_4")]
             AV_FRAME_DATA_FILM_GRAIN_PARAMS => Type::FILM_GRAIN_PARAMS,
 
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_FRAME_DATA_DETECTION_BBOXES => Type::DETECTION_BBOXES,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_FRAME_DATA_DOVI_RPU_BUFFER => Type::DOVI_RPU_BUFFER,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_FRAME_DATA_DOVI_METADATA => Type::DOVI_METADATA,
 
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             AV_FRAME_DATA_DYNAMIC_HDR_VIVID => Type::DYNAMIC_HDR_VIVID,
 
             #[cfg(feature = "ffmpeg6")]
@@ -191,14 +191,14 @@ impl From<Type> for AVFrameSideDataType {
             // #[cfg(feature = "ffmpeg_4_4")]
             Type::FILM_GRAIN_PARAMS => AV_FRAME_DATA_FILM_GRAIN_PARAMS,
 
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Type::DETECTION_BBOXES => AV_FRAME_DATA_DETECTION_BBOXES,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Type::DOVI_RPU_BUFFER => AV_FRAME_DATA_DOVI_RPU_BUFFER,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Type::DOVI_METADATA => AV_FRAME_DATA_DOVI_METADATA,
 
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             Type::DYNAMIC_HDR_VIVID => AV_FRAME_DATA_DYNAMIC_HDR_VIVID,
 
             #[cfg(feature = "ffmpeg6")]

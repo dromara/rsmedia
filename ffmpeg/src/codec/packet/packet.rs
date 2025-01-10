@@ -181,7 +181,7 @@ impl Packet {
     }
 
     // #[inline]
-    // #[cfg(not(feature = "ffmpeg_5_0"))]
+    // #[cfg(not(feature = "ffmpeg5"))]
     // pub fn convergence(&self) -> isize {
     //     self.0.convergence_duration as isize
     // }

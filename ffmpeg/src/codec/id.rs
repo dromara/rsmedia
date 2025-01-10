@@ -596,22 +596,22 @@ pub enum Id {
     // #[cfg(feature = "ffmpeg_4_4")]
     FASTAUDIO,
 
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     GEM,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     ADPCM_IMA_ACORN,
-    // #[cfg(feature = "ffmpeg_5_0")]
+    #[cfg(feature = "ffmpeg5")]
     MSNSIREN,
 
-    // #[cfg(feature = "ffmpeg_5_1")]
+    #[cfg(feature = "ffmpeg5")]
     VBN,
-    // #[cfg(feature = "ffmpeg_5_1")]
+    #[cfg(feature = "ffmpeg5")]
     JPEGXL,
-    // #[cfg(feature = "ffmpeg_5_1")]
+    #[cfg(feature = "ffmpeg5")]
     QOI,
-    // #[cfg(feature = "ffmpeg_5_1")]
+    #[cfg(feature = "ffmpeg5")]
     PHM,
-    // #[cfg(feature = "ffmpeg_5_1")]
+    #[cfg(feature = "ffmpeg5")]
     DFPWM,
 
     #[cfg(feature = "ffmpeg6")]
@@ -1271,22 +1271,22 @@ impl From<AVCodecID> for Id {
             // #[cfg(feature = "ffmpeg_4_4")]
             AV_CODEC_ID_FASTAUDIO => Id::FASTAUDIO,
 
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_GEM => Id::GEM,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_ADPCM_IMA_ACORN => Id::ADPCM_IMA_ACORN,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_MSNSIREN => Id::MSNSIREN,
 
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_VBN => Id::VBN,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_JPEGXL => Id::JPEGXL,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_QOI => Id::QOI,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_PHM => Id::PHM,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             AV_CODEC_ID_DFPWM => Id::DFPWM,
 
             #[cfg(feature = "ffmpeg6")]
@@ -1947,22 +1947,22 @@ impl From<Id> for AVCodecID {
             // #[cfg(feature = "ffmpeg_4_4")]
             Id::FASTAUDIO => AV_CODEC_ID_FASTAUDIO,
 
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Id::GEM => AV_CODEC_ID_GEM,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Id::ADPCM_IMA_ACORN => AV_CODEC_ID_ADPCM_IMA_ACORN,
-            // #[cfg(feature = "ffmpeg_5_0")]
+            #[cfg(feature = "ffmpeg5")]
             Id::MSNSIREN => AV_CODEC_ID_MSNSIREN,
 
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             Id::VBN => AV_CODEC_ID_VBN,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             Id::JPEGXL => AV_CODEC_ID_JPEGXL,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             Id::QOI => AV_CODEC_ID_QOI,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             Id::PHM => AV_CODEC_ID_PHM,
-            // #[cfg(feature = "ffmpeg_5_1")]
+            #[cfg(feature = "ffmpeg5")]
             Id::DFPWM => AV_CODEC_ID_DFPWM,
 
             #[cfg(feature = "ffmpeg6")]

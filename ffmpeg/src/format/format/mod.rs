@@ -11,10 +11,6 @@ pub use self::output::Output;
 mod iter;
 #[cfg(not(feature = "ffmpeg7"))]
 pub use self::iter::Iter;
-#[cfg(not(feature = "ffmpeg7"))]
-pub fn list() -> Iter {
-    Iter::new()
-}
 
 pub enum Format {
     Input(Input),
@@ -49,4 +45,9 @@ impl Format {
             Format::Output(ref f) => f.mime_types(),
         }
     }
+}
+
+#[cfg(not(feature = "ffmpeg7"))]
+pub fn list() -> Iter {
+    Iter::new()
 }

@@ -3,14 +3,14 @@ use std::mem;
 use std::slice;
 
 use crate::Error;
-use format;
+use crate::format;
 use libc::{c_int, size_t};
 use sys::ffi::*;
 
 pub struct Picture<'a> {
     ptr: *mut AVPicture,
 
-    format: crate::format::Pixel,
+    format: format::Pixel,
     width: u32,
     height: u32,
 
@@ -21,7 +21,7 @@ pub struct Picture<'a> {
 impl<'a> Picture<'a> {
     pub unsafe fn wrap(
         ptr: *mut AVPicture,
-        format: crate::format::Pixel,
+        format: format::Pixel,
         width: u32,
         height: u32,
     ) -> Self {
@@ -47,7 +47,7 @@ impl<'a> Picture<'a> {
 }
 
 impl<'a> Picture<'a> {
-    pub fn size(format: crate::format::Pixel, width: u32, height: u32) -> Result<usize, Error> {
+    pub fn size(format: format::Pixel, width: u32, height: u32) -> Result<usize, Error> {
         unsafe {
             match avpicture_get_size(format.into(), width as c_int, height as c_int) {
                 v if v >= 0 => Ok(v as usize),
@@ -56,7 +56,7 @@ impl<'a> Picture<'a> {
         }
     }
 
-    pub fn new(format: crate::format::Pixel, width: u32, height: u32) -> Result<Self, Error> {
+    pub fn new(format: format::Pixel, width: u32, height: u32) -> Result<Self, Error> {
         unsafe {
             let ptr = av_malloc(mem::size_of::<AVPicture>() as size_t) as *mut AVPicture;
 
@@ -77,7 +77,7 @@ impl<'a> Picture<'a> {
         }
     }
 
-    pub fn format(&self) -> crate::format::Pixel {
+    pub fn format(&self) -> format::Pixel {
         self.format
     }
 
@@ -107,7 +107,7 @@ impl<'a> Picture<'a> {
 
     pub fn layout_as(
         &self,
-        format: crate::format::Pixel,
+        format: format::Pixel,
         width: u32,
         height: u32,
         out: &mut [u8],

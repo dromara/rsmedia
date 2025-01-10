@@ -41,7 +41,7 @@ impl Input {
         }
     }
 
-    // #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg5"))]
     pub fn video_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).video_codec;
@@ -54,7 +54,7 @@ impl Input {
         }
     }
 
-    // #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg5"))]
     pub fn audio_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).audio_codec;
@@ -67,7 +67,7 @@ impl Input {
         }
     }
 
-    // #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg5"))]
     pub fn subtitle_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).subtitle_codec;
@@ -80,7 +80,7 @@ impl Input {
         }
     }
 
-    // #[cfg(not(feature = "ffmpeg_5_0"))]
+    #[cfg(not(feature = "ffmpeg5"))]
     pub fn data_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).data_codec;

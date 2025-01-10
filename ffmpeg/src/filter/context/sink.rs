@@ -14,7 +14,7 @@ impl<'a> Sink<'a> {
     }
 }
 
-impl<'a> Sink<'a> {
+impl Sink<'_> {
     pub fn frame(&mut self, frame: &mut Frame) -> Result<(), Error> {
         unsafe {
             match ffi::av_buffersink_get_frame(self.ctx.as_mut_ptr(), frame.as_mut_ptr()) {

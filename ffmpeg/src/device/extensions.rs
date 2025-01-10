@@ -19,7 +19,7 @@ pub struct DeviceIter<'a> {
     _marker: PhantomData<&'a ()>,
 }
 
-impl<'a> DeviceIter<'a> {
+impl DeviceIter<'_> {
     pub unsafe fn wrap(ctx: *const ffi::AVFormatContext) -> Result<Self, Error> {
         let mut ptr: *mut ffi::AVDeviceInfoList = ptr::null_mut();
 
@@ -35,13 +35,13 @@ impl<'a> DeviceIter<'a> {
     }
 }
 
-impl<'a> DeviceIter<'a> {
+impl DeviceIter<'_> {
     pub fn default(&self) -> usize {
         unsafe { (*self.ptr).default_device as usize }
     }
 }
 
-impl<'a> Drop for DeviceIter<'a> {
+impl Drop for DeviceIter<'_> {
     fn drop(&mut self) {
         unsafe {
             ffi::avdevice_free_list_devices(&mut self.ptr);
@@ -74,4 +74,4 @@ impl<'a> Iterator for DeviceIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for DeviceIter<'a> {}
+impl ExactSizeIterator for DeviceIter<'_> {}

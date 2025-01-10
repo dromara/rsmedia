@@ -13,7 +13,7 @@ pub struct Ref<'a> {
     _marker: PhantomData<&'a ()>,
 }
 
-impl<'a> Ref<'a> {
+impl Ref<'_> {
     pub unsafe fn wrap(ptr: *const ffi::AVDictionary) -> Self {
         Ref {
             ptr,
@@ -60,7 +60,7 @@ impl<'a> IntoIterator for &'a Ref<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Ref<'a> {
+impl fmt::Debug for Ref<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_map().entries(self.iter()).finish()
     }

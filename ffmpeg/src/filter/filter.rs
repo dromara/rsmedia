@@ -85,7 +85,7 @@ pub struct PadIter<'a> {
     _marker: PhantomData<&'a ()>,
 }
 
-impl<'a> PadIter<'a> {
+impl PadIter<'_> {
     pub fn new(ptr: *const ffi::AVFilterPad, count: isize) -> Self {
         PadIter {
             ptr,

@@ -121,7 +121,7 @@ pub struct Parser<'a> {
     outputs: *mut ffi::AVFilterInOut,
 }
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub fn new(graph: &mut Graph) -> Parser {
         Parser {
             graph,

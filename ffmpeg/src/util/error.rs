@@ -166,7 +166,7 @@ impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.write_str("ffmpeg::Error(")?;
         // f.write_str(&format!("{}: ", ffi::AVUNERROR((*self).into())))?;
-        f.write_str(&format!("{}: ", self.to_string()))?;
+        f.write_str(&format!("{}: ", self))?;
         fmt::Display::fmt(self, f)?;
         f.write_str(")")
     }

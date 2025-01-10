@@ -10,13 +10,13 @@ pub struct Owned<'a> {
     inner: mutable::Ref<'a>,
 }
 
-impl<'a> Default for Owned<'a> {
+impl Default for Owned<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> Owned<'a> {
+impl Owned<'_> {
     pub unsafe fn own(ptr: *mut ffi::AVDictionary) -> Self {
         Owned {
             inner: mutable::Ref::wrap(ptr),
@@ -31,7 +31,7 @@ impl<'a> Owned<'a> {
     }
 }
 
-impl<'a> Owned<'a> {
+impl Owned<'_> {
     pub fn new() -> Self {
         unsafe {
             Owned {
@@ -41,7 +41,7 @@ impl<'a> Owned<'a> {
     }
 }
 
-impl<'a, 'b> FromIterator<(&'b str, &'b str)> for Owned<'a> {
+impl<'b> FromIterator<(&'b str, &'b str)> for Owned<'_> {
     fn from_iter<T: IntoIterator<Item = (&'b str, &'b str)>>(iterator: T) -> Self {
         let mut result = Owned::new();
 
@@ -53,7 +53,7 @@ impl<'a, 'b> FromIterator<(&'b str, &'b str)> for Owned<'a> {
     }
 }
 
-impl<'a, 'b> FromIterator<&'b (&'b str, &'b str)> for Owned<'a> {
+impl<'b> FromIterator<&'b (&'b str, &'b str)> for Owned<'_> {
     fn from_iter<T: IntoIterator<Item = &'b (&'b str, &'b str)>>(iterator: T) -> Self {
         let mut result = Owned::new();
 
@@ -65,7 +65,7 @@ impl<'a, 'b> FromIterator<&'b (&'b str, &'b str)> for Owned<'a> {
     }
 }
 
-impl<'a> FromIterator<(String, String)> for Owned<'a> {
+impl FromIterator<(String, String)> for Owned<'_> {
     fn from_iter<T: IntoIterator<Item = (String, String)>>(iterator: T) -> Self {
         let mut result = Owned::new();
 
@@ -77,7 +77,7 @@ impl<'a> FromIterator<(String, String)> for Owned<'a> {
     }
 }
 
-impl<'a, 'b> FromIterator<&'b (String, String)> for Owned<'a> {
+impl<'b> FromIterator<&'b (String, String)> for Owned<'_> {
     fn from_iter<T: IntoIterator<Item = &'b (String, String)>>(iterator: T) -> Self {
         let mut result = Owned::new();
 
@@ -97,13 +97,13 @@ impl<'a> Deref for Owned<'a> {
     }
 }
 
-impl<'a> DerefMut for Owned<'a> {
+impl DerefMut for Owned<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<'a> Clone for Owned<'a> {
+impl Clone for Owned<'_> {
     fn clone(&self) -> Self {
         let mut dictionary = Owned::new();
         dictionary.clone_from(self);
@@ -120,7 +120,7 @@ impl<'a> Clone for Owned<'a> {
     }
 }
 
-impl<'a> Drop for Owned<'a> {
+impl Drop for Owned<'_> {
     fn drop(&mut self) {
         unsafe {
             ffi::av_dict_free(&mut self.inner.as_mut_ptr());
@@ -128,7 +128,7 @@ impl<'a> Drop for Owned<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Owned<'a> {
+impl fmt::Debug for Owned<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt(fmt)
     }

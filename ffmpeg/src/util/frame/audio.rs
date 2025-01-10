@@ -1,4 +1,3 @@
-use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::slice;
 
@@ -49,9 +48,7 @@ impl Audio {
             if (*self.as_ptr()).format == -1 {
                 format::Sample::None
             } else {
-                format::Sample::from(mem::transmute::<i32, ffi::AVSampleFormat>(
-                    (*self.as_ptr()).format,
-                ))
+                format::Sample::from((*self.as_ptr()).format as ffi::AVSampleFormat)
             }
         }
     }
@@ -60,7 +57,7 @@ impl Audio {
     pub fn set_format(&mut self, value: format::Sample) {
         unsafe {
             (*self.as_mut_ptr()).format =
-                mem::transmute::<ffi::AVSampleFormat, c_int>(value.into());
+                std::mem::transmute::<ffi::AVSampleFormat, c_int>(value.into());
         }
     }
 

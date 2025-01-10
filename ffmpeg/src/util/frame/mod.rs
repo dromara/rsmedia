@@ -12,7 +12,7 @@ pub use self::flag::Flags;
 
 use crate::{Dictionary, DictionaryRef};
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Packet {

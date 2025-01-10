@@ -1,4 +1,4 @@
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::slice;

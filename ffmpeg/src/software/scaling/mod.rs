@@ -20,7 +20,7 @@ mod extensions;
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub fn version() -> u32 {
     unsafe { ffi::swscale_version() }

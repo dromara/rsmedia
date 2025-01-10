@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::{Audio, Capabilities, Id, Profile, Video};
 use crate::{media, Error};

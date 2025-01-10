@@ -3,7 +3,7 @@ use std::path::Path;
 use std::ptr;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::Flags;
 use crate::{codec, media};

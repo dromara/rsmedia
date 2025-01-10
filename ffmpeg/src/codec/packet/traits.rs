@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub trait Ref {
     fn as_ptr(&self) -> *const ffi::AVPacket;

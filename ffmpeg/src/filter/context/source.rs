@@ -1,6 +1,6 @@
 use std::ptr;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::Context;
 use crate::{Error, Frame};

@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Range {

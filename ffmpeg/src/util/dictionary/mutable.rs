@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use super::immutable;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Ref<'a> {
     ptr: *mut ffi::AVDictionary,

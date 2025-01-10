@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use sys::ffi;
 
 use crate::{format::context::common::Context, DictionaryRef, Rational};
 

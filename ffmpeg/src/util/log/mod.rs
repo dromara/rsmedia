@@ -4,7 +4,7 @@ pub use self::level::Level;
 pub mod flag;
 pub use self::flag::Flags;
 
-use rsmpeg::ffi;
+use sys::ffi;
 use std::convert::TryInto;
 
 pub fn set_level(value: Level) {

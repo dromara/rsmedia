@@ -1,5 +1,5 @@
 use super::{Format, Input, Output};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 use std::ptr;
 
 pub struct Iter {

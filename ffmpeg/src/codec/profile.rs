@@ -1,6 +1,6 @@
 use super::Id;
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 #[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]

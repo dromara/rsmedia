@@ -3,7 +3,7 @@ use std::mem;
 use std::slice;
 
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::{Borrow, Flags, Mut, Ref, SideData};
 

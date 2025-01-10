@@ -11,7 +11,8 @@ extern crate image;
 
 extern crate libc;
 
-pub use rsmpeg::ffi;
+pub extern crate rusty_ffmpeg as sys;
+pub use sys::ffi as ffi;
 
 #[macro_use]
 pub mod util;

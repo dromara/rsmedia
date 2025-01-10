@@ -1,7 +1,7 @@
 use std::ptr;
 
 use crate::Format;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct AudioIter(*mut ffi::AVOutputFormat);
 

@@ -1,5 +1,5 @@
 use libc::c_int;
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 use super::Disposition;
 use crate::{

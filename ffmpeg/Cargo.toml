@@ -17,17 +17,18 @@ categories    = ["multimedia"]
 default = ["ffmpeg7", "link_system_ffmpeg"]
 
 # Note that ffmpeg{x}
-ffmpeg6 = ["rsmpeg/ffmpeg6"]
-ffmpeg7 = ["rsmpeg/ffmpeg7"]
+ffmpeg5 = ["rusty_ffmpeg/ffmpeg5"]
+ffmpeg6 = ["rusty_ffmpeg/ffmpeg6"]
+ffmpeg7 = ["rusty_ffmpeg/ffmpeg7"]
 
 # Try linking ffmpeg with pkg-config.
-link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg"]
+link_system_ffmpeg = ["rusty_ffmpeg/link_system_ffmpeg"]
 # Try linking ffmpeg with vcpkg.
-link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
+link_vcpkg_ffmpeg = ["rusty_ffmpeg/link_vcpkg_ffmpeg"]
 
 [dependencies]
 libc     = "0.2"
 bitflags = "2.6"
 image    = { version = "0.25", optional = true }
-rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", default-features = false }
+rusty_ffmpeg = { version = "0.16.1", default-features = false }
 

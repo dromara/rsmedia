@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use libc::{c_float, c_int};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 use super::Encoder as Super;
 use super::{Comparison, Decision};

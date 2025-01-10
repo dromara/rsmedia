@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::ptr;
 
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 use crate::{device, format::context::common::Context, Error};
 

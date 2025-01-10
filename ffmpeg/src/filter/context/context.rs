@@ -1,7 +1,7 @@
 use super::{Sink, Source};
 
 use libc::c_void;
-use rsmpeg::ffi;
+use sys::ffi;
 
 use crate::{option, ChannelLayout};
 

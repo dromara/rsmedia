@@ -2,7 +2,7 @@ use std::panic;
 use std::process;
 
 use libc::{c_int, c_void};
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Interrupt {
     pub interrupt: ffi::AVIOInterruptCB,

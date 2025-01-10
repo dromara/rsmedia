@@ -27,7 +27,7 @@ use crate::codec::Context;
 use crate::codec::Id;
 use crate::Codec;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub fn new() -> Decoder {
     Context::new().decoder()

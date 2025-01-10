@@ -1,5 +1,5 @@
 use crate::util::format;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub fn input(format: format::Pixel) -> bool {
     unsafe { ffi::sws_isSupportedInput(format.into()) != 0 }

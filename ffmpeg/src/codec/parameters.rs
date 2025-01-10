@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use super::{Context, Id};
 use crate::media;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Parameters {
     ptr: *mut ffi::AVCodecParameters,

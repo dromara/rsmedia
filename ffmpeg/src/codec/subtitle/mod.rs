@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use std::mem;
 
 use libc::{c_uint, size_t};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Type {

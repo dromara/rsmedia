@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::{audio, subtitle, video};
 use crate::{codec::Context, media, packet, Error, Frame};

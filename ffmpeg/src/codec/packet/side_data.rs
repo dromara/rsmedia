@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::slice;
 
 use super::Packet;
-use rsmpeg::ffi;
+use sys::ffi;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Type {

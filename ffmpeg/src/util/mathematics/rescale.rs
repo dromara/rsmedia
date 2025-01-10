@@ -1,5 +1,5 @@
 use crate::{Rational, Rounding};
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub const TIME_BASE: Rational = Rational(ffi::AV_TIME_BASE_Q.num, ffi::AV_TIME_BASE_Q.den);
 

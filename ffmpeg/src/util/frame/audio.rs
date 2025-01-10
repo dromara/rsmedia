@@ -6,7 +6,7 @@ use super::Frame;
 use crate::util::format;
 use crate::ChannelLayout;
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 #[derive(PartialEq, Eq)]
 pub struct Audio(Frame);

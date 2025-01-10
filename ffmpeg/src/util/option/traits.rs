@@ -2,7 +2,7 @@
 
 use crate::{util::format, ChannelLayout, Error, Rational};
 use libc::{c_int, c_void};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 use std::ffi::CString;
 use std::mem;
 

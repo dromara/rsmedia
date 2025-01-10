@@ -1,7 +1,7 @@
 mod traits;
 pub use self::traits::{Gettable, Iterable, Settable, Target};
 
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Type {

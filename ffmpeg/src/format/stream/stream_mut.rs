@@ -1,7 +1,7 @@
 use std::mem;
 use std::ops::Deref;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::Stream;
 use crate::{codec, format::context::common::Context, Dictionary, Rational};

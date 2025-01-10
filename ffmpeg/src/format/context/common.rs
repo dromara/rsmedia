@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use super::destructor::{self, Destructor};
 use libc::{c_int, c_uint};
-use rsmpeg::ffi;
+use sys::ffi;
 
 use crate::{media, Chapter, ChapterMut, DictionaryRef, Stream, StreamMut};
 

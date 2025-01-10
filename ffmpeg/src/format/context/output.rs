@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use libc;
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::{common::Context, destructor};
 

@@ -3,7 +3,7 @@ use std::ptr;
 
 use super::Ref;
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Borrow<'a> {
     packet: ffi::AVPacket,

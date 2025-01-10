@@ -1,5 +1,5 @@
 use super::Vector;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Filter {
     ptr: *mut ffi::SwsFilter,

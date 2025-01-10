@@ -4,7 +4,7 @@ use std::ptr;
 use super::{Context, Filter};
 use crate::Error;
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Graph {
     ptr: *mut ffi::AVFilterGraph,

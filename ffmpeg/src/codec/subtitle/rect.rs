@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::str::from_utf8_unchecked;
 
 use super::{Flags, Type};
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub enum Rect<'a> {
     None(*const ffi::AVSubtitleRect),

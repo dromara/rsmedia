@@ -1,4 +1,4 @@
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum FieldOrder {

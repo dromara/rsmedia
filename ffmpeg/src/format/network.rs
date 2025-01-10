@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub fn init() {
     unsafe {

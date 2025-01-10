@@ -1,4 +1,4 @@
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]

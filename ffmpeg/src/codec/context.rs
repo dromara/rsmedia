@@ -3,7 +3,7 @@ use std::ptr;
 use std::rc::Rc;
 
 use libc::c_int;
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 use super::decoder::Decoder;
 use super::encoder::Encoder;

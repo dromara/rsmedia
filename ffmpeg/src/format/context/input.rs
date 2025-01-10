@@ -2,7 +2,7 @@ use std::ffi::CString;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::{common::Context, destructor};
 

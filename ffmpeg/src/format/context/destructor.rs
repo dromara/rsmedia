@@ -1,4 +1,4 @@
-use rsmpeg::ffi;
+use sys::ffi;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Mode {

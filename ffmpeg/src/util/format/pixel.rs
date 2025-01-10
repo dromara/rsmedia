@@ -1,4 +1,4 @@
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 use std::error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;

@@ -5,7 +5,7 @@ use std::slice;
 use std::str::from_utf8_unchecked;
 
 use libc::{c_int, c_void};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Sample {

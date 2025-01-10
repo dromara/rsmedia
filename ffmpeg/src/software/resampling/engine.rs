@@ -1,4 +1,4 @@
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Engine {

@@ -21,7 +21,7 @@ use std::path::Path;
 use std::ptr;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 // #[cfg(not(feature = "ffmpeg_5_0"))]
 pub fn register_all() {

@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::{Audio, Check, Conceal, Opened, Subtitle, Video};
 use crate::{

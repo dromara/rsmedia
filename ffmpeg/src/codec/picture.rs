@@ -5,7 +5,7 @@ use std::slice;
 use crate::Error;
 use format;
 use libc::{c_int, size_t};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 pub struct Picture<'a> {
     ptr: *mut AVPicture,

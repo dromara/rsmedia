@@ -2,7 +2,7 @@ use std::ffi::c_void;
 use std::ptr;
 
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 use super::Delay;
 use crate::{frame, util::format, ChannelLayout, Dictionary, Error};

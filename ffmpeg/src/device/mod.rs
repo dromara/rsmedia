@@ -6,7 +6,7 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Info<'a> {
     ptr: *mut ffi::AVDeviceInfo,

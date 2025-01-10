@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::slice;
 
 use libc::{c_double, c_int};
-use rsmpeg::ffi::*;
+use sys::ffi::*;
 
 pub struct Vector<'a> {
     ptr: *mut SwsVector,

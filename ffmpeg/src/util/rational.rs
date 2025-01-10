@@ -3,7 +3,7 @@ use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
 use libc::c_int;
-use rsmpeg::ffi;
+use sys::ffi;
 
 #[derive(Copy, Clone)]
 pub struct Rational(pub i32, pub i32);

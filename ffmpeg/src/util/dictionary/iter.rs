@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::ptr;
 use std::str::from_utf8_unchecked;
 
-use rsmpeg::ffi;
+use sys::ffi;
 
 pub struct Iter<'a> {
     ptr: *const ffi::AVDictionary,

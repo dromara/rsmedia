@@ -8,6 +8,9 @@ use super::{common::Context, destructor};
 
 use crate::{util::range::Range, Error, Packet, Stream};
 
+#[cfg(not(feature = "ffmpeg5"))]
+use crate::Codec;
+
 pub struct Input {
     ptr: *mut ffi::AVFormatContext,
     ctx: Context,

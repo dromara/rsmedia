@@ -102,19 +102,26 @@ apt-get -y install \
 ## Build
 
 ```bash
+## ffmpeg7
+export FFMPEG_INCLUDE_DIR=/opt/ffmpeg-7.1-d725360//ffmpeg_build/include
+export FFMPEG_PKG_CONFIG_PATH=/opt/ffmpeg-7.1-d725360//ffmpeg_build/lib/pkgconfig
+#
+cargo build --no-default-features --features ffmpeg7,link_system_ffmpeg --verbose
+cargo test --no-default-features --features ffmpeg7,link_system_ffmpeg --verbose
+
 ## ffmpeg6
 export FFMPEG_INCLUDE_DIR=/opt/ffmpeg-6.1-ac60bc2/ffmpeg_build/include
 export FFMPEG_PKG_CONFIG_PATH=/opt/ffmpeg-6.1-ac60bc2/ffmpeg_build/lib/pkgconfig
 #
-cargo build --no-default-features --features ffmpeg6,link_system_ffmpeg
-cargo test --no-default-features --features ffmpeg6,link_system_ffmpeg
+cargo build --no-default-features --features ffmpeg6,link_system_ffmpeg --verbose
+cargo test --no-default-features --features ffmpeg6,link_system_ffmpeg --verbose
 
 ## ffmpeg5
 export FFMPEG_INCLUDE_DIR=/opt/ffmpeg-5.1-6e63e49/ffmpeg_build/include
 export FFMPEG_PKG_CONFIG_PATH=/opt/ffmpeg-5.1-6e63e49/ffmpeg_build/lib/pkgconfig
 #
-cargo build --no-default-features --features ffmpeg5,link_system_ffmpeg
-cargo test --no-default-features --features ffmpeg5,link_system_ffmpeg
+cargo build --no-default-features --features ffmpeg5,link_system_ffmpeg --verbose
+cargo test --no-default-features --features ffmpeg5,link_system_ffmpeg --verbose
 ```
 
 ## 配置宏和feature组合

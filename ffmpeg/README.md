@@ -1,5 +1,5 @@
 
-
+## ffmpeg 安装
 ```bash
 ## FFmpeg BuildTools
 sudo apt-get install \
@@ -99,10 +99,99 @@ apt-get -y install \
     libswscale-dev
 ```
 
-### Build
+## Build
 
 ```bash
 export FFMPEG_INCLUDE_DIR=/opt/ffmpeg-6.1-ac60bc2/ffmpeg_build/include
 export FFMPEG_PKG_CONFIG_PATH=/opt/ffmpeg-6.1-ac60bc2/ffmpeg_build/lib/pkgconfig
 
 ```
+
+## 配置宏和feature组合
+
+常见的 `#[cfg()]` 和 `feature` 的组合方式.
+
+以下是一些常见的组合方式和它们的用途：
+
+### 1. `#[cfg(feature = "feature_name")]`
+   描述：当指定的特性（feature_name）被启用时，编译此代码。
+   示例：
+   ```rust
+   #[cfg(feature = "ffi")]
+   fn use_ffi() {
+   // 只有在启用 "ffi" 特性时编译
+   }
+   ```
+   解释：此代码仅在 Cargo.toml 文件中启用了 ffi 特性时会被编译。
+### 2. `#[cfg(not(feature = "feature_name"))]`
+   描述：当指定的特性（feature_name）没有启用时，编译此代码。
+   示例：
+   ```rust
+   #[cfg(not(feature = "ffi"))]
+   fn use_default() {
+   // 只有在没有启用 "ffi" 特性时编译
+   }
+   ```
+   解释：此代码仅在 ffi 特性未启用时会被编译。
+### 3. `#[cfg(any(feature = "feature1", feature = "feature2"))]`
+   描述：当指定的特性之一（feature1 或 feature2）启用时，编译此代码。
+   示例：
+   ```rust
+   #[cfg(any(feature = "ffi", feature = "openssl"))]
+   fn use_crypto() {
+   // 只有在启用 "ffi" 或 "openssl" 特性之一时编译
+   }
+   ```
+   解释：此代码将在启用 ffi 或 openssl 特性时编译。
+### 4.`#[cfg(all(feature = "feature1", feature = "feature2"))]`
+   描述：当多个特性同时启用时，编译此代码。
+   示例：
+   ```rust
+   #[cfg(all(feature = "ffi", feature = "openssl"))]
+   fn use_ffi_and_openssl() {
+   // 只有在同时启用 "ffi" 和 "openssl" 特性时编译
+   }
+   ```
+   解释：此代码仅在 ffi 和 openssl 特性都启用时会被编译。
+### 5. `#[cfg(feature = "feature_name" if ...) ]`
+   描述：通过条件语句检查特性是否启用，类似于 if 语句判断条件。
+   示例：
+   ```rust
+   #[cfg(feature = "ffi")]
+   fn use_ffi() {
+   println!("Using ffi feature");
+   }
+   ```
+   解释：如果在 Cargo.toml 中启用了 ffi 特性，那么会编译该部分代码。
+### 6. `#[cfg(all(feature = "feature1", not(feature = "feature2")))]`
+   描述：当某个特性启用，且另一个特性没有启用时，编译此代码。
+   示例：
+   ```rust
+   #[cfg(all(feature = "ffi", not(feature = "openssl")))]
+   fn use_ffi_without_openssl() {
+   // 只有在启用 "ffi" 特性而没有启用 "openssl" 时编译
+   }
+   ```
+   解释：此代码仅在启用了 ffi 特性并且没有启用 openssl 特性时会被编译。
+### 7. `#[cfg(feature = "feature_name", target_os = "linux")]`
+   描述：结合操作系统目标和特性判断，进行跨平台特性的选择。
+   示例：
+   ```rust
+   #[cfg(all(feature = "ffi", target_os = "linux"))]
+   fn use_ffi_on_linux() {
+   // 只有在启用 "ffi" 特性并且目标操作系统是 Linux 时编译
+   }
+   ```
+   解释：此代码仅在启用了 ffi 特性，并且目标操作系统是 Linux 时会被编译。 
+   
+> 小结:
+> 
+> (1) `#[cfg(feature = "feature_name")]`：当特性启用时编译。
+> 
+> (2) `#[cfg(not(feature = "feature_name"))]`：当特性未启用时编译。
+> 
+> (3) `#[cfg(any(feature = "feature1", feature = "feature2"))]`：当任意一个特性启用时编译。
+> 
+> (4) `#[cfg(all(feature = "feature1", feature = "feature2"))]`：当所有特性都启用时编译。
+> 
+> (5) `#[cfg(all(feature = "feature1", not(feature = "feature2")))]`：当一个特性启用，另一个特性未启用时编译。

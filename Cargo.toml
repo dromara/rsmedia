@@ -11,7 +11,7 @@ repository = "https://github.com/oddity-ai/video-rs"
 readme = "README.md"
 
 [features]
-default = ["ffmpeg7"]
+default = ["ffmpeg7", "ndarray"]
 
 ffmpeg5 = ["ffmpeg/ffmpeg5", "ffmpeg/link_system_ffmpeg"]
 ffmpeg6 = ["ffmpeg/ffmpeg6", "ffmpeg/link_system_ffmpeg"]

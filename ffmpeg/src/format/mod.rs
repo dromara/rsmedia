@@ -11,8 +11,8 @@ pub mod context;
 pub use self::context::Context;
 
 pub mod format;
-#[cfg(not(feature = "ffmpeg7"))]
-pub use self::format::list;
+// #[cfg(not(feature = "ffmpeg7"))]
+// pub use self::format::list;
 pub use self::format::{flag, Flags};
 pub use self::format::{Input, Output};
 

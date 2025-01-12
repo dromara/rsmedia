@@ -38,10 +38,10 @@ impl Audio {
 
     pub fn channel_layouts(&self) -> Option<ChannelLayoutIter> {
         unsafe {
-            #[cfg(not(feature = "ffmpeg7"))]
-            let ptr = (*self.codec.as_ptr()).channel_layouts;
-
-            #[cfg(feature = "ffmpeg7")]
+            // #[cfg(not(feature = "ffmpeg7"))]
+            // let ptr = (*self.codec.as_ptr()).channel_layouts;
+            //
+            // #[cfg(feature = "ffmpeg7")]
             let ptr = (*self.codec.as_ptr()).ch_layouts;
 
             if ptr.is_null() {
@@ -115,9 +115,9 @@ impl Iterator for FormatIter {
     }
 }
 
-#[cfg(not(feature = "ffmpeg7"))]
-type ChannelLayoutType = u64;
-#[cfg(feature = "ffmpeg7")]
+// #[cfg(not(feature = "ffmpeg7"))]
+// type ChannelLayoutType = u64;
+// #[cfg(feature = "ffmpeg7")]
 type ChannelLayoutType = ffi::AVChannelLayout;
 
 pub struct ChannelLayoutIter {
@@ -145,20 +145,20 @@ impl Iterator for ChannelLayoutIter {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            #[cfg(not(feature = "ffmpeg7"))]
-            if *self.ptr == 0 {
-                return None;
-            }
+            // #[cfg(not(feature = "ffmpeg7"))]
+            // if *self.ptr == 0 {
+            //     return None;
+            // }
 
-            #[cfg(feature = "ffmpeg7")]
+            // #[cfg(feature = "ffmpeg7")]
             if self.ptr.is_null() || (*self.ptr).u.mask == 0 {
                 return None;
             }
 
-            #[cfg(not(feature = "ffmpeg7"))]
-            let layout = ChannelLayout::from_bits_truncate(*self.ptr);
+            // #[cfg(not(feature = "ffmpeg7"))]
+            // let layout = ChannelLayout::from_bits_truncate(*self.ptr);
 
-            #[cfg(feature = "ffmpeg7")]
+            // #[cfg(feature = "ffmpeg7")]
             let layout = ChannelLayout::from(*self.ptr);
 
             self.ptr = self.ptr.offset(1);

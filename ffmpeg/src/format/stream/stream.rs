@@ -29,10 +29,10 @@ impl Stream<'_> {
         unsafe { (*self.as_ptr()).id }
     }
 
-    #[cfg(not(feature = "ffmpeg7"))]
-    pub fn codec(&self) -> codec::Context {
-        unsafe { codec::Context::wrap((*self.as_ptr()).codec, Some(self.context.destructor())) }
-    }
+    // #[cfg(not(feature = "ffmpeg7"))]
+    // pub fn codec(&self) -> codec::Context {
+    //     unsafe { codec::Context::wrap((*self.as_ptr()).codec, Some(self.context.destructor())) }
+    // }
 
     pub fn parameters(&self) -> codec::Parameters {
         unsafe {

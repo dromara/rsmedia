@@ -138,7 +138,7 @@ pub trait Settable: Target {
                     self.as_mut_ptr(),
                     name.as_ptr(),
                     layout.bits() as i64,
-                    AV_OPT_SEARCH_CHILDREN
+                    AV_OPT_SEARCH_CHILDREN as c_int
                 ))
             }
 

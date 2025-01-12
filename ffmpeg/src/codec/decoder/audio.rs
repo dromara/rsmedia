@@ -49,15 +49,13 @@ impl Audio {
     }
 
     pub fn channel_layout(&self) -> ChannelLayout {
-        #[cfg(not(feature = "ffmpeg7"))]
-        unsafe {
-            ChannelLayout::from_bits_truncate((*self.as_ptr()).channel_layout)
-        }
+        // #[cfg(not(feature = "ffmpeg7"))]
+        // unsafe {
+        //     ChannelLayout::from_bits_truncate((*self.as_ptr()).channel_layout)
+        // }
 
-        #[cfg(feature = "ffmpeg7")]
-        unsafe {
-            ChannelLayout::from((*self.as_ptr()).ch_layout)
-        }
+        // #[cfg(feature = "ffmpeg7")]
+        unsafe { ChannelLayout::from((*self.as_ptr()).ch_layout) }
     }
 
     pub fn set_channel_layout(&mut self, value: ChannelLayout) {

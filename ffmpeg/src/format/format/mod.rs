@@ -7,10 +7,10 @@ pub use self::input::Input;
 mod output;
 pub use self::output::Output;
 
-#[cfg(not(feature = "ffmpeg7"))]
-mod iter;
-#[cfg(not(feature = "ffmpeg7"))]
-pub use self::iter::Iter;
+// #[cfg(not(feature = "ffmpeg7"))]
+// mod iter;
+// #[cfg(not(feature = "ffmpeg7"))]
+// pub use self::iter::Iter;
 
 pub enum Format {
     Input(Input),
@@ -47,7 +47,7 @@ impl Format {
     }
 }
 
-#[cfg(not(feature = "ffmpeg7"))]
-pub fn list() -> Iter {
-    Iter::new()
-}
+// #[cfg(not(feature = "ffmpeg7"))]
+// pub fn list() -> Iter {
+//     Iter::new()
+// }

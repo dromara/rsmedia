@@ -54,8 +54,8 @@ pub use codec::field_order::FieldOrder;
 // #[cfg(feature = "codec")]
 pub use codec::packet::{self, Packet};
 // #[cfg(all(feature = "codec", not(feature = "ffmpeg5")))]
-#[cfg(not(feature = "ffmpeg7"))]
-pub use codec::picture::Picture;
+// #[cfg(not(feature = "ffmpeg7"))]
+// pub use codec::picture::Picture;
 // #[cfg(feature = "codec")]
 pub use codec::subtitle::{self, Subtitle};
 // #[cfg(feature = "codec")]

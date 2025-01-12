@@ -6,13 +6,13 @@ use sys::ffi::*;
 
 use super::Encoder as Super;
 use super::{Comparison, Decision};
-#[cfg(not(feature = "ffmpeg7"))]
-use super::{MotionEstimation, Prediction};
+// #[cfg(not(feature = "ffmpeg5"))]
+// use super::{MotionEstimation, Prediction};
 
 use crate::codec::{traits, Context};
 use crate::{color, format, Dictionary, Error, Rational};
-#[cfg(not(feature = "ffmpeg7"))]
-use crate::{frame, packet};
+// #[cfg(not(feature = "ffmpeg5"))]
+// use crate::{frame, packet};
 
 pub struct Video(pub Super);
 

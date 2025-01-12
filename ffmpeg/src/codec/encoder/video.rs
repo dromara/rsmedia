@@ -201,7 +201,7 @@ impl Video {
     }
 
     // #[inline]
-    // #[cfg(not(feature = "ffmpeg7"))]
+    // #[cfg(not(feature = "ffmpeg5"))]
     // pub fn set_prediction(&mut self, value: Prediction) {
     //     unsafe {
     //         (*self.as_mut_ptr()).prediction_method = value.into();
@@ -258,7 +258,7 @@ impl Video {
     }
 
     // #[inline]
-    // #[cfg(not(feature = "ffmpeg7"))]
+    // #[cfg(not(feature = "ffmpeg5"))]
     // pub fn set_pre_me(&mut self, value: MotionEstimation) {
     //     unsafe {
     //         (*self.as_mut_ptr()).pre_me = value.into();

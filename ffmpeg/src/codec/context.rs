@@ -110,10 +110,10 @@ impl Context {
         unsafe {
             (*self.as_mut_ptr()).thread_type = config.kind.into();
             (*self.as_mut_ptr()).thread_count = config.count as c_int;
-            // #[cfg(not(feature = "ffmpeg7"))]
-            // {
-            //     (*self.as_mut_ptr()).thread_safe_callbacks = if config.safe { 1 } else { 0 };
-            // }
+            #[cfg(feature = "ffmpeg5")]
+            {
+                (*self.as_mut_ptr()).thread_safe_callbacks = if config.safe { 1 } else { 0 };
+            }
         }
     }
 
@@ -122,8 +122,8 @@ impl Context {
             threading::Config {
                 kind: threading::Type::from((*self.as_ptr()).active_thread_type),
                 count: (*self.as_ptr()).thread_count as usize,
-                // #[cfg(not(feature = "ffmpeg7"))]
-                // safe: (*self.as_ptr()).thread_safe_callbacks != 0,
+                #[cfg(feature = "ffmpeg5")]
+                safe: (*self.as_ptr()).thread_safe_callbacks != 0,
             }
         }
     }
@@ -181,7 +181,7 @@ impl Drop for Context {
     }
 }
 
-// #[cfg(not(feature = "ffmpeg7"))]
+// #[cfg(not(feature = "ffmpeg5"))]
 // impl Clone for Context {
 //     fn clone(&self) -> Self {
 //         let mut ctx = Context::new();

@@ -102,9 +102,19 @@ apt-get -y install \
 ## Build
 
 ```bash
+## ffmpeg6
 export FFMPEG_INCLUDE_DIR=/opt/ffmpeg-6.1-ac60bc2/ffmpeg_build/include
 export FFMPEG_PKG_CONFIG_PATH=/opt/ffmpeg-6.1-ac60bc2/ffmpeg_build/lib/pkgconfig
+#
+cargo build --no-default-features --features ffmpeg6,link_system_ffmpeg
+cargo test --no-default-features --features ffmpeg6,link_system_ffmpeg
 
+## ffmpeg5
+export FFMPEG_INCLUDE_DIR=/opt/ffmpeg-5.1-6e63e49/ffmpeg_build/include
+export FFMPEG_PKG_CONFIG_PATH=/opt/ffmpeg-5.1-6e63e49/ffmpeg_build/lib/pkgconfig
+#
+cargo build --no-default-features --features ffmpeg5,link_system_ffmpeg
+cargo test --no-default-features --features ffmpeg5,link_system_ffmpeg
 ```
 
 ## 配置宏和feature组合

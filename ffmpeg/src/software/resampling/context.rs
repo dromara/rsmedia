@@ -7,7 +7,7 @@ use sys::ffi;
 use super::Delay;
 use crate::{frame, util::format, ChannelLayout, Dictionary, Error};
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Definition {
     pub format: format::Sample,
     pub channel_layout: ChannelLayout,

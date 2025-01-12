@@ -276,12 +276,12 @@ impl Clone for Packet {
 
     #[inline]
     fn clone_from(&mut self, source: &Self) {
-        #[cfg(not(feature = "ffmpeg7"))]
-        unsafe {
-            ffi::av_packet_ref(&mut self.0, &source.0);
-            ffi::av_packet_make_writable(&mut self.0);
-        }
-        #[cfg(feature = "ffmpeg7")]
+        // #[cfg(feature = "ffmpeg_4_0")]
+        // unsafe {
+        //     av_packet_ref(&mut self.0, &source.0);
+        //     av_packet_make_writable(&mut self.0);
+        // }
+        // #[cfg(not(feature = "ffmpeg_4_0"))]
         unsafe {
             ffi::av_packet_copy_props(&mut self.0, &source.0);
         }

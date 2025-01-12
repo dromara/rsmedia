@@ -8,7 +8,7 @@ pub mod packet;
 
 pub mod subtitle;
 
-// #[cfg(not(feature = "ffmpeg7"))]
+// #[cfg(not(feature = "ffmpeg5"))]
 // pub mod picture;
 
 pub mod discard;

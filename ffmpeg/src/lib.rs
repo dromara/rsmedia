@@ -15,22 +15,17 @@ extern crate image;
 
 #[macro_use]
 pub mod util;
-pub use util::channel_layout::{self, ChannelLayout};
-pub use util::chroma;
-pub use util::color;
-pub use util::dictionary;
-pub use util::dictionary::Mut as DictionaryMut;
-pub use util::dictionary::Owned as Dictionary;
-pub use util::dictionary::Ref as DictionaryRef;
-pub use util::error::{self, Error};
-pub use util::frame::{self, Frame};
-pub use util::log;
-pub use util::mathematics::{self, rescale, Rescale, Rounding};
-pub use util::media;
-pub use util::option;
-pub use util::picture;
-pub use util::rational::{self, Rational};
-pub use util::time;
+pub use util::{
+    channel_layout::{self, ChannelLayout},
+    chroma, color, dictionary, log,
+    dictionary::{Mut as DictionaryMut, Owned as Dictionary, Ref as DictionaryRef},
+    error::Error,
+    frame::{self, Frame},
+    mathematics::{self, rescale, Rescale, Rounding},
+    media, option, picture,
+    rational::{self, Rational},
+    time,
+};
 
 // #[cfg(feature = "format")]
 pub mod format;
@@ -54,7 +49,6 @@ pub use codec::field_order::FieldOrder;
 // #[cfg(feature = "codec")]
 pub use codec::packet::{self, Packet};
 // #[cfg(all(feature = "codec", not(feature = "ffmpeg5")))]
-// #[cfg(not(feature = "ffmpeg7"))]
 // pub use codec::picture::Picture;
 // #[cfg(feature = "codec")]
 pub use codec::subtitle::{self, Subtitle};

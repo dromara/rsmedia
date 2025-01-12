@@ -5,8 +5,8 @@ use sys::ffi::*;
 pub struct Config {
     pub kind: Type,
     pub count: usize,
-    // #[cfg(not(feature = "ffmpeg7"))]
-    // pub safe: bool,
+    #[cfg(feature = "ffmpeg5")]
+    pub safe: bool,
 }
 
 impl Config {
@@ -24,13 +24,13 @@ impl Config {
         }
     }
 
-    // #[cfg(not(feature = "ffmpeg7"))]
-    // pub fn safe(value: bool) -> Self {
-    //     Config {
-    //         safe: value,
-    //         ..Default::default()
-    //     }
-    // }
+    #[cfg(feature = "ffmpeg5")]
+    pub fn safe(value: bool) -> Self {
+        Config {
+            safe: value,
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for Config {
@@ -38,8 +38,8 @@ impl Default for Config {
         Config {
             kind: Type::None,
             count: 0,
-            // #[cfg(not(feature = "ffmpeg7"))]
-            // safe: false,
+            #[cfg(feature = "ffmpeg5")]
+            safe: false,
         }
     }
 }

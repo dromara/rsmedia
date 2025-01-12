@@ -19,7 +19,7 @@ pub use util::{
     channel_layout::{self, ChannelLayout},
     chroma, color, dictionary, log,
     dictionary::{Mut as DictionaryMut, Owned as Dictionary, Ref as DictionaryRef},
-    error::Error,
+    error::{self, Error},
     frame::{self, Frame},
     mathematics::{self, rescale, Rescale, Rounding},
     media, option, picture,

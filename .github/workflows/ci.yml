@@ -21,13 +21,13 @@ jobs:
         include:
           # FFmpeg 5.x
           - ffmpeg_version: "5.1"
-            feature: "ffmpeg5"
+            feature: "ffmpeg5,ndarray"
           # FFmpeg 6.x
           - ffmpeg_version: "6.1"
-            feature: "ffmpeg6"
+            feature: "ffmpeg6,ndarray"
           # FFmpeg 7.x
           - ffmpeg_version: "7.1"
-            feature: "ffmpeg7"
+            feature: "ffmpeg7,ndarray"
       fail-fast: false
 
     steps:

@@ -1,6 +1,6 @@
+use super::*;
 use libc::c_ulonglong;
 use sys::ffi::*;
-use super::*;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]

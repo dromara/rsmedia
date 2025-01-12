@@ -1,5 +1,5 @@
-use sys::ffi::*;
 use super::*;
+use sys::ffi::*;
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]

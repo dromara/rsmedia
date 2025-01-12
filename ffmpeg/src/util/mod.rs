@@ -15,7 +15,7 @@ pub mod range;
 pub mod rational;
 pub mod time;
 
-#[cfg_attr(not(feature = "ffmpeg7"), path="legacy_channel_layout.rs")]
+#[cfg_attr(not(feature = "ffmpeg7"), path = "legacy_channel_layout.rs")]
 pub mod channel_layout;
 
 use std::ffi::CStr;

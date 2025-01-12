@@ -17,10 +17,11 @@ extern crate image;
 pub mod util;
 pub use util::{
     channel_layout::{self, ChannelLayout},
-    chroma, color, dictionary, log,
+    chroma, color, dictionary,
     dictionary::{Mut as DictionaryMut, Owned as Dictionary, Ref as DictionaryRef},
     error::{self, Error},
     frame::{self, Frame},
+    log,
     mathematics::{self, rescale, Rescale, Rounding},
     media, option, picture,
     rational::{self, Rational},

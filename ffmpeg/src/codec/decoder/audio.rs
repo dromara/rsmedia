@@ -55,7 +55,9 @@ impl Audio {
         }
 
         #[cfg(feature = "ffmpeg7")]
-        unsafe { ChannelLayout::from((*self.as_ptr()).ch_layout) }
+        unsafe {
+            ChannelLayout::from((*self.as_ptr()).ch_layout)
+        }
     }
 
     pub fn set_channel_layout(&mut self, value: ChannelLayout) {

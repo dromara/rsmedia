@@ -3,11 +3,11 @@ name = "rsmedia"
 description = "High-level video toolkit based on ffmpeg."
 keywords = ["video", "ffmpeg", "encoding", "decoding", "muxing"]
 categories = ["multimedia", "multimedia::video"]
-version = "0.10.3"
-authors = ["Oddity.ai Developers <hello@oddity.ai>"]
+version = "0.1.0"
+authors = ["phial3 Developers"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-repository = "https://github.com/oddity-ai/video-rs"
+repository = "https://github.com/phial3/rsmedia"
 readme = "README.md"
 
 [features]

@@ -1,25 +1,77 @@
 <h1 align="center">
   <code>rsmedia</code>
 </h1>
-<p align="center">High-level video toolkit based on ffmpeg.</p>
+
+Low / High-level video toolkit based on ffmpeg.
+
+ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
 > see also: 
+> 
+> https://github.com/CCExtractor/rusty_ffmpeg
+> 
+> https://github.com/larksuite/rsmpeg
+> 
+> https://github.com/zmwangx/rust-ffmpeg
 > 
 > https://github.com/oddity-ai/video-rs
 > 
 > https://github.com/remotia/remotia-ffmpeg-codecs
 
+
+## Status
+> ⛔ 格式不正确
+> 
+> ✔️ 注册成功
+>
+> ⭕ 成功
+> 
+> 🔴 构建失败
+> 
+> 🟢 测试通过
+
+
+## Advanced usage
+
+1. FFmpeg linking: refer to [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)'s documentation for how to use environment variables to statically or dynamically link FFmpeg.
+
+2. Advanced usage of rsmpeg: Check out the `examples` folder.
+
 ## usage
 
 ```toml
-rsmedia = "0.10"
+rsmedia = "0.1.0"
 ```
 
+## Features
+
+- `ndarray`:
 Use the `ndarray` feature to be able to use raw frames with the
 [`ndarray`](https://github.com/rust-ndarray/ndarray) crate:
 
 ```toml
-rsmedia = { version = "0.10", features = ["ndarray"] }
+rsmedia = { version = "0.1.0", features = ["ndarray"] }
+```
+
+- `ffmpeg5`:
+    use `ffmpeg5` feature to enable ffmpeg 5.x
+
+```toml
+rsmedia = { version = "0.1.0", features = ["ffmpeg5"] }
+```
+
+- `ffmpeg6`:
+    use `ffmpeg6` feature to enable ffmpeg 6.x
+
+```toml
+rsmedia = { version = "0.1.0", features = ["ffmpeg6"] }
+```
+
+- `ffmpeg7`:
+    use `ffmpeg7` feature to enable ffmpeg 7.x
+
+```toml
+rsmedia = { version = "0.1.0", features = ["ffmpeg7"] }
 ```
 
 ## 📖 Examples

@@ -6,8 +6,7 @@ Low / High-level video toolkit based on ffmpeg.
 
 ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
-> see also: 
-> 
+## See also: 
 > https://github.com/CCExtractor/rusty_ffmpeg
 > 
 > https://github.com/larksuite/rsmpeg
@@ -18,6 +17,21 @@ ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCEx
 > 
 > https://github.com/remotia/remotia-ffmpeg-codecs
 
+## Test on:
+
+### ffmpeg container [jrottenberg/ffmpeg](https://github.com/jrottenberg/ffmpeg):
+> ffmpeg:5.1-ubuntu [🟢]
+> 
+> ffmpeg:6.1-ubuntu [🟢]
+>
+> ffmpeg:7.1-ubuntu [🟢]
+
+### Architecture:
+> ubuntu-letest: [🟢]
+> 
+> macos-letest: [🟢]
+>
+> windows-latest: [🟢]
 
 ## Status
 > ⛔ 格式不正确

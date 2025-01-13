@@ -27,9 +27,9 @@ ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCEx
 > ffmpeg:7.1-ubuntu [🟢]
 
 ### Architecture:
-> ubuntu-letest: [🟢]
+> ubuntu-latest: [🟢]
 > 
-> macos-letest: [🟢]
+> macos-latest: [🟢]
 >
 > windows-latest: [🟢]
 

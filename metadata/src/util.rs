@@ -64,7 +64,6 @@ mod tests {
     use super::*;
     use quickcheck::{Arbitrary, Gen};
     use regex::{Captures, Regex};
-    use std;
     use std::io::Write;
     use tempfile::NamedTempFile;
 

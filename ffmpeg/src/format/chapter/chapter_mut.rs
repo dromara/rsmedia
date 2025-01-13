@@ -1,4 +1,3 @@
-use std::mem;
 use std::ops::Deref;
 
 use sys::ffi;
@@ -18,10 +17,10 @@ pub struct ChapterMut<'a> {
 impl ChapterMut<'_> {
     pub unsafe fn wrap(context: &mut Context, index: usize) -> ChapterMut {
         ChapterMut {
-            context: mem::transmute_copy(&context),
+            context: std::mem::transmute_copy(&context),
             index,
 
-            immutable: Chapter::wrap(mem::transmute_copy(&context), index),
+            immutable: Chapter::wrap(std::mem::transmute_copy(&context), index),
         }
     }
 

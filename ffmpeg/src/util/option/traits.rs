@@ -3,7 +3,6 @@
 use crate::{util::format, ChannelLayout, Error, Rational};
 use libc::{c_int, c_void};
 use std::ffi::CString;
-use std::mem;
 use sys::ffi::*;
 
 macro_rules! check {
@@ -29,7 +28,7 @@ pub trait Settable: Target {
                 self.as_mut_ptr(),
                 name.as_ptr(),
                 value as *const _ as *const _,
-                mem::size_of::<T>() as c_int,
+                std::mem::size_of::<T>() as c_int,
                 AV_OPT_SEARCH_CHILDREN as c_int
             ))
         }

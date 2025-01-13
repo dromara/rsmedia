@@ -56,8 +56,7 @@ impl Audio {
     #[inline]
     pub fn set_format(&mut self, value: format::Sample) {
         unsafe {
-            (*self.as_mut_ptr()).format =
-                std::mem::transmute::<ffi::AVSampleFormat, c_int>(value.into());
+            (*self.as_mut_ptr()).format = Into::<i32>::into(value) as c_int;
         }
     }
 

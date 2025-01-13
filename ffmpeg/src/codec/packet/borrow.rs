@@ -1,6 +1,3 @@
-use std::mem;
-use std::ptr;
-
 use super::Ref;
 use libc::c_int;
 use sys::ffi;
@@ -13,7 +10,7 @@ pub struct Borrow<'a> {
 impl Borrow<'_> {
     pub fn new(data: &[u8]) -> Borrow {
         unsafe {
-            let mut packet: ffi::AVPacket = mem::zeroed();
+            let mut packet: ffi::AVPacket = std::mem::zeroed();
 
             packet.data = data.as_ptr() as *mut _;
             packet.size = data.len() as c_int;
@@ -42,7 +39,7 @@ impl Ref for Borrow<'_> {
 impl Drop for Borrow<'_> {
     fn drop(&mut self) {
         unsafe {
-            self.packet.data = ptr::null_mut();
+            self.packet.data = std::ptr::null_mut();
             self.packet.size = 0;
 
             ffi::av_packet_unref(&mut self.packet);

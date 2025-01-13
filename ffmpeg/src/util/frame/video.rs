@@ -1,4 +1,3 @@
-use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::slice;
 
@@ -61,7 +60,7 @@ impl Video {
     #[inline]
     pub fn set_format(&mut self, value: format::Pixel) {
         unsafe {
-            (*self.as_mut_ptr()).format = mem::transmute::<ffi::AVPixelFormat, c_int>(value.into());
+            (*self.as_mut_ptr()).format = Into::<i32>::into(value) as c_int;
         }
     }
 
@@ -264,7 +263,7 @@ impl Video {
         unsafe {
             slice::from_raw_parts(
                 (*self.as_ptr()).data[index] as *const T,
-                self.stride(index) * self.plane_height(index) as usize / mem::size_of::<T>(),
+                self.stride(index) * self.plane_height(index) as usize / std::mem::size_of::<T>(),
             )
         }
     }
@@ -282,7 +281,7 @@ impl Video {
         unsafe {
             slice::from_raw_parts_mut(
                 (*self.as_mut_ptr()).data[index] as *mut T,
-                self.stride(index) * self.plane_height(index) as usize / mem::size_of::<T>(),
+                self.stride(index) * self.plane_height(index) as usize / std::mem::size_of::<T>(),
             )
         }
     }

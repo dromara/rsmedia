@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::mem;
 use std::slice;
 
 use libc::c_int;
@@ -25,7 +24,7 @@ impl Packet {
     #[inline]
     pub fn empty() -> Self {
         unsafe {
-            let mut pkt: ffi::AVPacket = mem::zeroed();
+            let mut pkt: ffi::AVPacket = std::mem::zeroed();
 
             ffi::av_init_packet(&mut pkt);
 
@@ -36,7 +35,7 @@ impl Packet {
     #[inline]
     pub fn new(size: usize) -> Self {
         unsafe {
-            let mut pkt: ffi::AVPacket = mem::zeroed();
+            let mut pkt: ffi::AVPacket = std::mem::zeroed();
 
             ffi::av_init_packet(&mut pkt);
             ffi::av_new_packet(&mut pkt, size as c_int);

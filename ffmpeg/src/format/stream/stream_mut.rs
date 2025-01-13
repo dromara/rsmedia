@@ -1,4 +1,3 @@
-use std::mem;
 use std::ops::Deref;
 
 use sys::ffi;
@@ -16,10 +15,10 @@ pub struct StreamMut<'a> {
 impl StreamMut<'_> {
     pub unsafe fn wrap(context: &mut Context, index: usize) -> StreamMut {
         StreamMut {
-            context: mem::transmute_copy(&context),
+            context: std::mem::transmute_copy(&context),
             index,
 
-            immutable: Stream::wrap(mem::transmute_copy(&context), index),
+            immutable: Stream::wrap(std::mem::transmute_copy(&context), index),
         }
     }
 

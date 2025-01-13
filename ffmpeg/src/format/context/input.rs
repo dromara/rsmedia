@@ -1,5 +1,4 @@
 use std::ffi::CString;
-use std::mem;
 use std::ops::{Deref, DerefMut};
 
 use sys::ffi;
@@ -173,7 +172,7 @@ impl<'a> Iterator for PacketIter<'a> {
             match packet.read(self.context) {
                 Ok(..) => unsafe {
                     return Some((
-                        Stream::wrap(mem::transmute_copy(&self.context), packet.stream()),
+                        Stream::wrap(std::mem::transmute_copy(&self.context), packet.stream()),
                         packet,
                     ));
                 },

@@ -1,5 +1,4 @@
 use std::fmt;
-use std::mem;
 use std::ptr;
 use std::rc::Rc;
 
@@ -277,7 +276,7 @@ impl<'a> Iterator for StreamIterMut<'a> {
 
         unsafe {
             Some(StreamMut::wrap(
-                mem::transmute_copy(&self.context),
+                std::mem::transmute_copy(&self.context),
                 (self.current - 1) as usize,
             ))
         }
@@ -364,7 +363,7 @@ impl<'a> Iterator for ChapterIterMut<'a> {
             self.current += 1;
 
             Some(ChapterMut::wrap(
-                mem::transmute_copy(&self.context),
+                std::mem::transmute_copy(&self.context),
                 (self.current - 1) as usize,
             ))
         }

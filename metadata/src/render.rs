@@ -5,12 +5,15 @@ use crate::media_file::MediaFileMetadata;
 use crate::stream::{self, StreamMetadata};
 
 pub trait Render: Serialize {
+
+    #[allow(clippy::result_large_err)]
     fn render(&self, template: &str) -> Result<String, handlebars::TemplateRenderError> {
         Handlebars::new().render_template(template, &self)
     }
 
     fn default_template() -> String;
 
+    #[allow(clippy::result_large_err)]
     fn render_default(&self) -> Result<String, handlebars::TemplateRenderError> {
         self.render(&Self::default_template())
     }
@@ -92,6 +95,7 @@ impl Render for MediaFileMetadata {
 // https://github.com/FFmpeg/FFmpeg/blob/n4.0.2/libavcodec/utils.c#L1167
 
 impl StreamMetadata {
+    #[allow(clippy::result_large_err)]
     pub fn render_default(&self) -> Result<String, handlebars::TemplateRenderError> {
         match self {
             StreamMetadata::VideoMetadata(m) => m.render_default(),

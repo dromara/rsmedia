@@ -40,7 +40,7 @@ fn run_main() -> bool {
             successful = false;
             continue;
         }
-        match build_media_file_metadata(&file) {
+        match build_media_file_metadata(file) {
             Ok(m) => match m.render_default() {
                 Ok(rendered) => println!("{}", rendered),
                 Err(_) => {

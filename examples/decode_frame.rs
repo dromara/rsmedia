@@ -1,11 +1,11 @@
 use image::{ImageBuffer, Rgb};
 use rsmedia::decode::Decoder;
 use std::error::Error;
-use tokio::task;
 use url::Url;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+// use tokio async runtime
+// #[tokio::main]
+fn main() -> Result<(), Box<dyn Error>> {
     rsmedia::init()?;
 
     let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
@@ -24,7 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut frame_count = 0;
     let mut elapsed_time = 0.0;
-    let mut tasks = vec![];
+
+    // task holding
+    // let mut tasks = vec![];
 
     for frame in decoder.decode_iter() {
         if let Ok((_timestamp, frame)) = frame {
@@ -40,11 +42,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);
 
-            let task = task::spawn_blocking(move || {
-                img.save(&frame_path).expect("failed to save frame");
-            });
-
-            tasks.push(task);
+            // use tokio::task;
+            // let task = task::spawn_blocking(move || {
+            //     img.save(&frame_path).expect("failed to save frame");
+            // });
+            // tasks.push(task);
+            // or:
+            img.save(&frame_path).expect("failed to save frame");
 
             frame_count += 1;
             elapsed_time += 1.0 / frame_rate;
@@ -54,13 +58,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Await all tasks to finish
-    for task in tasks {
-        task.await.expect("task failed");
-    }
+    // for task in tasks {
+    //     task.await.expect("task failed");
+    // }
 
-    println!(
-        "Saved {} frames in the '{}' directory",
-        frame_count, output_folder
-    );
+    println!("Saved {} frames in the '{}' directory", frame_count, output_folder);
     Ok(())
 }

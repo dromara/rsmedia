@@ -5,8 +5,8 @@
 sudo apt-get install \
     autoconf \
     automake \
-    bzip2 \
     build-essential \
+    bzip2 \
     cmake \
     clang \
     gcc \
@@ -18,6 +18,7 @@ sudo apt-get install \
     libgnutls28-dev \
     libmp3lame-dev \
     libopus-dev \
+    libfdk-aac-dev \
     libtheora-dev \
     libvorbis-dev \
     libvpx-dev \
@@ -83,8 +84,8 @@ sudo apt-get install \
     texinfo \
     wget \
     yasm \
-    zlib1g-dev \
     nasm \
+    zlib1g-dev \
     libnuma-dev
 
 ## System FFmpeg

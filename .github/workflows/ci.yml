@@ -100,9 +100,6 @@ jobs:
       - name: Build
         run: cargo build --no-default-features --features ffmpeg7 --verbose
 
-      - name: Run Test
-        run: cargo test --verbose
-
   test:
     runs-on: ubuntu-latest
     container: jrottenberg/ffmpeg:7.1-ubuntu

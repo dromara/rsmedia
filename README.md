@@ -6,13 +6,18 @@ Low / High-level video toolkit based on ffmpeg.
 
 ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
+## FFI bindings
+
+- [rusty_ffmpeg](https://github.com/CCExtractor/rusty_ffmpeg)
+- [rust-ffmpeg](https://github.com/meh/rust-ffmpeg/)
+- [ffmpeg-sys-next](https://github.com/zmwangx/rust-ffmpeg-sys)
+- [ffmpeg-the-third](https://github.com/shssoichiro/ffmpeg-the-third)
+
 ## See also: 
-> https://github.com/CCExtractor/rusty_ffmpeg
-> 
-> https://github.com/larksuite/rsmpeg
-> 
 > https://github.com/zmwangx/rust-ffmpeg
 > 
+> https://github.com/larksuite/rsmpeg
+>
 > https://github.com/oddity-ai/video-rs
 > 
 > https://github.com/remotia/remotia-ffmpeg-codecs

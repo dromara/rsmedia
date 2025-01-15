@@ -80,6 +80,7 @@ sudo apt-get install \
     libxcb1-dev \
     libxcb-shm0-dev \
     libxcb-xfixes0-dev \
+    libc6-dev \
     pkg-config \
     texinfo \
     wget \

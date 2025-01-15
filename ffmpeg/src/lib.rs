@@ -8,7 +8,7 @@ extern crate bitflags;
 extern crate libc;
 
 pub extern crate rusty_ffmpeg as sys;
-pub use sys::ffi;
+pub use crate::sys::ffi;
 
 #[cfg(feature = "image")]
 extern crate image;

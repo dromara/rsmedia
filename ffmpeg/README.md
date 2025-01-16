@@ -80,9 +80,14 @@ sudo apt-get install \
     libxcb1-dev \
     libxcb-shm0-dev \
     libxcb-xfixes0-dev \
+    libtool \
+    libc6 \
     libc6-dev \
+    libnuma1 \
+    libnuma-dev \
     pkg-config \
     texinfo \
+    unzip \
     wget \
     yasm \
     nasm \

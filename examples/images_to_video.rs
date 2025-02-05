@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::path::Path;
 
 use ffmpeg::frame::Video;
 use rsmedia::{encode::Encoder, encode::Settings, frame::PixelFormat, Options};

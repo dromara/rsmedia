@@ -18,7 +18,7 @@ use crate::error::Error;
 use crate::ffi;
 #[cfg(feature = "ndarray")]
 use crate::frame::Frame;
-use crate::frame::{PixelFormat, RawFrame, FRAME_PIXEL_FORMAT};
+use crate::frame::{self, PixelFormat, RawFrame};
 use crate::io::private::Write;
 use crate::io::{Writer, WriterBuilder};
 use crate::location::Location;
@@ -66,7 +66,22 @@ impl<'a> EncoderBuilder<'a> {
     ///
     /// # Arguments
     ///
-    /// * `format` - Container format to use.
+    /// * `format` - Container format to use. eg. `"mp4"`, `"mkv"`, `"mov"`, `"avi"`, `"flv"`.
+    ///
+    /// reference: https://trac.ffmpeg.org/wiki/HWAccelIntro
+    ///
+    /// | Format                          | Filename Extension | H.264/AVC | H.265/HEVC | AV1   |
+    /// |---------------------------------|--------------------|-----------|------------|-------|
+    /// | Matroska                        | .mkv               | Y         | Y          | Y     |
+    /// | MPEG-4 Part 14 (MP4)            | .mp4               | Y         | Y          | Y     |
+    /// | Audio Video Interleave (AVI)    | .avi               | Y         | N          | Y     |
+    /// | Material Exchange Format (MXF)  | .mxf               | Y         | n/a        | n/a   |
+    /// | MPEG transport stream (TS)      | .ts                | Y         | Y          | N     |
+    /// | 3GPP (3GP)                      | .3gp               | Y         | n/a        | n/a   |
+    /// | Flash Video (FLV)               | .flv               | Y         | n/a        | n/a   |
+    /// | WebM                            | .webm              | n/a       | n/a        | Y     |
+    /// | Advanced Systems Format (ASF)   | .asf, .wmv         | Y         | Y          | Y     |
+    /// | QuickTime File Format (QTFF)    | .mov               | Y         | Y          | n/a   |
     pub fn with_format(mut self, format: &'a str) -> Self {
         self.format = Some(format);
         self
@@ -173,7 +188,7 @@ impl Encoder {
     pub fn encode_raw(&mut self, frame: RawFrame) -> Result<()> {
         if frame.width() != self.scaler_width
             || frame.height() != self.scaler_height
-            || frame.format() != FRAME_PIXEL_FORMAT
+            || frame.format() != frame::FRAME_PIXEL_FORMAT
         {
             return Err(Error::InvalidFrameFormat);
         }
@@ -270,7 +285,7 @@ impl Encoder {
         let scaler_width = encoder.width();
         let scaler_height = encoder.height();
         let scaler = AvScaler::get(
-            FRAME_PIXEL_FORMAT,
+            frame::FRAME_PIXEL_FORMAT,
             scaler_width,
             scaler_height,
             encoder.format(),

@@ -1,5 +1,5 @@
 # Rust files
-target
+target/
 Cargo.lock
 
 # Vim temporary files

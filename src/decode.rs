@@ -11,7 +11,7 @@ use crate::ffi_hwaccel;
 #[cfg(feature = "ndarray")]
 use crate::frame::Frame;
 use crate::frame::RawFrame;
-use crate::hwaccel::{HWDeviceType, HWContext};
+use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::io::{Reader, ReaderBuilder};
 use crate::location::Location;
 use crate::options::Options;

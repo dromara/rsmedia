@@ -273,10 +273,6 @@ impl Encoder {
         let mut encoder = encoder_context.encoder().video()?;
         settings.apply_to(&mut encoder);
 
-        // Just use the ffmpeg global time base which is precise enough
-        // that we should never get in trouble.
-        encoder.set_time_base(TIME_BASE);
-
         let encoder = encoder.open_with(settings.options().to_dict())?;
         let encoder_time_base = ffi::get_encoder_time_base(&encoder);
 
@@ -412,6 +408,24 @@ impl Settings {
     /// exactly.
     const FRAME_RATE: i32 = 30;
 
+    /// Default bit rate.
+    /// 分辨率(width, height) + 推荐比特率（单位：bps）
+    ///     // 标清 480p
+    ///     (640, 480) => 1_000_000,     // 1 Mbps
+    ///
+    ///     // 高清 720p
+    ///     (1280, 720) => 2_500_000,    // 2.5 Mbps
+    ///
+    ///     // 全高清 1080p
+    ///     (1920, 1080) => 5_000_000,   // 5 Mbps
+    ///
+    ///     // 2K
+    ///     (2560, 1440) => 8_000_000,   // 8 Mbps
+    ///
+    ///     // 4K
+    ///     (3840, 2160) => 20_000_000,  // 20 Mbps
+    const BIT_RATE: usize = 1_000_000;
+
     /// Create encoder settings for an H264 stream with YUV420p pixel format. This will encode to
     /// arguably the most widely compatible video file since H264 is a common codec and YUV420p is
     /// the most commonly used pixel format.
@@ -484,7 +498,11 @@ impl Settings {
         encoder.set_width(self.width);
         encoder.set_height(self.height);
         encoder.set_format(self.pixel_format);
+        encoder.set_bit_rate(Self::BIT_RATE);
         encoder.set_frame_rate(Some((Self::FRAME_RATE, 1)));
+        // Just use the ffmpeg global time base which is precise enough
+        // that we should never get in trouble.
+        encoder.set_time_base(TIME_BASE);
     }
 
     /// Get codec.

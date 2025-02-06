@@ -5,9 +5,7 @@ pub struct HWDeviceContext {
 }
 
 impl HWDeviceContext {
-    pub fn new(
-        device_type: HWDeviceType,
-    ) -> Result<HWDeviceContext, ffmpeg::error::Error> {
+    pub fn new(device_type: HWDeviceType) -> Result<HWDeviceContext, ffmpeg::error::Error> {
         let mut ptr: *mut ffmpeg::ffi::AVBufferRef = std::ptr::null_mut();
 
         unsafe {

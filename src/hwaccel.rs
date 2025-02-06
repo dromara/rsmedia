@@ -3,15 +3,15 @@ use crate::ffi_hwaccel;
 
 type Result<T> = std::result::Result<T, Error>;
 
-pub(crate) struct HardwareAccelerationContext {
+pub(crate) struct HWContext {
     pixel_format: ffmpeg::util::format::Pixel,
-    _hardware_device_context: ffi_hwaccel::HardwareDeviceContext,
+    _hw_device_context: ffi_hwaccel::HWDeviceContext,
 }
 
-impl HardwareAccelerationContext {
+impl HWContext {
     pub(crate) fn new(
         decoder: &mut ffmpeg::codec::Context,
-        device_type: HardwareAccelerationDeviceType,
+        device_type: HWDeviceType,
     ) -> Result<Self> {
         let codec = ffmpeg::codec::decoder::find(decoder.id()).ok_or(Error::UninitializedCodec)?;
         let pixel_format =
@@ -20,12 +20,12 @@ impl HardwareAccelerationContext {
 
         ffi_hwaccel::codec_context_hwaccel_set_get_format(decoder, pixel_format);
 
-        let hardware_device_context = ffi_hwaccel::HardwareDeviceContext::new(device_type)?;
+        let hardware_device_context = ffi_hwaccel::HWDeviceContext::new(device_type)?;
         ffi_hwaccel::codec_context_hwaccel_set_hw_device_ctx(decoder, &hardware_device_context);
 
-        Ok(HardwareAccelerationContext {
+        Ok(HWContext {
             pixel_format,
-            _hardware_device_context: hardware_device_context,
+            _hw_device_context: hardware_device_context,
         })
     }
 
@@ -35,7 +35,7 @@ impl HardwareAccelerationContext {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum HardwareAccelerationDeviceType {
+pub enum HWDeviceType {
     /// Video Decode and Presentation API for Unix (VDPAU)
     Vdpau,
     /// NVIDIA CUDA
@@ -56,11 +56,13 @@ pub enum HardwareAccelerationDeviceType {
     OpenCl,
     /// MediaCodec
     MediaCodec,
+    /// Vulkan
+    Vulkan,
     /// Direct3D 12 Video Acceleration
     D3D12Va,
 }
 
-impl HardwareAccelerationDeviceType {
+impl HWDeviceType {
     /// Whether or not the device type is available on this system.
     pub fn is_available(self) -> bool {
         Self::list_available().contains(&self)
@@ -69,14 +71,15 @@ impl HardwareAccelerationDeviceType {
     /// List available hardware acceleration device types on this system.
     ///
     /// Uses `av_hwdevice_iterate_types` internally.
-    pub fn list_available() -> Vec<HardwareAccelerationDeviceType> {
+    pub fn list_available() -> Vec<HWDeviceType> {
         ffi_hwaccel::hwdevice_list_available_device_types()
     }
 }
 
-impl HardwareAccelerationDeviceType {
-    pub fn from(value: ffmpeg::ffi::AVHWDeviceType) -> Option<HardwareAccelerationDeviceType> {
+impl HWDeviceType {
+    pub fn from(value: ffmpeg::ffi::AVHWDeviceType) -> Option<HWDeviceType> {
         match value {
+            ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE => None,
             ffmpeg::ffi::AV_HWDEVICE_TYPE_VDPAU => Some(Self::Vdpau),
             ffmpeg::ffi::AV_HWDEVICE_TYPE_CUDA => Some(Self::Cuda),
             ffmpeg::ffi::AV_HWDEVICE_TYPE_VAAPI => Some(Self::VaApi),
@@ -87,7 +90,8 @@ impl HardwareAccelerationDeviceType {
             ffmpeg::ffi::AV_HWDEVICE_TYPE_DRM => Some(Self::Drm),
             ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL => Some(Self::OpenCl),
             ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC => Some(Self::MediaCodec),
-            ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE => None,
+            ffmpeg::ffi::AV_HWDEVICE_TYPE_VULKAN => Some(Self::Vulkan),
+            ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D12VA => Some(Self::D3D12Va),
             // FIXME: Find a way to handle the new variants in ffmpeg 7 without breaking backwards
             // compatibility...
             #[allow(unreachable_patterns)]
@@ -96,24 +100,21 @@ impl HardwareAccelerationDeviceType {
     }
 }
 
-impl From<HardwareAccelerationDeviceType> for ffmpeg::ffi::AVHWDeviceType {
-    fn from(value: HardwareAccelerationDeviceType) -> Self {
+impl From<HWDeviceType> for ffmpeg::ffi::AVHWDeviceType {
+    fn from(value: HWDeviceType) -> Self {
         match value {
-            HardwareAccelerationDeviceType::Vdpau => ffmpeg::ffi::AV_HWDEVICE_TYPE_VDPAU,
-            HardwareAccelerationDeviceType::Cuda => ffmpeg::ffi::AV_HWDEVICE_TYPE_CUDA,
-            HardwareAccelerationDeviceType::VaApi => ffmpeg::ffi::AV_HWDEVICE_TYPE_VAAPI,
-            HardwareAccelerationDeviceType::Dxva2 => ffmpeg::ffi::AV_HWDEVICE_TYPE_DXVA2,
-            HardwareAccelerationDeviceType::Qsv => ffmpeg::ffi::AV_HWDEVICE_TYPE_QSV,
-            HardwareAccelerationDeviceType::VideoToolbox => {
-                ffmpeg::ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX
-            }
-            HardwareAccelerationDeviceType::D3D11Va => ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D11VA,
-            HardwareAccelerationDeviceType::Drm => ffmpeg::ffi::AV_HWDEVICE_TYPE_DRM,
-            HardwareAccelerationDeviceType::OpenCl => ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL,
-            HardwareAccelerationDeviceType::MediaCodec => ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC,
-            HardwareAccelerationDeviceType::D3D12Va => {
-                unimplemented!()
-            }
+            HWDeviceType::Vdpau => ffmpeg::ffi::AV_HWDEVICE_TYPE_VDPAU,
+            HWDeviceType::Cuda => ffmpeg::ffi::AV_HWDEVICE_TYPE_CUDA,
+            HWDeviceType::VaApi => ffmpeg::ffi::AV_HWDEVICE_TYPE_VAAPI,
+            HWDeviceType::Dxva2 => ffmpeg::ffi::AV_HWDEVICE_TYPE_DXVA2,
+            HWDeviceType::Qsv => ffmpeg::ffi::AV_HWDEVICE_TYPE_QSV,
+            HWDeviceType::VideoToolbox => ffmpeg::ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            HWDeviceType::D3D11Va => ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D11VA,
+            HWDeviceType::Drm => ffmpeg::ffi::AV_HWDEVICE_TYPE_DRM,
+            HWDeviceType::OpenCl => ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL,
+            HWDeviceType::MediaCodec => ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC,
+            HWDeviceType::Vulkan => ffmpeg::ffi::AV_HWDEVICE_TYPE_VULKAN,
+            HWDeviceType::D3D12Va => ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D12VA,
         }
     }
 }

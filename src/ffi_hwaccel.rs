@@ -1,13 +1,13 @@
-use crate::hwaccel::HardwareAccelerationDeviceType;
+use crate::hwaccel::HWDeviceType;
 
-pub struct HardwareDeviceContext {
+pub struct HWDeviceContext {
     ptr: *mut ffmpeg::ffi::AVBufferRef,
 }
 
-impl HardwareDeviceContext {
+impl HWDeviceContext {
     pub fn new(
-        device_type: HardwareAccelerationDeviceType,
-    ) -> Result<HardwareDeviceContext, ffmpeg::error::Error> {
+        device_type: HWDeviceType,
+    ) -> Result<HWDeviceContext, ffmpeg::error::Error> {
         let mut ptr: *mut ffmpeg::ffi::AVBufferRef = std::ptr::null_mut();
 
         unsafe {
@@ -18,7 +18,7 @@ impl HardwareDeviceContext {
                 std::ptr::null_mut(),
                 0,
             ) {
-                0 => Ok(HardwareDeviceContext { ptr }),
+                0 => Ok(HWDeviceContext { ptr }),
                 e => Err(ffmpeg::error::Error::from(e)),
             }
         }
@@ -29,7 +29,7 @@ impl HardwareDeviceContext {
     }
 }
 
-impl Drop for HardwareDeviceContext {
+impl Drop for HWDeviceContext {
     fn drop(&mut self) {
         unsafe {
             ffmpeg::ffi::av_buffer_unref(&mut self.ptr);
@@ -37,12 +37,12 @@ impl Drop for HardwareDeviceContext {
     }
 }
 
-pub fn hwdevice_list_available_device_types() -> Vec<HardwareAccelerationDeviceType> {
+pub fn hwdevice_list_available_device_types() -> Vec<HWDeviceType> {
     let mut hwdevice_types = Vec::new();
     let mut hwdevice_type =
         unsafe { ffmpeg::ffi::av_hwdevice_iterate_types(ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE) };
     while hwdevice_type != ffmpeg::ffi::AV_HWDEVICE_TYPE_NONE {
-        hwdevice_types.push(HardwareAccelerationDeviceType::from(hwdevice_type).unwrap());
+        hwdevice_types.push(HWDeviceType::from(hwdevice_type).unwrap());
         hwdevice_type = unsafe { ffmpeg::ffi::av_hwdevice_iterate_types(hwdevice_type) };
     }
     hwdevice_types
@@ -66,7 +66,7 @@ pub fn hwdevice_transfer_frame(
 
 pub fn codec_find_corresponding_hwaccel_pixfmt(
     codec: &ffmpeg::codec::codec::Codec,
-    hwaccel_type: HardwareAccelerationDeviceType,
+    hwaccel_type: HWDeviceType,
 ) -> Option<ffmpeg::format::pixel::Pixel> {
     let mut i = 0;
     loop {
@@ -99,7 +99,7 @@ pub fn codec_context_hwaccel_set_get_format(
 
 pub fn codec_context_hwaccel_set_hw_device_ctx(
     codec_context: &mut ffmpeg::codec::context::Context,
-    hardware_device_context: &HardwareDeviceContext,
+    hardware_device_context: &HWDeviceContext,
 ) {
     unsafe {
         (*codec_context.as_mut_ptr()).hw_device_ctx = hardware_device_context.ref_raw();

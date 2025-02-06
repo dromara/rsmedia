@@ -11,7 +11,7 @@ use crate::ffi_hwaccel;
 #[cfg(feature = "ndarray")]
 use crate::frame::Frame;
 use crate::frame::RawFrame;
-use crate::hwaccel::{HardwareAccelerationContext, HardwareAccelerationDeviceType};
+use crate::hwaccel::{HWDeviceType, HWContext};
 use crate::io::{Reader, ReaderBuilder};
 use crate::location::Location;
 use crate::options::Options;
@@ -29,7 +29,7 @@ pub struct DecoderBuilder<'a> {
     source: Location,
     options: Option<&'a Options>,
     resize: Option<Resize>,
-    hardware_acceleration_device_type: Option<HardwareAccelerationDeviceType>,
+    hw_device_type: Option<HWDeviceType>,
 }
 
 impl<'a> DecoderBuilder<'a> {
@@ -41,7 +41,7 @@ impl<'a> DecoderBuilder<'a> {
             source: source.into(),
             options: None,
             resize: None,
-            hardware_acceleration_device_type: None,
+            hw_device_type: None,
         }
     }
 
@@ -64,11 +64,8 @@ impl<'a> DecoderBuilder<'a> {
     /// Enable hardware acceleration with the specified device type.
     ///
     /// * `device_type` - Device to use for hardware acceleration.
-    pub fn with_hardware_acceleration(
-        mut self,
-        device_type: HardwareAccelerationDeviceType,
-    ) -> Self {
-        self.hardware_acceleration_device_type = Some(device_type);
+    pub fn with_hardware_acceleration(mut self, device_type: HWDeviceType) -> Self {
+        self.hw_device_type = Some(device_type);
         self
     }
 
@@ -85,7 +82,7 @@ impl<'a> DecoderBuilder<'a> {
                 &reader,
                 reader_stream_index,
                 self.resize,
-                self.hardware_acceleration_device_type,
+                self.hw_device_type,
             )?,
             reader,
             reader_stream_index,
@@ -338,7 +335,7 @@ impl Decoder {
 pub struct DecoderSplit {
     decoder: AvDecoder,
     decoder_time_base: AvRational,
-    hwaccel_context: Option<HardwareAccelerationContext>,
+    hwaccel_context: Option<HWContext>,
     scaler: Option<AvScaler>,
     size: (u32, u32),
     size_out: (u32, u32),
@@ -356,7 +353,7 @@ impl DecoderSplit {
         reader: &Reader,
         reader_stream_index: usize,
         resize: Option<Resize>,
-        hwaccel_device_type: Option<HardwareAccelerationDeviceType>,
+        hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
         let reader_stream = reader
             .input
@@ -367,8 +364,8 @@ impl DecoderSplit {
         ffi::set_decoder_context_time_base(&mut decoder, reader_stream.time_base());
         decoder.set_parameters(reader_stream.parameters())?;
 
-        let hwaccel_context = match hwaccel_device_type {
-            Some(device_type) => Some(HardwareAccelerationContext::new(&mut decoder, device_type)?),
+        let hwaccel_context = match hw_device_type {
+            Some(device_type) => Some(HWContext::new(&mut decoder, device_type)?),
             None => None,
         };
 

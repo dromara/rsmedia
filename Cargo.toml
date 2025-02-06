@@ -12,7 +12,6 @@ readme = "README.md"
 
 [features]
 default = ["ffmpeg7", "ndarray"]
-
 ffmpeg5 = ["ffmpeg/ffmpeg5", "ffmpeg/link_system_ffmpeg"]
 ffmpeg6 = ["ffmpeg/ffmpeg6", "ffmpeg/link_system_ffmpeg"]
 ffmpeg7 = ["ffmpeg/ffmpeg7", "ffmpeg/link_system_ffmpeg"]

@@ -59,6 +59,7 @@ pub enum HWDeviceType {
     /// Vulkan
     Vulkan,
     /// Direct3D 12 Video Acceleration
+    #[cfg(feature = "ffmpeg7")]
     D3D12Va,
 }
 
@@ -91,9 +92,9 @@ impl HWDeviceType {
             ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL => Some(Self::OpenCl),
             ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC => Some(Self::MediaCodec),
             ffmpeg::ffi::AV_HWDEVICE_TYPE_VULKAN => Some(Self::Vulkan),
+            #[cfg(feature = "ffmpeg7")]
             ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D12VA => Some(Self::D3D12Va),
-            // FIXME: Find a way to handle the new variants in ffmpeg 7 without breaking backwards
-            // compatibility...
+
             #[allow(unreachable_patterns)]
             _ => unimplemented!(),
         }
@@ -114,6 +115,7 @@ impl From<HWDeviceType> for ffmpeg::ffi::AVHWDeviceType {
             HWDeviceType::OpenCl => ffmpeg::ffi::AV_HWDEVICE_TYPE_OPENCL,
             HWDeviceType::MediaCodec => ffmpeg::ffi::AV_HWDEVICE_TYPE_MEDIACODEC,
             HWDeviceType::Vulkan => ffmpeg::ffi::AV_HWDEVICE_TYPE_VULKAN,
+            #[cfg(feature = "ffmpeg7")]
             HWDeviceType::D3D12Va => ffmpeg::ffi::AV_HWDEVICE_TYPE_D3D12VA,
         }
     }

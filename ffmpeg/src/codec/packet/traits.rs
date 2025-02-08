@@ -1,9 +1,9 @@
-use sys::ffi;
+use ffi::*;
 
 pub trait Ref {
-    fn as_ptr(&self) -> *const ffi::AVPacket;
+    fn as_ptr(&self) -> *const AVPacket;
 }
 
 pub trait Mut {
-    fn as_mut_ptr(&mut self) -> *mut ffi::AVPacket;
+    fn as_mut_ptr(&mut self) -> *mut AVPacket;
 }

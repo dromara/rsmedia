@@ -1,12 +1,12 @@
 use super::{decoder, encoder};
-use crate::codec::{Audio, Id, Video};
-use crate::Codec;
+use codec::{Audio, Id, Video};
+use Codec;
 
 pub trait Decoder {
     fn decoder(self) -> Option<Codec>;
 }
 
-impl Decoder for &str {
+impl<'a> Decoder for &'a str {
     fn decoder(self) -> Option<Codec> {
         decoder::find_by_name(self)
     }
@@ -58,7 +58,7 @@ pub trait Encoder {
     fn encoder(self) -> Option<Codec>;
 }
 
-impl Encoder for &str {
+impl<'a> Encoder for &'a str {
     fn encoder(self) -> Option<Codec> {
         encoder::find_by_name(self)
     }

@@ -8,8 +8,8 @@ pub mod packet;
 
 pub mod subtitle;
 
-// #[cfg(not(feature = "ffmpeg5"))]
-// pub mod picture;
+#[cfg(not(feature = "ffmpeg_5_0"))]
+pub mod picture;
 
 pub mod discard;
 
@@ -51,16 +51,16 @@ pub mod traits;
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use sys::ffi;
+use ffi::*;
 
 pub fn version() -> u32 {
-    unsafe { ffi::avcodec_version() }
+    unsafe { avcodec_version() }
 }
 
 pub fn configuration() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avcodec_configuration()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(avcodec_configuration()).to_bytes()) }
 }
 
 pub fn license() -> &'static str {
-    unsafe { from_utf8_unchecked(CStr::from_ptr(ffi::avcodec_license()).to_bytes()) }
+    unsafe { from_utf8_unchecked(CStr::from_ptr(avcodec_license()).to_bytes()) }
 }

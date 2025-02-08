@@ -1,50 +1,52 @@
 use std::ffi::CString;
+use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use libc;
-use sys::ffi;
 
-use super::{common::Context, destructor};
-
-use crate::{codec, codec::traits, ChapterMut, Dictionary, Error, Rational, StreamMut};
+use super::common::Context;
+use super::destructor;
+use codec::traits;
+use ffi::*;
+use {codec, format, ChapterMut, Dictionary, Error, Rational, StreamMut};
 
 pub struct Output {
-    ptr: *mut ffi::AVFormatContext,
+    ptr: *mut AVFormatContext,
     ctx: Context,
 }
 
 unsafe impl Send for Output {}
 
 impl Output {
-    pub unsafe fn wrap(ptr: *mut ffi::AVFormatContext) -> Self {
+    pub unsafe fn wrap(ptr: *mut AVFormatContext) -> Self {
         Output {
             ptr,
             ctx: Context::wrap(ptr, destructor::Mode::Output),
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVFormatContext {
+    pub unsafe fn as_ptr(&self) -> *const AVFormatContext {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFormatContext {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFormatContext {
         self.ptr
     }
 }
 
 impl Output {
-    pub fn format(&self) -> crate::format::Output {
+    pub fn format(&self) -> format::Output {
         // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
         #[allow(clippy::unnecessary_cast)]
         unsafe {
-            crate::format::Output::wrap((*self.as_ptr()).oformat as *mut ffi::AVOutputFormat)
+            format::Output::wrap((*self.as_ptr()).oformat as *mut AVOutputFormat)
         }
     }
 
     pub fn write_header(&mut self) -> Result<(), Error> {
         unsafe {
-            match ffi::avformat_write_header(self.as_mut_ptr(), ptr::null_mut()) {
+            match avformat_write_header(self.as_mut_ptr(), ptr::null_mut()) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -54,7 +56,7 @@ impl Output {
     pub fn write_header_with(&mut self, options: Dictionary) -> Result<Dictionary, Error> {
         unsafe {
             let mut opts = options.disown();
-            let res = ffi::avformat_write_header(self.as_mut_ptr(), &mut opts);
+            let res = avformat_write_header(self.as_mut_ptr(), &mut opts);
 
             match res {
                 0 => Ok(Dictionary::own(opts)),
@@ -65,7 +67,7 @@ impl Output {
 
     pub fn write_trailer(&mut self) -> Result<(), Error> {
         unsafe {
-            match ffi::av_write_trailer(self.as_mut_ptr()) {
+            match av_write_trailer(self.as_mut_ptr()) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -76,7 +78,7 @@ impl Output {
         unsafe {
             let codec = codec.encoder();
             let codec = codec.map_or(ptr::null(), |c| c.as_ptr());
-            let ptr = ffi::avformat_new_stream(self.as_mut_ptr(), codec);
+            let ptr = avformat_new_stream(self.as_mut_ptr(), codec);
 
             if ptr.is_null() {
                 return Err(Error::Unknown);
@@ -90,13 +92,13 @@ impl Output {
 
     pub fn add_stream_with(&mut self, context: &codec::Context) -> Result<StreamMut, Error> {
         unsafe {
-            let ptr = ffi::avformat_new_stream(self.as_mut_ptr(), ptr::null());
+            let ptr = avformat_new_stream(self.as_mut_ptr(), ptr::null());
 
             if ptr.is_null() {
                 return Err(Error::Unknown);
             }
 
-            match ffi::avcodec_parameters_from_context((*ptr).codecpar, context.as_ptr()) {
+            match avcodec_parameters_from_context((*ptr).codecpar, context.as_ptr()) {
                 0 => (),
                 e => return Err(Error::from(e)),
             }
@@ -132,13 +134,13 @@ impl Output {
         let index = match existing {
             Some(index) => index,
             None => unsafe {
-                let ptr = ffi::av_mallocz(std::mem::size_of::<ffi::AVChapter>())
+                let ptr = av_mallocz(size_of::<AVChapter>())
                     .as_mut()
                     .ok_or(Error::Bug)?;
                 let mut nb_chapters = (*self.as_ptr()).nb_chapters as i32;
 
                 // chapters array will be freed by `avformat_free_context`
-                ffi::av_dynarray_add(
+                av_dynarray_add(
                     &mut (*self.as_mut_ptr()).chapters as *mut _ as *mut libc::c_void,
                     &mut nb_chapters,
                     ptr,
@@ -150,7 +152,7 @@ impl Output {
                     index as usize
                 } else {
                     // failed to add the chapter
-                    ffi::av_freep(ptr);
+                    av_freep(ptr);
                     return Err(Error::Bug);
                 }
             },
@@ -192,7 +194,7 @@ pub fn dump(ctx: &Output, index: i32, url: Option<&str>) {
     let url = url.map(|u| CString::new(u).unwrap());
 
     unsafe {
-        ffi::av_dump_format(
+        av_dump_format(
             ctx.as_ptr() as *mut _,
             index,
             url.unwrap_or_else(|| CString::new("").unwrap()).as_ptr(),

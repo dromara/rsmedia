@@ -1,13 +1,13 @@
-use sys::ffi;
+use ffi::*;
 
 pub fn init() {
     unsafe {
-        ffi::avformat_network_init();
+        avformat_network_init();
     }
 }
 
 pub fn deinit() {
     unsafe {
-        ffi::avformat_network_deinit();
+        avformat_network_deinit();
     }
 }

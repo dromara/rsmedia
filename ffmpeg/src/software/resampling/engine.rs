@@ -1,4 +1,5 @@
-use sys::ffi::*;
+use ffi::*;
+use sys::SwrEngine::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Engine {
@@ -12,10 +13,6 @@ impl From<SwrEngine> for Engine {
             SWR_ENGINE_SWR => Engine::Software,
             SWR_ENGINE_SOXR => Engine::SoundExchange,
             SWR_ENGINE_NB => Engine::Software,
-            _ => {
-                eprintln!("Unknown Engine variant: {}", value);
-                Engine::Software
-            }
         }
     }
 }

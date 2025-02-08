@@ -16,25 +16,26 @@ pub use self::graph::Graph;
 use std::ffi::{CStr, CString};
 use std::str::from_utf8_unchecked;
 
-use sys::ffi::*;
+use ffi::*;
+#[cfg(not(feature = "ffmpeg_5_0"))]
+use Error;
 
-// #[cfg(not(feature = "ffmpeg5"))]
+#[cfg(not(feature = "ffmpeg_5_0"))]
 pub fn register_all() {
-    // unsafe {
-    //     // avfilter_register_all 在 FFmpeg 4.0 之后已被废弃
-    //     avfilter_register_all();
-    // }
+    unsafe {
+        avfilter_register_all();
+    }
 }
 
-// #[cfg(not(feature = "ffmpeg5"))]
-// pub fn register(filter: &Filter) -> Result<(), Error> {
-//     unsafe {
-//         match avfilter_register(filter.as_ptr() as *mut _) {
-//             0 => Ok(()),
-//             _ => Err(Error::InvalidData),
-//         }
-//     }
-// }
+#[cfg(not(feature = "ffmpeg_5_0"))]
+pub fn register(filter: &Filter) -> Result<(), Error> {
+    unsafe {
+        match avfilter_register(filter.as_ptr() as *mut _) {
+            0 => Ok(()),
+            _ => Err(Error::InvalidData),
+        }
+    }
+}
 
 pub fn version() -> u32 {
     unsafe { avfilter_version() }
@@ -67,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_paditer() {
-        // #[cfg(not(feature = "ffmpeg5"))]
+        #[cfg(not(feature = "ffmpeg_5_0"))]
         register_all();
         assert_eq!(
             find("overlay")

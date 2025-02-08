@@ -4,17 +4,17 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use super::immutable;
-use sys::ffi;
+use ffi::*;
 
 pub struct Ref<'a> {
-    ptr: *mut ffi::AVDictionary,
+    ptr: *mut AVDictionary,
     imm: immutable::Ref<'a>,
 
     _marker: PhantomData<&'a ()>,
 }
 
-impl Ref<'_> {
-    pub unsafe fn wrap(ptr: *mut ffi::AVDictionary) -> Self {
+impl<'a> Ref<'a> {
+    pub unsafe fn wrap(ptr: *mut AVDictionary) -> Self {
         Ref {
             ptr,
             imm: immutable::Ref::wrap(ptr),
@@ -22,19 +22,19 @@ impl Ref<'_> {
         }
     }
 
-    pub unsafe fn as_mut_ptr(&self) -> *mut ffi::AVDictionary {
+    pub unsafe fn as_mut_ptr(&self) -> *mut AVDictionary {
         self.ptr
     }
 }
 
-impl Ref<'_> {
+impl<'a> Ref<'a> {
     pub fn set(&mut self, key: &str, value: &str) {
         unsafe {
             let key = CString::new(key).unwrap();
             let value = CString::new(value).unwrap();
             let mut ptr = self.as_mut_ptr();
 
-            if ffi::av_dict_set(&mut ptr, key.as_ptr(), value.as_ptr(), 0) < 0 {
+            if av_dict_set(&mut ptr, key.as_ptr(), value.as_ptr(), 0) < 0 {
                 panic!("out of memory");
             }
 
@@ -52,7 +52,7 @@ impl<'a> Deref for Ref<'a> {
     }
 }
 
-impl fmt::Debug for Ref<'_> {
+impl<'a> fmt::Debug for Ref<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         self.imm.fmt(fmt)
     }

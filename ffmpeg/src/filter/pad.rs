@@ -2,18 +2,18 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::str::from_utf8_unchecked;
 
-use crate::media;
-use sys::ffi;
+use ffi::*;
+use media;
 
 pub struct Pad<'a> {
-    ptr: *const ffi::AVFilterPad,
+    ptr: *const AVFilterPad,
     idx: isize,
 
     _marker: PhantomData<&'a ()>,
 }
 
-impl Pad<'_> {
-    pub unsafe fn wrap(ptr: *const ffi::AVFilterPad, idx: isize) -> Self {
+impl<'a> Pad<'a> {
+    pub unsafe fn wrap(ptr: *const AVFilterPad, idx: isize) -> Self {
         Pad {
             ptr,
             idx,
@@ -21,19 +21,19 @@ impl Pad<'_> {
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVFilterPad {
+    pub unsafe fn as_ptr(&self) -> *const AVFilterPad {
         self.ptr
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFilterPad {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFilterPad {
         self.ptr as *mut _
     }
 }
 
-impl Pad<'_> {
+impl<'a> Pad<'a> {
     pub fn name(&self) -> Option<&str> {
         unsafe {
-            let ptr = ffi::avfilter_pad_get_name(self.ptr, self.idx as i32);
+            let ptr = avfilter_pad_get_name(self.ptr, self.idx as i32);
 
             if ptr.is_null() {
                 None
@@ -44,6 +44,6 @@ impl Pad<'_> {
     }
 
     pub fn medium(&self) -> media::Type {
-        unsafe { media::Type::from(ffi::avfilter_pad_get_type(self.ptr, self.idx as i32)) }
+        unsafe { media::Type::from(avfilter_pad_get_type(self.ptr, self.idx as i32)) }
     }
 }

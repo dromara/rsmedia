@@ -1,22 +1,22 @@
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::slice;
 
-use libc::c_int;
-use sys::ffi;
-
 use super::Frame;
-use crate::{
-    color, picture,
-    util::{chroma, format},
-    Rational,
-};
+use color;
+use ffi::*;
+use libc::c_int;
+use picture;
+use util::chroma;
+use util::format;
+use Rational;
 
 #[derive(PartialEq, Eq)]
 pub struct Video(Frame);
 
 impl Video {
     #[inline(always)]
-    pub unsafe fn wrap(ptr: *mut ffi::AVFrame) -> Self {
+    pub unsafe fn wrap(ptr: *mut AVFrame) -> Self {
         Video(Frame::wrap(ptr))
     }
 
@@ -26,7 +26,7 @@ impl Video {
         self.set_width(width);
         self.set_height(height);
 
-        ffi::av_frame_get_buffer(self.as_mut_ptr(), 32);
+        av_frame_get_buffer(self.as_mut_ptr(), 32);
     }
 }
 
@@ -52,7 +52,9 @@ impl Video {
             if (*self.as_ptr()).format == -1 {
                 format::Pixel::None
             } else {
-                format::Pixel::from((*self.as_ptr()).format as ffi::AVPixelFormat)
+                format::Pixel::from(mem::transmute::<i32, AVPixelFormat>(
+                    (*self.as_ptr()).format,
+                ))
             }
         }
     }
@@ -60,7 +62,7 @@ impl Video {
     #[inline]
     pub fn set_format(&mut self, value: format::Pixel) {
         unsafe {
-            (*self.as_mut_ptr()).format = Into::<i32>::into(value) as c_int;
+            (*self.as_mut_ptr()).format = mem::transmute::<AVPixelFormat, c_int>(value.into());
         }
     }
 
@@ -174,13 +176,13 @@ impl Video {
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg7"))]
+    #[cfg(not(feature = "ffmpeg_7_0"))]
     pub fn coded_number(&self) -> usize {
         unsafe { (*self.as_ptr()).coded_picture_number as usize }
     }
 
     #[inline]
-    #[cfg(not(feature = "ffmpeg7"))]
+    #[cfg(not(feature = "ffmpeg_7_0"))]
     pub fn display_number(&self) -> usize {
         unsafe { (*self.as_ptr()).display_picture_number as usize }
     }
@@ -263,7 +265,7 @@ impl Video {
         unsafe {
             slice::from_raw_parts(
                 (*self.as_ptr()).data[index] as *const T,
-                self.stride(index) * self.plane_height(index) as usize / std::mem::size_of::<T>(),
+                self.stride(index) * self.plane_height(index) as usize / mem::size_of::<T>(),
             )
         }
     }
@@ -281,7 +283,7 @@ impl Video {
         unsafe {
             slice::from_raw_parts_mut(
                 (*self.as_mut_ptr()).data[index] as *mut T,
-                self.stride(index) * self.plane_height(index) as usize / std::mem::size_of::<T>(),
+                self.stride(index) * self.plane_height(index) as usize / mem::size_of::<T>(),
             )
         }
     }
@@ -343,8 +345,8 @@ impl Clone for Video {
     #[inline]
     fn clone_from(&mut self, source: &Self) {
         unsafe {
-            ffi::av_frame_copy(self.as_mut_ptr(), source.as_ptr());
-            ffi::av_frame_copy_props(self.as_mut_ptr(), source.as_ptr());
+            av_frame_copy(self.as_mut_ptr(), source.as_ptr());
+            av_frame_copy_props(self.as_mut_ptr(), source.as_ptr());
         }
     }
 }

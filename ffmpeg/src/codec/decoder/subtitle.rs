@@ -1,10 +1,11 @@
 use std::ops::{Deref, DerefMut};
 
+use ffi::*;
 use libc::c_int;
-use sys::ffi;
 
 use super::Opened;
-use crate::{codec::Context, packet, Error};
+use codec::Context;
+use {packet, Error};
 
 pub struct Subtitle(pub Opened);
 
@@ -12,13 +13,13 @@ impl Subtitle {
     pub fn decode<P: packet::Ref>(
         &mut self,
         packet: &P,
-        out: &mut crate::Subtitle,
+        out: &mut ::Subtitle,
     ) -> Result<bool, Error> {
         unsafe {
             let mut got: c_int = 0;
 
-            match ffi::avcodec_decode_subtitle2(
-                self.0.as_mut_ptr(),
+            match avcodec_decode_subtitle2(
+                self.as_mut_ptr(),
                 out.as_mut_ptr(),
                 &mut got,
                 packet.as_ptr() as *mut _,
@@ -46,12 +47,12 @@ impl DerefMut for Subtitle {
 
 impl AsRef<Context> for Subtitle {
     fn as_ref(&self) -> &Context {
-        self.0.as_ref()
+        self
     }
 }
 
 impl AsMut<Context> for Subtitle {
     fn as_mut(&mut self) -> &mut Context {
-        self.0.as_mut()
+        &mut self.0
     }
 }

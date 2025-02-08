@@ -4,8 +4,9 @@ use std::ptr;
 use std::slice;
 use std::str::from_utf8_unchecked;
 
+use ffi::AVSampleFormat::*;
+use ffi::*;
 use libc::{c_int, c_void};
-use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Sample {
@@ -85,10 +86,6 @@ impl From<AVSampleFormat> for Sample {
             AV_SAMPLE_FMT_DBLP => Sample::F64(Type::Planar),
 
             AV_SAMPLE_FMT_NB => Sample::None,
-            _ => {
-                eprintln!("Unknown value: {}", value);
-                Sample::None
-            }
         }
     }
 }

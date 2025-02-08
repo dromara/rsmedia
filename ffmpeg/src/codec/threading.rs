@@ -1,11 +1,11 @@
+use ffi::*;
 use libc::c_int;
-use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub struct Config {
     pub kind: Type,
     pub count: usize,
-    #[cfg(feature = "ffmpeg5")]
+    #[cfg(not(feature = "ffmpeg_6_0"))]
     pub safe: bool,
 }
 
@@ -24,7 +24,7 @@ impl Config {
         }
     }
 
-    #[cfg(feature = "ffmpeg5")]
+    #[cfg(not(feature = "ffmpeg_6_0"))]
     pub fn safe(value: bool) -> Self {
         Config {
             safe: value,
@@ -38,7 +38,7 @@ impl Default for Config {
         Config {
             kind: Type::None,
             count: 0,
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(not(feature = "ffmpeg_6_0"))]
             safe: false,
         }
     }
@@ -53,7 +53,7 @@ pub enum Type {
 
 impl From<c_int> for Type {
     fn from(value: c_int) -> Type {
-        match value as u32 {
+        match value {
             FF_THREAD_FRAME => Type::Frame,
             FF_THREAD_SLICE => Type::Slice,
 
@@ -66,8 +66,8 @@ impl From<Type> for c_int {
     fn from(value: Type) -> c_int {
         match value {
             Type::None => 0,
-            Type::Frame => FF_THREAD_FRAME as c_int,
-            Type::Slice => FF_THREAD_SLICE as c_int,
+            Type::Frame => FF_THREAD_FRAME,
+            Type::Slice => FF_THREAD_SLICE,
         }
     }
 }

@@ -1,6 +1,7 @@
-use sys::ffi;
+use ffi::*;
+use {DictionaryRef, Rational};
 
-use crate::{format::context::common::Context, DictionaryRef, Rational};
+use format::context::common::Context;
 
 // WARNING: index refers to the offset in the chapters array (starting from 0)
 // it is not necessarly equal to the id (which may start at 1)
@@ -9,17 +10,17 @@ pub struct Chapter<'a> {
     index: usize,
 }
 
-impl Chapter<'_> {
+impl<'a> Chapter<'a> {
     pub unsafe fn wrap(context: &Context, index: usize) -> Chapter {
         Chapter { context, index }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVChapter {
+    pub unsafe fn as_ptr(&self) -> *const AVChapter {
         *(*self.context.as_ptr()).chapters.add(self.index)
     }
 }
 
-impl Chapter<'_> {
+impl<'a> Chapter<'a> {
     pub fn index(&self) -> usize {
         self.index
     }
@@ -48,7 +49,7 @@ impl Chapter<'_> {
     }
 }
 
-impl PartialEq for Chapter<'_> {
+impl<'a> PartialEq for Chapter<'a> {
     fn eq(&self, other: &Self) -> bool {
         unsafe { self.as_ptr() == other.as_ptr() }
     }

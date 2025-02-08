@@ -13,10 +13,10 @@ pub use self::subtitle::Encoder as Subtitle;
 pub mod motion_estimation;
 pub use self::motion_estimation::MotionEstimation;
 
-// #[cfg(not(feature = "ffmpeg5"))]
-// pub mod prediction;
-// #[cfg(not(feature = "ffmpeg5"))]
-// pub use self::prediction::Prediction;
+#[cfg(not(feature = "ffmpeg_5_0"))]
+pub mod prediction;
+#[cfg(not(feature = "ffmpeg_5_0"))]
+pub use self::prediction::Prediction;
 
 pub mod comparison;
 pub use self::comparison::Comparison;
@@ -26,10 +26,10 @@ pub use self::decision::Decision;
 
 use std::ffi::CString;
 
-use crate::codec::Context;
-use crate::codec::Id;
-use crate::Codec;
-use sys::ffi::*;
+use codec::Context;
+use codec::Id;
+use ffi::*;
+use Codec;
 
 pub fn new() -> Encoder {
     Context::new().encoder()

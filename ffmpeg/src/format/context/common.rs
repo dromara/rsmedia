@@ -1,33 +1,33 @@
 use std::fmt;
+use std::mem;
 use std::ptr;
 use std::rc::Rc;
 
 use super::destructor::{self, Destructor};
+use ffi::*;
 use libc::{c_int, c_uint};
-use sys::ffi;
-
-use crate::{media, Chapter, ChapterMut, DictionaryRef, Stream, StreamMut};
+use {media, Chapter, ChapterMut, DictionaryRef, Stream, StreamMut};
 
 pub struct Context {
-    ptr: *mut ffi::AVFormatContext,
+    ptr: *mut AVFormatContext,
     dtor: Rc<Destructor>,
 }
 
 unsafe impl Send for Context {}
 
 impl Context {
-    pub unsafe fn wrap(ptr: *mut ffi::AVFormatContext, mode: destructor::Mode) -> Self {
+    pub unsafe fn wrap(ptr: *mut AVFormatContext, mode: destructor::Mode) -> Self {
         Context {
             ptr,
             dtor: Rc::new(Destructor::new(ptr, mode)),
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVFormatContext {
+    pub unsafe fn as_ptr(&self) -> *const AVFormatContext {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFormatContext {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFormatContext {
         self.ptr
     }
 
@@ -167,7 +167,7 @@ impl<'a> Best<'a> {
     {
         unsafe {
             let decoder = ptr::null_mut();
-            let index = ffi::av_find_best_stream(
+            let index = av_find_best_stream(
                 self.context.ptr,
                 kind.into(),
                 self.wanted as c_int,
@@ -190,7 +190,7 @@ pub struct StreamIter<'a> {
     current: c_uint,
 }
 
-impl StreamIter<'_> {
+impl<'a> StreamIter<'a> {
     pub fn new<'s, 'c: 's>(context: &'c Context) -> StreamIter<'s> {
         StreamIter {
             context,
@@ -249,14 +249,14 @@ impl<'a> Iterator for StreamIter<'a> {
     }
 }
 
-impl ExactSizeIterator for StreamIter<'_> {}
+impl<'a> ExactSizeIterator for StreamIter<'a> {}
 
 pub struct StreamIterMut<'a> {
     context: &'a mut Context,
     current: c_uint,
 }
 
-impl StreamIterMut<'_> {
+impl<'a> StreamIterMut<'a> {
     pub fn new<'s, 'c: 's>(context: &'c mut Context) -> StreamIterMut<'s> {
         StreamIterMut {
             context,
@@ -276,7 +276,7 @@ impl<'a> Iterator for StreamIterMut<'a> {
 
         unsafe {
             Some(StreamMut::wrap(
-                std::mem::transmute_copy(&self.context),
+                mem::transmute_copy(&self.context),
                 (self.current - 1) as usize,
             ))
         }
@@ -292,14 +292,14 @@ impl<'a> Iterator for StreamIterMut<'a> {
     }
 }
 
-impl ExactSizeIterator for StreamIterMut<'_> {}
+impl<'a> ExactSizeIterator for StreamIterMut<'a> {}
 
 pub struct ChapterIter<'a> {
     context: &'a Context,
     current: c_uint,
 }
 
-impl ChapterIter<'_> {
+impl<'a> ChapterIter<'a> {
     pub fn new<'s, 'c: 's>(context: &'c Context) -> ChapterIter<'s> {
         ChapterIter {
             context,
@@ -335,14 +335,14 @@ impl<'a> Iterator for ChapterIter<'a> {
     }
 }
 
-impl ExactSizeIterator for ChapterIter<'_> {}
+impl<'a> ExactSizeIterator for ChapterIter<'a> {}
 
 pub struct ChapterIterMut<'a> {
     context: &'a mut Context,
     current: c_uint,
 }
 
-impl ChapterIterMut<'_> {
+impl<'a> ChapterIterMut<'a> {
     pub fn new<'s, 'c: 's>(context: &'c mut Context) -> ChapterIterMut<'s> {
         ChapterIterMut {
             context,
@@ -363,7 +363,7 @@ impl<'a> Iterator for ChapterIterMut<'a> {
             self.current += 1;
 
             Some(ChapterMut::wrap(
-                std::mem::transmute_copy(&self.context),
+                mem::transmute_copy(&self.context),
                 (self.current - 1) as usize,
             ))
         }
@@ -381,7 +381,7 @@ impl<'a> Iterator for ChapterIterMut<'a> {
     }
 }
 
-impl ExactSizeIterator for ChapterIterMut<'_> {}
+impl<'a> ExactSizeIterator for ChapterIterMut<'a> {}
 
 impl fmt::Debug for Context {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {

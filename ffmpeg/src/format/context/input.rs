@@ -1,49 +1,49 @@
 use std::ffi::CString;
+use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use sys::ffi;
-
-use super::{common::Context, destructor};
-
-use crate::{util::range::Range, Error, Packet, Stream};
-
-#[cfg(not(feature = "ffmpeg5"))]
-use crate::Codec;
+use super::common::Context;
+use super::destructor;
+use ffi::*;
+use util::range::Range;
+#[cfg(not(feature = "ffmpeg_5_0"))]
+use Codec;
+use {format, Error, Packet, Stream};
 
 pub struct Input {
-    ptr: *mut ffi::AVFormatContext,
+    ptr: *mut AVFormatContext,
     ctx: Context,
 }
 
 unsafe impl Send for Input {}
 
 impl Input {
-    pub unsafe fn wrap(ptr: *mut ffi::AVFormatContext) -> Self {
+    pub unsafe fn wrap(ptr: *mut AVFormatContext) -> Self {
         Input {
             ptr,
             ctx: Context::wrap(ptr, destructor::Mode::Input),
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVFormatContext {
+    pub unsafe fn as_ptr(&self) -> *const AVFormatContext {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVFormatContext {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVFormatContext {
         self.ptr
     }
 }
 
 impl Input {
-    pub fn format(&self) -> crate::format::Input {
+    pub fn format(&self) -> format::Input {
         // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
         #[allow(clippy::unnecessary_cast)]
         unsafe {
-            crate::format::Input::wrap((*self.as_ptr()).iformat as *mut ffi::AVInputFormat)
+            format::Input::wrap((*self.as_ptr()).iformat as *mut AVInputFormat)
         }
     }
 
-    #[cfg(not(feature = "ffmpeg5"))]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn video_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).video_codec;
@@ -56,7 +56,7 @@ impl Input {
         }
     }
 
-    #[cfg(not(feature = "ffmpeg5"))]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn audio_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).audio_codec;
@@ -69,7 +69,7 @@ impl Input {
         }
     }
 
-    #[cfg(not(feature = "ffmpeg5"))]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn subtitle_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).subtitle_codec;
@@ -82,7 +82,7 @@ impl Input {
         }
     }
 
-    #[cfg(not(feature = "ffmpeg5"))]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
     pub fn data_codec(&self) -> Option<Codec> {
         unsafe {
             let ptr = (*self.as_ptr()).data_codec;
@@ -105,7 +105,7 @@ impl Input {
 
     pub fn pause(&mut self) -> Result<(), Error> {
         unsafe {
-            match ffi::av_read_pause(self.as_mut_ptr()) {
+            match av_read_pause(self.as_mut_ptr()) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -114,7 +114,7 @@ impl Input {
 
     pub fn play(&mut self) -> Result<(), Error> {
         unsafe {
-            match ffi::av_read_play(self.as_mut_ptr()) {
+            match av_read_play(self.as_mut_ptr()) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -123,7 +123,7 @@ impl Input {
 
     pub fn seek<R: Range<i64>>(&mut self, ts: i64, range: R) -> Result<(), Error> {
         unsafe {
-            match ffi::avformat_seek_file(
+            match avformat_seek_file(
                 self.as_mut_ptr(),
                 -1,
                 range.start().cloned().unwrap_or(i64::MIN),
@@ -156,7 +156,7 @@ pub struct PacketIter<'a> {
     context: &'a mut Input,
 }
 
-impl PacketIter<'_> {
+impl<'a> PacketIter<'a> {
     pub fn new(context: &mut Input) -> PacketIter {
         PacketIter { context }
     }
@@ -172,7 +172,7 @@ impl<'a> Iterator for PacketIter<'a> {
             match packet.read(self.context) {
                 Ok(..) => unsafe {
                     return Some((
-                        Stream::wrap(std::mem::transmute_copy(&self.context), packet.stream()),
+                        Stream::wrap(mem::transmute_copy(&self.context), packet.stream()),
                         packet,
                     ));
                 },
@@ -189,7 +189,7 @@ pub fn dump(ctx: &Input, index: i32, url: Option<&str>) {
     let url = url.map(|u| CString::new(u).unwrap());
 
     unsafe {
-        ffi::av_dump_format(
+        av_dump_format(
             ctx.as_ptr() as *mut _,
             index,
             url.unwrap_or_else(|| CString::new("").unwrap()).as_ptr(),

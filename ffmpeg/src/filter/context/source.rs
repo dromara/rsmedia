@@ -1,9 +1,8 @@
 use std::ptr;
 
-use sys::ffi;
-
 use super::Context;
-use crate::{Error, Frame};
+use ffi::*;
+use {Error, Frame};
 
 pub struct Source<'a> {
     ctx: &'a mut Context,
@@ -15,14 +14,14 @@ impl<'a> Source<'a> {
     }
 }
 
-impl Source<'_> {
+impl<'a> Source<'a> {
     pub fn failed_requests(&self) -> usize {
-        unsafe { ffi::av_buffersrc_get_nb_failed_requests(self.ctx.as_ptr() as *mut _) as usize }
+        unsafe { av_buffersrc_get_nb_failed_requests(self.ctx.as_ptr() as *mut _) as usize }
     }
 
     pub fn add(&mut self, frame: &Frame) -> Result<(), Error> {
         unsafe {
-            match ffi::av_buffersrc_add_frame(self.ctx.as_mut_ptr(), frame.as_ptr() as *mut _) {
+            match av_buffersrc_add_frame(self.ctx.as_mut_ptr(), frame.as_ptr() as *mut _) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -35,7 +34,7 @@ impl Source<'_> {
 
     pub fn close(&mut self, pts: i64) -> Result<(), Error> {
         unsafe {
-            match ffi::av_buffersrc_close(self.ctx.as_mut_ptr(), pts, 0) {
+            match av_buffersrc_close(self.ctx.as_mut_ptr(), pts, 0) {
                 0 => Ok(()),
                 e => Err(Error::from(e)),
             }

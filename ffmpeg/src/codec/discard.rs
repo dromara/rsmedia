@@ -1,4 +1,5 @@
-use sys::ffi;
+use ffi::AVDiscard::*;
+use ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Discard {
@@ -11,34 +12,30 @@ pub enum Discard {
     All,
 }
 
-impl From<ffi::AVDiscard> for Discard {
-    fn from(value: ffi::AVDiscard) -> Self {
+impl From<AVDiscard> for Discard {
+    fn from(value: AVDiscard) -> Self {
         match value {
-            ffi::AVDISCARD_NONE => Discard::None,
-            ffi::AVDISCARD_DEFAULT => Discard::Default,
-            ffi::AVDISCARD_NONREF => Discard::NonReference,
-            ffi::AVDISCARD_BIDIR => Discard::Bidirectional,
-            ffi::AVDISCARD_NONINTRA => Discard::NonIntra,
-            ffi::AVDISCARD_NONKEY => Discard::NonKey,
-            ffi::AVDISCARD_ALL => Discard::All,
-            _ => {
-                eprintln!("Unknown Discard variant: {}", value);
-                Discard::None
-            }
+            AVDISCARD_NONE => Discard::None,
+            AVDISCARD_DEFAULT => Discard::Default,
+            AVDISCARD_NONREF => Discard::NonReference,
+            AVDISCARD_BIDIR => Discard::Bidirectional,
+            AVDISCARD_NONINTRA => Discard::NonIntra,
+            AVDISCARD_NONKEY => Discard::NonKey,
+            AVDISCARD_ALL => Discard::All,
         }
     }
 }
 
-impl From<Discard> for ffi::AVDiscard {
-    fn from(value: Discard) -> ffi::AVDiscard {
+impl From<Discard> for AVDiscard {
+    fn from(value: Discard) -> AVDiscard {
         match value {
-            Discard::None => ffi::AVDISCARD_NONE,
-            Discard::Default => ffi::AVDISCARD_DEFAULT,
-            Discard::NonReference => ffi::AVDISCARD_NONREF,
-            Discard::Bidirectional => ffi::AVDISCARD_BIDIR,
-            Discard::NonIntra => ffi::AVDISCARD_NONINTRA,
-            Discard::NonKey => ffi::AVDISCARD_NONKEY,
-            Discard::All => ffi::AVDISCARD_ALL,
+            Discard::None => AVDISCARD_NONE,
+            Discard::Default => AVDISCARD_DEFAULT,
+            Discard::NonReference => AVDISCARD_NONREF,
+            Discard::Bidirectional => AVDISCARD_BIDIR,
+            Discard::NonIntra => AVDISCARD_NONINTRA,
+            Discard::NonKey => AVDISCARD_NONKEY,
+            Discard::All => AVDISCARD_ALL,
         }
     }
 }

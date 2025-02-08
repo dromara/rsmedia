@@ -2,13 +2,13 @@ use std::any::Any;
 use std::ptr;
 use std::rc::Rc;
 
-use libc::c_int;
-use sys::ffi::*;
-
 use super::decoder::Decoder;
 use super::encoder::Encoder;
 use super::{threading, Compliance, Debug, Flags, Id, Parameters};
-use crate::{media, Codec, Error, Rational};
+use ffi::*;
+use libc::c_int;
+use media;
+use {Codec, Error, Rational};
 
 pub struct Context {
     ptr: *mut AVCodecContext,
@@ -110,7 +110,7 @@ impl Context {
         unsafe {
             (*self.as_mut_ptr()).thread_type = config.kind.into();
             (*self.as_mut_ptr()).thread_count = config.count as c_int;
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(not(feature = "ffmpeg_6_0"))]
             {
                 (*self.as_mut_ptr()).thread_safe_callbacks = if config.safe { 1 } else { 0 };
             }
@@ -122,7 +122,7 @@ impl Context {
             threading::Config {
                 kind: threading::Type::from((*self.as_ptr()).active_thread_type),
                 count: (*self.as_ptr()).thread_count as usize,
-                #[cfg(feature = "ffmpeg5")]
+                #[cfg(not(feature = "ffmpeg_6_0"))]
                 safe: (*self.as_ptr()).thread_safe_callbacks != 0,
             }
         }
@@ -181,19 +181,19 @@ impl Drop for Context {
     }
 }
 
-// #[cfg(not(feature = "ffmpeg5"))]
-// impl Clone for Context {
-//     fn clone(&self) -> Self {
-//         let mut ctx = Context::new();
-//         ctx.clone_from(self);
-//
-//         ctx
-//     }
-//
-//     fn clone_from(&mut self, source: &Self) {
-//         unsafe {
-//             // Removed in ffmpeg >= 5.0.
-//             avcodec_copy_context(self.as_mut_ptr(), source.as_ptr());
-//         }
-//     }
-// }
+#[cfg(not(feature = "ffmpeg_5_0"))]
+impl Clone for Context {
+    fn clone(&self) -> Self {
+        let mut ctx = Context::new();
+        ctx.clone_from(self);
+
+        ctx
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        unsafe {
+            // Removed in ffmpeg >= 5.0.
+            avcodec_copy_context(self.as_mut_ptr(), source.as_ptr());
+        }
+    }
+}

@@ -2,10 +2,11 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::slice;
 use std::str::from_utf8_unchecked;
-use sys::ffi::*;
 
 use super::Frame;
-use crate::DictionaryRef;
+use ffi::AVFrameSideDataType::*;
+use ffi::*;
+use DictionaryRef;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Type {
@@ -27,45 +28,46 @@ pub enum Type {
     ContentLightLevel,
     IccProfile,
 
-    // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+    #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
     QPTableProperties,
-    // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+    #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
     QPTableData,
 
-    // #[cfg(feature = "ffmpeg_4_1")]
+    #[cfg(feature = "ffmpeg_4_1")]
     S12M_TIMECODE,
 
-    // #[cfg(feature = "ffmpeg_4_2")]
+    #[cfg(feature = "ffmpeg_4_2")]
     DYNAMIC_HDR_PLUS,
-    // #[cfg(feature = "ffmpeg_4_2")]
+    #[cfg(feature = "ffmpeg_4_2")]
     REGIONS_OF_INTEREST,
 
-    // #[cfg(feature = "ffmpeg_4_3")]
+    #[cfg(feature = "ffmpeg_4_3")]
     VIDEO_ENC_PARAMS,
 
-    // #[cfg(feature = "ffmpeg_4_4")]
+    #[cfg(feature = "ffmpeg_4_4")]
     SEI_UNREGISTERED,
-    // #[cfg(feature = "ffmpeg_4_4")]
+    #[cfg(feature = "ffmpeg_4_4")]
     FILM_GRAIN_PARAMS,
 
-    #[cfg(feature = "ffmpeg5")]
+    #[cfg(feature = "ffmpeg_5_0")]
     DETECTION_BBOXES,
-    #[cfg(feature = "ffmpeg5")]
+    #[cfg(feature = "ffmpeg_5_0")]
     DOVI_RPU_BUFFER,
-    #[cfg(feature = "ffmpeg5")]
+    #[cfg(feature = "ffmpeg_5_0")]
     DOVI_METADATA,
 
-    #[cfg(feature = "ffmpeg5")]
+    #[cfg(feature = "ffmpeg_5_1")]
     DYNAMIC_HDR_VIVID,
 
-    #[cfg(feature = "ffmpeg6")]
+    #[cfg(feature = "ffmpeg_6_0")]
     AMBIENT_VIEWING_ENVIRONMENT,
-    #[cfg(feature = "ffmpeg6")]
+
+    #[cfg(feature = "ffmpeg_6_1")]
     VIDEO_HINT,
 
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_1")]
     LCEVC,
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_1")]
     VIEW_ID,
 }
 
@@ -100,51 +102,46 @@ impl From<AVFrameSideDataType> for Type {
             AV_FRAME_DATA_CONTENT_LIGHT_LEVEL => Type::ContentLightLevel,
             AV_FRAME_DATA_ICC_PROFILE => Type::IccProfile,
 
-            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
-            // AV_FRAME_DATA_QP_TABLE_PROPERTIES => Type::QPTableProperties,
-            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
-            // AV_FRAME_DATA_QP_TABLE_DATA => Type::QPTableData,
-            // #[cfg(feature = "ffmpeg_4_1")]
+            #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            AV_FRAME_DATA_QP_TABLE_PROPERTIES => Type::QPTableProperties,
+            #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            AV_FRAME_DATA_QP_TABLE_DATA => Type::QPTableData,
+            #[cfg(feature = "ffmpeg_4_1")]
             AV_FRAME_DATA_S12M_TIMECODE => Type::S12M_TIMECODE,
 
-            // #[cfg(feature = "ffmpeg_4_2")]
+            #[cfg(feature = "ffmpeg_4_2")]
             AV_FRAME_DATA_DYNAMIC_HDR_PLUS => Type::DYNAMIC_HDR_PLUS,
-            // #[cfg(feature = "ffmpeg_4_2")]
+            #[cfg(feature = "ffmpeg_4_2")]
             AV_FRAME_DATA_REGIONS_OF_INTEREST => Type::REGIONS_OF_INTEREST,
 
-            // #[cfg(feature = "ffmpeg_4_3")]
+            #[cfg(feature = "ffmpeg_4_3")]
             AV_FRAME_DATA_VIDEO_ENC_PARAMS => Type::VIDEO_ENC_PARAMS,
 
-            // #[cfg(feature = "ffmpeg_4_4")]
+            #[cfg(feature = "ffmpeg_4_4")]
             AV_FRAME_DATA_SEI_UNREGISTERED => Type::SEI_UNREGISTERED,
-            // #[cfg(feature = "ffmpeg_4_4")]
+            #[cfg(feature = "ffmpeg_4_4")]
             AV_FRAME_DATA_FILM_GRAIN_PARAMS => Type::FILM_GRAIN_PARAMS,
 
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_0")]
             AV_FRAME_DATA_DETECTION_BBOXES => Type::DETECTION_BBOXES,
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_0")]
             AV_FRAME_DATA_DOVI_RPU_BUFFER => Type::DOVI_RPU_BUFFER,
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_0")]
             AV_FRAME_DATA_DOVI_METADATA => Type::DOVI_METADATA,
 
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_1")]
             AV_FRAME_DATA_DYNAMIC_HDR_VIVID => Type::DYNAMIC_HDR_VIVID,
 
-            #[cfg(feature = "ffmpeg6")]
+            #[cfg(feature = "ffmpeg_6_0")]
             AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT => Type::AMBIENT_VIEWING_ENVIRONMENT,
 
-            #[cfg(feature = "ffmpeg6")]
+            #[cfg(feature = "ffmpeg_6_1")]
             AV_FRAME_DATA_VIDEO_HINT => Type::VIDEO_HINT,
 
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             AV_FRAME_DATA_LCEVC => Type::LCEVC,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             AV_FRAME_DATA_VIEW_ID => Type::VIEW_ID,
-
-            _ => {
-                eprintln!("Unknown AVFrameSideDataType: {}", value);
-                Type::PanScan
-            }
         }
     }
 }
@@ -171,45 +168,45 @@ impl From<Type> for AVFrameSideDataType {
             Type::ContentLightLevel => AV_FRAME_DATA_CONTENT_LIGHT_LEVEL,
             Type::IccProfile => AV_FRAME_DATA_ICC_PROFILE,
 
-            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
-            Type::QPTableProperties => 0, //? AV_FRAME_DATA_QP_TABLE_PROPERTIES,
-            // #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
-            Type::QPTableData => 0, //? AV_FRAME_DATA_QP_TABLE_DATA,
-            // #[cfg(feature = "ffmpeg_4_1")]
+            #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            Type::QPTableProperties => AV_FRAME_DATA_QP_TABLE_PROPERTIES,
+            #[cfg(all(feature = "ffmpeg_4_0", not(feature = "ffmpeg_5_0")))]
+            Type::QPTableData => AV_FRAME_DATA_QP_TABLE_DATA,
+            #[cfg(feature = "ffmpeg_4_1")]
             Type::S12M_TIMECODE => AV_FRAME_DATA_S12M_TIMECODE,
 
-            // #[cfg(feature = "ffmpeg_4_2")]
+            #[cfg(feature = "ffmpeg_4_2")]
             Type::DYNAMIC_HDR_PLUS => AV_FRAME_DATA_DYNAMIC_HDR_PLUS,
-            // #[cfg(feature = "ffmpeg_4_2")]
+            #[cfg(feature = "ffmpeg_4_2")]
             Type::REGIONS_OF_INTEREST => AV_FRAME_DATA_REGIONS_OF_INTEREST,
 
-            // #[cfg(feature = "ffmpeg_4_3")]
+            #[cfg(feature = "ffmpeg_4_3")]
             Type::VIDEO_ENC_PARAMS => AV_FRAME_DATA_VIDEO_ENC_PARAMS,
 
-            // #[cfg(feature = "ffmpeg_4_4")]
+            #[cfg(feature = "ffmpeg_4_4")]
             Type::SEI_UNREGISTERED => AV_FRAME_DATA_SEI_UNREGISTERED,
-            // #[cfg(feature = "ffmpeg_4_4")]
+            #[cfg(feature = "ffmpeg_4_4")]
             Type::FILM_GRAIN_PARAMS => AV_FRAME_DATA_FILM_GRAIN_PARAMS,
 
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_0")]
             Type::DETECTION_BBOXES => AV_FRAME_DATA_DETECTION_BBOXES,
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_0")]
             Type::DOVI_RPU_BUFFER => AV_FRAME_DATA_DOVI_RPU_BUFFER,
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_0")]
             Type::DOVI_METADATA => AV_FRAME_DATA_DOVI_METADATA,
 
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_1")]
             Type::DYNAMIC_HDR_VIVID => AV_FRAME_DATA_DYNAMIC_HDR_VIVID,
 
-            #[cfg(feature = "ffmpeg6")]
+            #[cfg(feature = "ffmpeg_6_0")]
             Type::AMBIENT_VIEWING_ENVIRONMENT => AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT,
 
-            #[cfg(feature = "ffmpeg6")]
+            #[cfg(feature = "ffmpeg_6_1")]
             Type::VIDEO_HINT => AV_FRAME_DATA_VIDEO_HINT,
 
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             Type::LCEVC => AV_FRAME_DATA_LCEVC,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             Type::VIEW_ID => AV_FRAME_DATA_VIEW_ID,
         }
     }
@@ -221,7 +218,7 @@ pub struct SideData<'a> {
     _marker: PhantomData<&'a Frame>,
 }
 
-impl SideData<'_> {
+impl<'a> SideData<'a> {
     #[inline(always)]
     pub unsafe fn wrap(ptr: *mut AVFrameSideData) -> Self {
         SideData {
@@ -241,7 +238,7 @@ impl SideData<'_> {
     }
 }
 
-impl SideData<'_> {
+impl<'a> SideData<'a> {
     #[inline]
     pub fn kind(&self) -> Type {
         unsafe { Type::from((*self.as_ptr()).type_) }

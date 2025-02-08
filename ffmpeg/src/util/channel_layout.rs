@@ -1,5 +1,4 @@
-use super::*;
-use sys::ffi::*;
+use ffi::*;
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -31,7 +30,7 @@ impl std::fmt::Debug for ChannelLayout {
 macro_rules! define_layout {
     ($name:ident, $nb:expr, $mask:expr) => {
         pub const $name: ChannelLayout = ChannelLayout(AVChannelLayout {
-            order: AV_CHANNEL_ORDER_NATIVE,
+            order: AVChannelOrder::AV_CHANNEL_ORDER_NATIVE,
             nb_channels: $nb,
             u: AVChannelLayout__bindgen_ty_1 { mask: $mask },
             opaque: std::ptr::null_mut(),
@@ -100,7 +99,7 @@ impl ChannelLayout {
     // See https://ffmpeg.org/doxygen/trunk/group__lavu__audio__channels.html#gaa4a685b5c38835392552a7f96ee24a3e,
     // AV_CH_UNUSED
     pub fn is_empty(&self) -> bool {
-        self.0.order == AV_CHANNEL_ORDER_UNSPEC
+        self.0.order == AVChannelOrder::AV_CHANNEL_ORDER_UNSPEC
     }
 }
 

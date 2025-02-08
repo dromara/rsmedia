@@ -1,12 +1,9 @@
-use libc::c_int;
-use sys::ffi::*;
-
 use super::Disposition;
-use crate::{
-    codec::{self, packet},
-    format::context::common::Context,
-    DictionaryRef, Discard, Rational,
-};
+use codec::{self, packet};
+use ffi::*;
+use format::context::common::Context;
+use libc::c_int;
+use {DictionaryRef, Discard, Rational};
 
 #[derive(Debug)]
 pub struct Stream<'a> {
@@ -14,7 +11,7 @@ pub struct Stream<'a> {
     index: usize,
 }
 
-impl Stream<'_> {
+impl<'a> Stream<'a> {
     pub unsafe fn wrap(context: &Context, index: usize) -> Stream {
         Stream { context, index }
     }
@@ -24,15 +21,15 @@ impl Stream<'_> {
     }
 }
 
-impl Stream<'_> {
+impl<'a> Stream<'a> {
     pub fn id(&self) -> i32 {
         unsafe { (*self.as_ptr()).id }
     }
 
-    // #[cfg(not(feature = "ffmpeg5"))]
-    // pub fn codec(&self) -> codec::Context {
-    //     unsafe { codec::Context::wrap((*self.as_ptr()).codec, Some(self.context.destructor())) }
-    // }
+    #[cfg(not(feature = "ffmpeg_5_0"))]
+    pub fn codec(&self) -> codec::Context {
+        unsafe { codec::Context::wrap((*self.as_ptr()).codec, Some(self.context.destructor())) }
+    }
 
     pub fn parameters(&self) -> codec::Parameters {
         unsafe {
@@ -85,20 +82,20 @@ impl Stream<'_> {
     }
 }
 
-impl PartialEq for Stream<'_> {
+impl<'a> PartialEq for Stream<'a> {
     fn eq(&self, other: &Self) -> bool {
         unsafe { self.as_ptr() == other.as_ptr() }
     }
 }
 
-impl Eq for Stream<'_> {}
+impl<'a> Eq for Stream<'a> {}
 
 pub struct SideDataIter<'a> {
     stream: &'a Stream<'a>,
     current: c_int,
 }
 
-impl SideDataIter<'_> {
+impl<'a> SideDataIter<'a> {
     pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> SideDataIter<'sd> {
         SideDataIter { stream, current: 0 }
     }
@@ -135,4 +132,4 @@ impl<'a> Iterator for SideDataIter<'a> {
     }
 }
 
-impl ExactSizeIterator for SideDataIter<'_> {}
+impl<'a> ExactSizeIterator for SideDataIter<'a> {}

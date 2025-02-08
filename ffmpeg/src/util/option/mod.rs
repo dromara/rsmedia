@@ -1,7 +1,8 @@
 mod traits;
 pub use self::traits::{Gettable, Iterable, Settable, Target};
 
-use sys::ffi::*;
+use ffi::AVOptionType::*;
+use ffi::*;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Type {
@@ -23,12 +24,12 @@ pub enum Type {
     Duration,
     Color,
     ChannelLayout,
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_0")]
     FlagArray,
     c_ulong,
     bool,
 
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_1")]
     UInt,
 }
 
@@ -54,21 +55,15 @@ impl From<AVOptionType> for Type {
             AV_OPT_TYPE_VIDEO_RATE => Type::VideoRate,
             AV_OPT_TYPE_DURATION => Type::Duration,
             AV_OPT_TYPE_COLOR => Type::Color,
-
-            #[cfg(not(feature = "ffmpeg7"))]
+            #[cfg(not(feature = "ffmpeg_7_0"))]
             AV_OPT_TYPE_CHANNEL_LAYOUT => Type::ChannelLayout,
-            #[cfg(feature = "ffmpeg5")]
+            #[cfg(feature = "ffmpeg_5_1")]
             AV_OPT_TYPE_CHLAYOUT => Type::ChannelLayout,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_0")]
             AV_OPT_TYPE_FLAG_ARRAY => Type::FlagArray,
 
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             AV_OPT_TYPE_UINT => Type::UInt,
-
-            _ => {
-                eprintln!("Unknown Type variant: {}", value);
-                Type::Flags
-            }
         }
     }
 }
@@ -95,14 +90,14 @@ impl From<Type> for AVOptionType {
             Type::VideoRate => AV_OPT_TYPE_VIDEO_RATE,
             Type::Duration => AV_OPT_TYPE_DURATION,
             Type::Color => AV_OPT_TYPE_COLOR,
-            #[cfg(not(feature = "ffmpeg7"))]
+            #[cfg(not(feature = "ffmpeg_7_0"))]
             Type::ChannelLayout => AV_OPT_TYPE_CHANNEL_LAYOUT,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_0")]
             Type::ChannelLayout => AV_OPT_TYPE_CHLAYOUT,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_0")]
             Type::FlagArray => AV_OPT_TYPE_FLAG_ARRAY,
 
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             Type::UInt => AV_OPT_TYPE_UINT,
         }
     }

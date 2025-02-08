@@ -1,9 +1,10 @@
+use std::mem;
 use std::ops::Deref;
 
-use sys::ffi;
-
 use super::Stream;
-use crate::{codec, format::context::common::Context, Dictionary, Rational};
+use ffi::*;
+use format::context::common::Context;
+use {codec, Dictionary, Rational};
 
 pub struct StreamMut<'a> {
     context: &'a mut Context,
@@ -12,22 +13,22 @@ pub struct StreamMut<'a> {
     immutable: Stream<'a>,
 }
 
-impl StreamMut<'_> {
+impl<'a> StreamMut<'a> {
     pub unsafe fn wrap(context: &mut Context, index: usize) -> StreamMut {
         StreamMut {
-            context: std::mem::transmute_copy(&context),
+            context: mem::transmute_copy(&context),
             index,
 
-            immutable: Stream::wrap(std::mem::transmute_copy(&context), index),
+            immutable: Stream::wrap(mem::transmute_copy(&context), index),
         }
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVStream {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVStream {
         *(*self.context.as_mut_ptr()).streams.add(self.index)
     }
 }
 
-impl StreamMut<'_> {
+impl<'a> StreamMut<'a> {
     pub fn set_time_base<R: Into<Rational>>(&mut self, value: R) {
         unsafe {
             (*self.as_mut_ptr()).time_base = value.into().into();
@@ -50,7 +51,7 @@ impl StreamMut<'_> {
         let parameters = parameters.into();
 
         unsafe {
-            ffi::avcodec_parameters_copy((*self.as_mut_ptr()).codecpar, parameters.as_ptr());
+            avcodec_parameters_copy((*self.as_mut_ptr()).codecpar, parameters.as_ptr());
         }
     }
 

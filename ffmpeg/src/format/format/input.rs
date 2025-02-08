@@ -1,22 +1,22 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use sys::ffi;
+use ffi::*;
 
 pub struct Input {
-    ptr: *mut ffi::AVInputFormat,
+    ptr: *mut AVInputFormat,
 }
 
 impl Input {
-    pub unsafe fn wrap(ptr: *mut ffi::AVInputFormat) -> Self {
+    pub unsafe fn wrap(ptr: *mut AVInputFormat) -> Self {
         Input { ptr }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVInputFormat {
+    pub unsafe fn as_ptr(&self) -> *const AVInputFormat {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVInputFormat {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut AVInputFormat {
         self.ptr
     }
 }

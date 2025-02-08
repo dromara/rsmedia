@@ -1,4 +1,5 @@
-use sys::ffi::*;
+use ffi::AVChromaLocation::*;
+use ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Location {
@@ -22,10 +23,6 @@ impl From<AVChromaLocation> for Location {
             AVCHROMA_LOC_BOTTOMLEFT => Location::BottomLeft,
             AVCHROMA_LOC_BOTTOM => Location::Bottom,
             AVCHROMA_LOC_NB => Location::Unspecified,
-            _ => {
-                eprintln!("Unknown Location variant: {}", value);
-                Location::Unspecified
-            }
         }
     }
 }

@@ -1,7 +1,8 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use sys::ffi::*;
+use ffi::AVColorSpace::*;
+use ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Space {
@@ -22,11 +23,11 @@ pub enum Space {
     ChromaDerivedCL,
     ICTCP,
 
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_1")]
     IPT_C2,
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_1")]
     YCGCO_RE,
-    #[cfg(feature = "ffmpeg7")]
+    #[cfg(feature = "ffmpeg_7_1")]
     YCGCO_RO,
 }
 
@@ -66,17 +67,12 @@ impl From<AVColorSpace> for Space {
             AVCOL_SPC_CHROMA_DERIVED_CL => Space::ChromaDerivedCL,
             AVCOL_SPC_ICTCP => Space::ICTCP,
 
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             AVCOL_SPC_IPT_C2 => Space::IPT_C2,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             AVCOL_SPC_YCGCO_RE => Space::YCGCO_RE,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             AVCOL_SPC_YCGCO_RO => Space::YCGCO_RO,
-
-            _ => {
-                eprintln!("Unknown color space: {}", value);
-                Space::Unspecified
-            }
         }
     }
 }
@@ -101,11 +97,11 @@ impl From<Space> for AVColorSpace {
             Space::ChromaDerivedCL => AVCOL_SPC_CHROMA_DERIVED_CL,
             Space::ICTCP => AVCOL_SPC_ICTCP,
 
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             Space::IPT_C2 => AVCOL_SPC_IPT_C2,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             Space::YCGCO_RE => AVCOL_SPC_YCGCO_RE,
-            #[cfg(feature = "ffmpeg7")]
+            #[cfg(feature = "ffmpeg_7_1")]
             Space::YCGCO_RO => AVCOL_SPC_YCGCO_RO,
         }
     }

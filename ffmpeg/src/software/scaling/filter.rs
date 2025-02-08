@@ -1,16 +1,16 @@
 use super::Vector;
-use sys::ffi;
+use ffi::*;
 
 pub struct Filter {
-    ptr: *mut ffi::SwsFilter,
+    ptr: *mut SwsFilter,
 }
 
 impl Filter {
-    pub unsafe fn as_ptr(&self) -> *const ffi::SwsFilter {
+    pub unsafe fn as_ptr(&self) -> *const SwsFilter {
         self.ptr as *const _
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::SwsFilter {
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut SwsFilter {
         self.ptr
     }
 }
@@ -26,7 +26,7 @@ impl Filter {
     ) -> Self {
         unsafe {
             Filter {
-                ptr: ffi::sws_getDefaultFilter(
+                ptr: sws_getDefaultFilter(
                     luma_g_blur,
                     chroma_g_blur,
                     luma_sharpen,
@@ -85,7 +85,7 @@ impl Default for Filter {
 impl Drop for Filter {
     fn drop(&mut self) {
         unsafe {
-            ffi::sws_freeFilter(self.as_mut_ptr());
+            sws_freeFilter(self.as_mut_ptr());
         }
     }
 }

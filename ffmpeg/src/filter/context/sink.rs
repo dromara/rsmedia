@@ -1,8 +1,7 @@
-use libc::c_int;
-use sys::ffi;
-
 use super::Context;
-use crate::{Error, Frame, Rational};
+use ffi::*;
+use libc::c_int;
+use {Error, Frame, Rational};
 
 pub struct Sink<'a> {
     ctx: &'a mut Context,
@@ -14,10 +13,10 @@ impl<'a> Sink<'a> {
     }
 }
 
-impl Sink<'_> {
+impl<'a> Sink<'a> {
     pub fn frame(&mut self, frame: &mut Frame) -> Result<(), Error> {
         unsafe {
-            match ffi::av_buffersink_get_frame(self.ctx.as_mut_ptr(), frame.as_mut_ptr()) {
+            match av_buffersink_get_frame(self.ctx.as_mut_ptr(), frame.as_mut_ptr()) {
                 n if n >= 0 => Ok(()),
                 e => Err(Error::from(e)),
             }
@@ -26,7 +25,7 @@ impl Sink<'_> {
 
     pub fn samples(&mut self, frame: &mut Frame, samples: usize) -> Result<(), Error> {
         unsafe {
-            match ffi::av_buffersink_get_samples(
+            match av_buffersink_get_samples(
                 self.ctx.as_mut_ptr(),
                 frame.as_mut_ptr(),
                 samples as c_int,
@@ -39,11 +38,11 @@ impl Sink<'_> {
 
     pub fn set_frame_size(&mut self, value: u32) {
         unsafe {
-            ffi::av_buffersink_set_frame_size(self.ctx.as_mut_ptr(), value);
+            av_buffersink_set_frame_size(self.ctx.as_mut_ptr(), value);
         }
     }
 
     pub fn time_base(&self) -> Rational {
-        unsafe { ffi::av_buffersink_get_time_base(self.ctx.as_ptr()) }.into()
+        unsafe { av_buffersink_get_time_base(self.ctx.as_ptr()) }.into()
     }
 }

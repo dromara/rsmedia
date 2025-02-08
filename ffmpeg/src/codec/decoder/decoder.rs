@@ -1,20 +1,17 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
-use sys::ffi;
-
 use super::{Audio, Check, Conceal, Opened, Subtitle, Video};
-use crate::{
-    codec::{traits, Context},
-    Dictionary, Discard, Error, Rational,
-};
+use codec::{traits, Context};
+use ffi::*;
+use {Dictionary, Discard, Error, Rational};
 
 pub struct Decoder(pub Context);
 
 impl Decoder {
     pub fn open(mut self) -> Result<Opened, Error> {
         unsafe {
-            match ffi::avcodec_open2(self.as_mut_ptr(), ptr::null(), ptr::null_mut()) {
+            match avcodec_open2(self.as_mut_ptr(), ptr::null(), ptr::null_mut()) {
                 0 => Ok(Opened(self)),
                 e => Err(Error::from(e)),
             }
@@ -24,7 +21,7 @@ impl Decoder {
     pub fn open_as<D: traits::Decoder>(mut self, codec: D) -> Result<Opened, Error> {
         unsafe {
             if let Some(codec) = codec.decoder() {
-                match ffi::avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), ptr::null_mut()) {
+                match avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), ptr::null_mut()) {
                     0 => Ok(Opened(self)),
                     e => Err(Error::from(e)),
                 }
@@ -42,7 +39,7 @@ impl Decoder {
         unsafe {
             if let Some(codec) = codec.decoder() {
                 let mut opts = options.disown();
-                let res = ffi::avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), &mut opts);
+                let res = avcodec_open2(self.as_mut_ptr(), codec.as_ptr(), &mut opts);
 
                 Dictionary::own(opts);
 

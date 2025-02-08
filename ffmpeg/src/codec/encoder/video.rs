@@ -1,18 +1,17 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
+use ffi::*;
 use libc::{c_float, c_int};
-use sys::ffi::*;
 
 use super::Encoder as Super;
 use super::{Comparison, Decision};
-// #[cfg(not(feature = "ffmpeg5"))]
-// use super::{MotionEstimation, Prediction};
-
-use crate::codec::{traits, Context};
-use crate::{color, format, Dictionary, Error, Rational};
-// #[cfg(not(feature = "ffmpeg5"))]
-// use crate::{frame, packet};
+#[cfg(not(feature = "ffmpeg_5_0"))]
+use super::{MotionEstimation, Prediction};
+use codec::{traits, Context};
+use {color, format, Dictionary, Error, Rational};
+#[cfg(not(feature = "ffmpeg_5_0"))]
+use {frame, packet};
 
 pub struct Video(pub Super);
 
@@ -122,13 +121,13 @@ impl Video {
         unsafe { format::Pixel::from((*self.as_ptr()).pix_fmt) }
     }
 
-    // #[inline]
-    // #[cfg(feature = "ff_api_motion_est")]
-    // pub fn set_motion_estimation(&mut self, value: MotionEstimation) {
-    //     unsafe {
-    //         (*self.as_mut_ptr()).me_method = value.into();
-    //     }
-    // }
+    #[inline]
+    #[cfg(feature = "ff_api_motion_est")]
+    pub fn set_motion_estimation(&mut self, value: MotionEstimation) {
+        unsafe {
+            (*self.as_mut_ptr()).me_method = value.into();
+        }
+    }
 
     #[inline]
     pub fn set_max_b_frames(&mut self, value: usize) {
@@ -200,13 +199,13 @@ impl Video {
         }
     }
 
-    // #[inline]
-    // #[cfg(not(feature = "ffmpeg5"))]
-    // pub fn set_prediction(&mut self, value: Prediction) {
-    //     unsafe {
-    //         (*self.as_mut_ptr()).prediction_method = value.into();
-    //     }
-    // }
+    #[inline]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
+    pub fn set_prediction(&mut self, value: Prediction) {
+        unsafe {
+            (*self.as_mut_ptr()).prediction_method = value.into();
+        }
+    }
 
     #[inline]
     pub fn set_aspect_ratio<R: Into<Rational>>(&mut self, value: R) {
@@ -257,13 +256,13 @@ impl Video {
         }
     }
 
-    // #[inline]
-    // #[cfg(not(feature = "ffmpeg5"))]
-    // pub fn set_pre_me(&mut self, value: MotionEstimation) {
-    //     unsafe {
-    //         (*self.as_mut_ptr()).pre_me = value.into();
-    //     }
-    // }
+    #[inline]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
+    pub fn set_pre_me(&mut self, value: MotionEstimation) {
+        unsafe {
+            (*self.as_mut_ptr()).pre_me = value.into();
+        }
+    }
 
     #[inline]
     pub fn set_me_pre_comparison(&mut self, value: Comparison) {
@@ -293,29 +292,29 @@ impl Video {
         }
     }
 
-    // #[inline]
-    // #[cfg(feature = "ff_api_quant_bias")]
-    // pub fn set_intra_quant_bias(&mut self, value: Option<usize>) {
-    //     unsafe {
-    //         if let Some(value) = value {
-    //             (*self.as_mut_ptr()).intra_quant_bias = value as c_int;
-    //         } else {
-    //             (*self.as_mut_ptr()).intra_quant_bias = FF_DEFAULT_QUANT_BIAS;
-    //         }
-    //     }
-    // }
+    #[inline]
+    #[cfg(feature = "ff_api_quant_bias")]
+    pub fn set_intra_quant_bias(&mut self, value: Option<usize>) {
+        unsafe {
+            if let Some(value) = value {
+                (*self.as_mut_ptr()).intra_quant_bias = value as c_int;
+            } else {
+                (*self.as_mut_ptr()).intra_quant_bias = FF_DEFAULT_QUANT_BIAS;
+            }
+        }
+    }
 
-    // #[inline]
-    // #[cfg(feature = "ff_api_quant_bias")]
-    // pub fn set_inter_quant_bias(&mut self, value: Option<usize>) {
-    //     unsafe {
-    //         if let Some(value) = value {
-    //             (*self.as_mut_ptr()).inter_quant_bias = value as c_int;
-    //         } else {
-    //             (*self.as_mut_ptr()).inter_quant_bias = FF_DEFAULT_QUANT_BIAS;
-    //         }
-    //     }
-    // }
+    #[inline]
+    #[cfg(feature = "ff_api_quant_bias")]
+    pub fn set_inter_quant_bias(&mut self, value: Option<usize>) {
+        unsafe {
+            if let Some(value) = value {
+                (*self.as_mut_ptr()).inter_quant_bias = value as c_int;
+            } else {
+                (*self.as_mut_ptr()).inter_quant_bias = FF_DEFAULT_QUANT_BIAS;
+            }
+        }
+    }
 
     #[inline]
     pub fn set_mb_decision(&mut self, value: Decision) {
@@ -422,6 +421,63 @@ impl AsMut<Context> for Video {
 pub struct Encoder(pub Video);
 
 impl Encoder {
+    #[deprecated(
+        since = "4.4.0",
+        note = "Underlying API avcodec_encode_video2 has been deprecated since FFmpeg 3.1; \
+        consider switching to send_frame() and receive_packet()"
+    )]
+    #[inline]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
+    pub fn encode<P: packet::Mut>(
+        &mut self,
+        frame: &frame::Video,
+        out: &mut P,
+    ) -> Result<bool, Error> {
+        unsafe {
+            if self.format() != frame.format()
+                || self.width() != frame.width()
+                || self.height() != frame.height()
+            {
+                return Err(Error::InvalidData);
+            }
+
+            let mut got: c_int = 0;
+
+            match avcodec_encode_video2(
+                self.0.as_mut_ptr(),
+                out.as_mut_ptr(),
+                frame.as_ptr(),
+                &mut got,
+            ) {
+                e if e < 0 => Err(Error::from(e)),
+                _ => Ok(got != 0),
+            }
+        }
+    }
+
+    #[deprecated(
+        since = "4.4.0",
+        note = "Underlying API avcodec_encode_video2 has been deprecated since FFmpeg 3.1; \
+        consider switching to send_frame() and receive_packet()"
+    )]
+    #[inline]
+    #[cfg(not(feature = "ffmpeg_5_0"))]
+    pub fn flush<P: packet::Mut>(&mut self, out: &mut P) -> Result<bool, Error> {
+        unsafe {
+            let mut got: c_int = 0;
+
+            match avcodec_encode_video2(
+                self.0.as_mut_ptr(),
+                out.as_mut_ptr(),
+                ptr::null(),
+                &mut got,
+            ) {
+                e if e < 0 => Err(Error::from(e)),
+                _ => Ok(got != 0),
+            }
+        }
+    }
+
     #[inline]
     pub fn frame_size(&self) -> u32 {
         unsafe { (*self.as_ptr()).frame_size as u32 }

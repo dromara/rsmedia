@@ -1,6 +1,5 @@
-use super::*;
+use ffi::*;
 use libc::c_ulonglong;
-use sys::ffi::*;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -60,17 +59,17 @@ bitflags! {
         const HEXADECAGONAL      = AV_CH_LAYOUT_HEXADECAGONAL;
         const STEREO_DOWNMIX     = AV_CH_LAYOUT_STEREO_DOWNMIX;
 
-        #[cfg(feature = "ffmpeg6")]
+        #[cfg(feature = "ffmpeg_6_1")]
         const _3POINT1POINT2      = AV_CH_LAYOUT_3POINT1POINT2;
-        #[cfg(feature = "ffmpeg6")]
+        #[cfg(feature = "ffmpeg_6_1")]
         const _5POINT1POINT2_BACK = AV_CH_LAYOUT_5POINT1POINT2_BACK;
-        #[cfg(feature = "ffmpeg6")]
+        #[cfg(feature = "ffmpeg_6_1")]
         const _5POINT1POINT4_BACK = AV_CH_LAYOUT_5POINT1POINT4_BACK;
-        #[cfg(feature = "ffmpeg6")]
+        #[cfg(feature = "ffmpeg_6_1")]
         const _7POINT1POINT2      = AV_CH_LAYOUT_7POINT1POINT2;
-        #[cfg(feature = "ffmpeg6")]
+        #[cfg(feature = "ffmpeg_6_1")]
         const _7POINT1POINT4_BACK = AV_CH_LAYOUT_7POINT1POINT4_BACK;
-        #[cfg(feature = "ffmpeg6")]
+        #[cfg(feature = "ffmpeg_6_1")]
         const CUBE = AV_CH_LAYOUT_CUBE;
     }
 }

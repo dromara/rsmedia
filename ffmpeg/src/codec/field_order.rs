@@ -1,4 +1,5 @@
-use sys::ffi::*;
+use ffi::AVFieldOrder::*;
+use ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum FieldOrder {
@@ -19,10 +20,6 @@ impl From<AVFieldOrder> for FieldOrder {
             AV_FIELD_BB => FieldOrder::BB,
             AV_FIELD_TB => FieldOrder::TB,
             AV_FIELD_BT => FieldOrder::BT,
-            _ => {
-                eprintln!("Unknown FieldOrder variant: {}", value);
-                FieldOrder::Unknown
-            }
         }
     }
 }

@@ -1,4 +1,5 @@
-use sys::ffi::*;
+use ffi::AVRounding::*;
+use ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Rounding {
@@ -20,10 +21,6 @@ impl From<AVRounding> for Rounding {
             AV_ROUND_UP => Rounding::Up,
             AV_ROUND_NEAR_INF => Rounding::NearInfinity,
             AV_ROUND_PASS_MINMAX => Rounding::PassMinMax,
-            _ => {
-                eprintln!("Unknown Rounding variant: {}", value);
-                Rounding::Zero
-            }
         }
     }
 }

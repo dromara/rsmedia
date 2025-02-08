@@ -1,11 +1,12 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
+use ffi::*;
 use libc::c_int;
-use sys::ffi;
 
 use super::{audio, subtitle, video};
-use crate::{codec::Context, media, packet, Error, Frame};
+use codec::Context;
+use {media, packet, Error, Frame};
 
 pub struct Encoder(pub Context);
 
@@ -60,7 +61,7 @@ impl Encoder {
 
     pub fn send_frame(&mut self, frame: &Frame) -> Result<(), Error> {
         unsafe {
-            match ffi::avcodec_send_frame(self.as_mut_ptr(), frame.as_ptr()) {
+            match avcodec_send_frame(self.as_mut_ptr(), frame.as_ptr()) {
                 e if e < 0 => Err(Error::from(e)),
                 _ => Ok(()),
             }
@@ -75,7 +76,7 @@ impl Encoder {
 
     pub fn receive_packet<P: packet::Mut>(&mut self, packet: &mut P) -> Result<(), Error> {
         unsafe {
-            match ffi::avcodec_receive_packet(self.as_mut_ptr(), packet.as_mut_ptr()) {
+            match avcodec_receive_packet(self.as_mut_ptr(), packet.as_mut_ptr()) {
                 e if e < 0 => Err(Error::from(e)),
                 _ => Ok(()),
             }

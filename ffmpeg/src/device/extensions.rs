@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 use std::ptr;
 
+use device;
+use ffi::*;
+use format::context::common::Context;
 use libc::c_int;
-use sys::ffi;
-
-use crate::{device, format::context::common::Context, Error};
+use Error;
 
 impl Context {
     pub fn devices(&self) -> Result<DeviceIter, Error> {
@@ -13,17 +14,17 @@ impl Context {
 }
 
 pub struct DeviceIter<'a> {
-    ptr: *mut ffi::AVDeviceInfoList,
+    ptr: *mut AVDeviceInfoList,
     cur: c_int,
 
     _marker: PhantomData<&'a ()>,
 }
 
-impl DeviceIter<'_> {
-    pub unsafe fn wrap(ctx: *const ffi::AVFormatContext) -> Result<Self, Error> {
-        let mut ptr: *mut ffi::AVDeviceInfoList = ptr::null_mut();
+impl<'a> DeviceIter<'a> {
+    pub unsafe fn wrap(ctx: *const AVFormatContext) -> Result<Self, Error> {
+        let mut ptr: *mut AVDeviceInfoList = ptr::null_mut();
 
-        match ffi::avdevice_list_devices(ctx as *mut _, &mut ptr) {
+        match avdevice_list_devices(ctx as *mut _, &mut ptr) {
             n if n < 0 => Err(Error::from(n)),
 
             _ => Ok(DeviceIter {
@@ -35,16 +36,16 @@ impl DeviceIter<'_> {
     }
 }
 
-impl DeviceIter<'_> {
+impl<'a> DeviceIter<'a> {
     pub fn default(&self) -> usize {
         unsafe { (*self.ptr).default_device as usize }
     }
 }
 
-impl Drop for DeviceIter<'_> {
+impl<'a> Drop for DeviceIter<'a> {
     fn drop(&mut self) {
         unsafe {
-            ffi::avdevice_free_list_devices(&mut self.ptr);
+            avdevice_free_list_devices(&mut self.ptr);
         }
     }
 }
@@ -74,4 +75,4 @@ impl<'a> Iterator for DeviceIter<'a> {
     }
 }
 
-impl ExactSizeIterator for DeviceIter<'_> {}
+impl<'a> ExactSizeIterator for DeviceIter<'a> {}

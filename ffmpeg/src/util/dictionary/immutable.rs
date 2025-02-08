@@ -5,23 +5,23 @@ use std::ptr;
 use std::str::from_utf8_unchecked;
 
 use super::{Iter, Owned};
-use sys::ffi;
+use ffi::*;
 
 pub struct Ref<'a> {
-    ptr: *const ffi::AVDictionary,
+    ptr: *const AVDictionary,
 
     _marker: PhantomData<&'a ()>,
 }
 
-impl Ref<'_> {
-    pub unsafe fn wrap(ptr: *const ffi::AVDictionary) -> Self {
+impl<'a> Ref<'a> {
+    pub unsafe fn wrap(ptr: *const AVDictionary) -> Self {
         Ref {
             ptr,
             _marker: PhantomData,
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVDictionary {
+    pub unsafe fn as_ptr(&self) -> *const AVDictionary {
         self.ptr
     }
 }
@@ -30,7 +30,7 @@ impl<'a> Ref<'a> {
     pub fn get(&'a self, key: &str) -> Option<&'a str> {
         unsafe {
             let key = CString::new(key).unwrap();
-            let entry = ffi::av_dict_get(self.as_ptr(), key.as_ptr(), ptr::null_mut(), 0);
+            let entry = av_dict_get(self.as_ptr(), key.as_ptr(), ptr::null_mut(), 0);
 
             if entry.is_null() {
                 None
@@ -60,7 +60,7 @@ impl<'a> IntoIterator for &'a Ref<'a> {
     }
 }
 
-impl fmt::Debug for Ref<'_> {
+impl<'a> fmt::Debug for Ref<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_map().entries(self.iter()).finish()
     }

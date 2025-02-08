@@ -1,16 +1,19 @@
+use std::mem;
+use std::ptr;
+
 use super::Ref;
+use ffi::*;
 use libc::c_int;
-use sys::ffi;
 
 pub struct Borrow<'a> {
-    packet: ffi::AVPacket,
+    packet: AVPacket,
     data: &'a [u8],
 }
 
-impl Borrow<'_> {
+impl<'a> Borrow<'a> {
     pub fn new(data: &[u8]) -> Borrow {
         unsafe {
-            let mut packet: ffi::AVPacket = std::mem::zeroed();
+            let mut packet: AVPacket = mem::zeroed();
 
             packet.data = data.as_ptr() as *mut _;
             packet.size = data.len() as c_int;
@@ -30,19 +33,19 @@ impl Borrow<'_> {
     }
 }
 
-impl Ref for Borrow<'_> {
-    fn as_ptr(&self) -> *const ffi::AVPacket {
+impl<'a> Ref for Borrow<'a> {
+    fn as_ptr(&self) -> *const AVPacket {
         &self.packet
     }
 }
 
-impl Drop for Borrow<'_> {
+impl<'a> Drop for Borrow<'a> {
     fn drop(&mut self) {
         unsafe {
-            self.packet.data = std::ptr::null_mut();
+            self.packet.data = ptr::null_mut();
             self.packet.size = 0;
 
-            ffi::av_packet_unref(&mut self.packet);
+            av_packet_unref(&mut self.packet);
         }
     }
 }

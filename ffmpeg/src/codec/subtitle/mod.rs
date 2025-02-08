@@ -10,8 +10,9 @@ pub use self::rect_mut::{AssMut, BitmapMut, RectMut, TextMut};
 use std::marker::PhantomData;
 use std::mem;
 
+use ffi::AVSubtitleType::*;
+use ffi::*;
 use libc::{c_uint, size_t};
-use sys::ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum Type {
@@ -28,10 +29,6 @@ impl From<AVSubtitleType> for Type {
             SUBTITLE_BITMAP => Type::Bitmap,
             SUBTITLE_TEXT => Type::Text,
             SUBTITLE_ASS => Type::Ass,
-            _ => {
-                eprintln!("Unknown value: {}", value);
-                Type::None
-            }
         }
     }
 }
@@ -131,7 +128,7 @@ pub struct RectIter<'a> {
     _marker: PhantomData<&'a Subtitle>,
 }
 
-impl RectIter<'_> {
+impl<'a> RectIter<'a> {
     pub fn new(ptr: *const AVSubtitle) -> Self {
         RectIter {
             ptr,
@@ -166,7 +163,7 @@ impl<'a> Iterator for RectIter<'a> {
     }
 }
 
-impl ExactSizeIterator for RectIter<'_> {}
+impl<'a> ExactSizeIterator for RectIter<'a> {}
 
 pub struct RectMutIter<'a> {
     ptr: *mut AVSubtitle,
@@ -175,7 +172,7 @@ pub struct RectMutIter<'a> {
     _marker: PhantomData<&'a Subtitle>,
 }
 
-impl RectMutIter<'_> {
+impl<'a> RectMutIter<'a> {
     pub fn new(ptr: *mut AVSubtitle) -> Self {
         RectMutIter {
             ptr,
@@ -210,4 +207,4 @@ impl<'a> Iterator for RectMutIter<'a> {
     }
 }
 
-impl ExactSizeIterator for RectMutIter<'_> {}
+impl<'a> ExactSizeIterator for RectMutIter<'a> {}

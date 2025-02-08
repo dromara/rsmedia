@@ -1,27 +1,27 @@
+use ffi::*;
 use libc::c_int;
-use sys::ffi;
 
 bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct Flags: c_int {
-        const NO_FILE       = ffi::AVFMT_NOFILE as i32;
-        const NEED_NUMBER   = ffi::AVFMT_NEEDNUMBER as i32;
-        const SHOW_IDS      = ffi::AVFMT_SHOW_IDS as i32;
-        // #[cfg(not(feature = "ffmpeg_4_0"))]
-        // const RAW_PICTURE   = ffi::AVFMT_RAWPICTURE;
-        const GLOBAL_HEADER = ffi::AVFMT_GLOBALHEADER as i32;
-        const NO_TIMESTAMPS = ffi::AVFMT_NOTIMESTAMPS as i32;
-        const GENERIC_INDEX = ffi::AVFMT_GENERIC_INDEX as i32;
-        const TS_DISCONT    = ffi::AVFMT_TS_DISCONT as i32;
-        const VARIABLE_FPS  = ffi::AVFMT_VARIABLE_FPS as i32;
-        const NO_DIMENSIONS = ffi::AVFMT_NODIMENSIONS as i32;
-        const NO_STREAMS    = ffi::AVFMT_NOSTREAMS as i32;
-        const NO_BINSEARCH  = ffi::AVFMT_NOBINSEARCH as i32;
-        const NO_GENSEARCH  = ffi::AVFMT_NOGENSEARCH as i32;
-        const NO_BYTE_SEEK  = ffi::AVFMT_NO_BYTE_SEEK as i32;
-        const ALLOW_FLUSH   = ffi::AVFMT_ALLOW_FLUSH as i32;
-        const TS_NONSTRICT  = ffi::AVFMT_TS_NONSTRICT as i32;
-        const TS_NEGATIVE   = ffi::AVFMT_TS_NEGATIVE as i32;
-        const SEEK_TO_PTS   = ffi::AVFMT_SEEK_TO_PTS as i32;
+        const NO_FILE       = AVFMT_NOFILE;
+        const NEED_NUMBER   = AVFMT_NEEDNUMBER;
+        const SHOW_IDS      = AVFMT_SHOW_IDS;
+        #[cfg(not(feature = "ffmpeg_4_0"))]
+        const RAW_PICTURE   = AVFMT_RAWPICTURE;
+        const GLOBAL_HEADER = AVFMT_GLOBALHEADER;
+        const NO_TIMESTAMPS = AVFMT_NOTIMESTAMPS;
+        const GENERIC_INDEX = AVFMT_GENERIC_INDEX;
+        const TS_DISCONT    = AVFMT_TS_DISCONT;
+        const VARIABLE_FPS  = AVFMT_VARIABLE_FPS;
+        const NO_DIMENSIONS = AVFMT_NODIMENSIONS;
+        const NO_STREAMS    = AVFMT_NOSTREAMS;
+        const NO_BINSEARCH  = AVFMT_NOBINSEARCH;
+        const NO_GENSEARCH  = AVFMT_NOGENSEARCH;
+        const NO_BYTE_SEEK  = AVFMT_NO_BYTE_SEEK;
+        const ALLOW_FLUSH   = AVFMT_ALLOW_FLUSH;
+        const TS_NONSTRICT  = AVFMT_TS_NONSTRICT;
+        const TS_NEGATIVE   = AVFMT_TS_NEGATIVE;
+        const SEEK_TO_PTS   = AVFMT_SEEK_TO_PTS;
     }
 }

@@ -23,11 +23,10 @@ pub use self::opened::Opened;
 
 use std::ffi::CString;
 
-use crate::codec::Context;
-use crate::codec::Id;
-use crate::Codec;
-
-use sys::ffi;
+use codec::Context;
+use codec::Id;
+use ffi::*;
+use Codec;
 
 pub fn new() -> Decoder {
     Context::new().decoder()
@@ -37,7 +36,7 @@ pub fn find(id: Id) -> Option<Codec> {
     unsafe {
         // We get a clippy warning in 4.4 but not in 5.0 and newer, so we allow that cast to not complicate the code
         #[allow(clippy::unnecessary_cast)]
-        let ptr = ffi::avcodec_find_decoder(id.into()) as *mut ffi::AVCodec;
+        let ptr = avcodec_find_decoder(id.into()) as *mut AVCodec;
 
         if ptr.is_null() {
             None
@@ -51,7 +50,7 @@ pub fn find_by_name(name: &str) -> Option<Codec> {
     unsafe {
         let name = CString::new(name).unwrap();
         #[allow(clippy::unnecessary_cast)]
-        let ptr = ffi::avcodec_find_decoder_by_name(name.as_ptr()) as *mut ffi::AVCodec;
+        let ptr = avcodec_find_decoder_by_name(name.as_ptr()) as *mut AVCodec;
 
         if ptr.is_null() {
             None

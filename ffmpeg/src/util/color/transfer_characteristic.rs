@@ -1,7 +1,8 @@
 use std::ffi::CStr;
 use std::str::from_utf8_unchecked;
 
-use sys::ffi::*;
+use ffi::AVColorTransferCharacteristic::*;
+use ffi::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum TransferCharacteristic {
@@ -62,10 +63,6 @@ impl From<AVColorTransferCharacteristic> for TransferCharacteristic {
             AVCOL_TRC_SMPTE2084 => TransferCharacteristic::SMPTE2084,
             AVCOL_TRC_SMPTE428 => TransferCharacteristic::SMPTE428,
             AVCOL_TRC_ARIB_STD_B67 => TransferCharacteristic::ARIB_STD_B67,
-            _ => {
-                eprintln!("Unknown value: {}", value);
-                TransferCharacteristic::Unspecified
-            }
         }
     }
 }

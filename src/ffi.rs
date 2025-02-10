@@ -1,17 +1,16 @@
 #[cfg(feature = "ndarray")]
 use ndarray::Array3;
 
-use ffmpeg::codec::codec::Codec;
-use ffmpeg::codec::context::Context;
-use ffmpeg::encoder::video::Video;
-use ffmpeg::format::context::Output;
-use ffmpeg::util::frame::video::Video as Frame;
-use ffmpeg::{Error, Rational};
+use rsmpeg::avcodec::AVCodec;
+use rsmpeg::avcodec::AVCodecContext;
+use rsmpeg::avformat::AVFormatContextOutput;
+use rsmpeg::avutil::{AVFrame, AVRational};
+use rsmpeg::error::{RsmpegError as Error};
 
 #[cfg(feature = "ndarray")]
-use ffmpeg::util::format::Pixel;
+use rsmpeg::avutil::AVPixelFormat as Pixel;
 
-use ffmpeg::ffi;
+use rsmpeg::ffi;
 
 /// This function is similar to the existing bindings in ffmpeg like `output` and `output_as`,
 /// but does not assume that it is opening a file-like context. Instead, it opens a raw output,
@@ -34,7 +33,7 @@ use ffmpeg::ffi;
 /// let buf output_raw_buf_end(&mut output);
 /// println!("{}", buf.len());
 /// ```
-pub fn output_raw(format: &str) -> Result<Output, Error> {
+pub fn output_raw(format: &str) -> Result<AVFormatContextOutput, Error> {
     unsafe {
         let mut output_ptr = std::ptr::null_mut();
         let format = std::ffi::CString::new(format).unwrap();
@@ -44,7 +43,7 @@ pub fn output_raw(format: &str) -> Result<Output, Error> {
             format.as_ptr(),
             std::ptr::null(),
         ) {
-            0 => Ok(Output::wrap(output_ptr)),
+            0 => Ok(AVFormatContextOutput::from_raw(std::ptr::NonNull::new(output_ptr).unwrap())),
             e => Err(Error::from(e)),
         }
     }
@@ -57,7 +56,7 @@ pub fn output_raw(format: &str) -> Result<Output, Error> {
 /// # Arguments
 ///
 /// * `output` - Output context to start write on.
-pub fn output_raw_buf_start(output: &mut Output) {
+pub fn output_raw_buf_start(output: &mut AVFormatContextOutput) {
     unsafe {
         // Here we initialize a raw pointer (mutable) as nullptr initially. We then call the
         // `avio_open_dyn_buf` which expects a ptr ptr, and place the result in p. In case of
@@ -80,7 +79,7 @@ pub fn output_raw_buf_start(output: &mut Output) {
 /// # Arguments
 ///
 /// * `output` - Output context to end write on.
-pub fn output_raw_buf_end(output: &mut Output) -> Vec<u8> {
+pub fn output_raw_buf_end(output: &mut AVFormatContextOutput) -> Vec<u8> {
     unsafe {
         // First, we acquire a raw pointer to the AVIOContext in the `pb` field of the output
         // context. We stored the dyn buf there when we called `output_raw_buf_start`. Secondly, the
@@ -92,7 +91,7 @@ pub fn output_raw_buf_end(output: &mut Output) -> Vec<u8> {
             ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
 
         // Reset the `pb` field or `avformat_close` will try to free it!
-        ((*output.as_mut_ptr()).pb) = std::ptr::null_mut::<ffi::AVIOContext>();
+        (*output.as_mut_ptr()).pb = std::ptr::null_mut::<ffi::AVIOContext>();
 
         // Create a Rust `Vec` from the buffer (copying).
         let buffer = std::slice::from_raw_parts(buffer_raw, buffer_size).to_vec();
@@ -121,7 +120,7 @@ pub fn output_raw_buf_end(output: &mut Output) -> Vec<u8> {
 ///   `output_raw_packetized_buf`.
 /// * `max_packet_size` - Maximum size per packet.
 pub fn output_raw_packetized_buf_start(
-    output: &mut Output,
+    output: &mut AVFormatContextOutput,
     packet_buffer: &mut Vec<Vec<u8>>,
     max_packet_size: usize,
 ) {
@@ -167,7 +166,7 @@ pub fn output_raw_packetized_buf_start(
 /// # Arguments
 ///
 /// * `output` - Output context to end write on.
-pub fn output_raw_packetized_buf_end(output: &mut Output) {
+pub fn output_raw_packetized_buf_end(output: &mut AVFormatContextOutput) {
     unsafe {
         let output_pb = (*output.as_mut_ptr()).pb;
 
@@ -183,7 +182,7 @@ pub fn output_raw_packetized_buf_end(output: &mut Output) {
         ffi::av_free(output_pb as *mut std::ffi::c_void);
 
         // Reset the `pb` field or `avformat_close` will try to free it!
-        ((*output.as_mut_ptr()).pb) = std::ptr::null_mut::<ffi::AVIOContext>();
+        (*output.as_mut_ptr()).pb = std::ptr::null_mut::<ffi::AVIOContext>();
     }
 }
 
@@ -195,7 +194,7 @@ pub fn output_raw_packetized_buf_end(output: &mut Output) {
 /// # Arguments
 ///
 /// * `output` - Output context to flush.
-pub fn flush_output(output: &mut Output) -> Result<(), Error> {
+pub fn flush_output(output: &mut AVFormatContextOutput) -> Result<(), Error> {
     unsafe {
         match ffi::av_write_frame(output.as_mut_ptr(), std::ptr::null_mut()) {
             0 => Ok(()),
@@ -210,11 +209,14 @@ pub fn flush_output(output: &mut Output) -> Result<(), Error> {
 /// # Arguments
 ///
 /// * `codec` - Codec to initialize with.
-pub fn codec_context_as(codec: &Codec) -> Result<Context, Error> {
+pub fn codec_context_as(codec: Option<AVCodec>) -> Result<AVCodecContext, Error> {
     unsafe {
-        let context_ptr = ffmpeg::ffi::avcodec_alloc_context3(codec.as_ptr());
+        let context_ptr = match codec {
+            None => ffi::avcodec_alloc_context3(std::ptr::null()),
+            Some(c) => ffi::avcodec_alloc_context3(c.as_ptr()),
+        };
         if !context_ptr.is_null() {
-            Ok(Context::wrap(context_ptr, None))
+            Ok(AVCodecContext::from_raw(std::ptr::NonNull::new(context_ptr).unwrap()))
         } else {
             Err(Error::Unknown)
         }
@@ -227,19 +229,10 @@ pub fn codec_context_as(codec: &Codec) -> Result<Context, Error> {
 ///
 /// * `decoder_context` - Decoder context.
 /// * `time_base` - Time base to assign.
-pub fn set_decoder_context_time_base(decoder_context: &mut Context, time_base: Rational) {
+pub fn set_decoder_context_time_base(decoder_context: &mut AVCodecContext, time_base: AVRational) {
     unsafe {
         (*decoder_context.as_mut_ptr()).time_base = time_base.into();
     }
-}
-
-/// Get the `time_base` field of an encoder. (Not natively supported in the public API.)
-///
-/// # Arguments
-///
-/// * `encoder` - Encoder to get `time_base` of.
-pub fn get_encoder_time_base(encoder: &Video) -> Rational {
-    unsafe { (*encoder.0.as_ptr()).time_base.into() }
 }
 
 /// Copy frame properties from `src` to `dst`.
@@ -248,7 +241,7 @@ pub fn get_encoder_time_base(encoder: &Video) -> Rational {
 ///
 /// * `src` - Frame to get properties from.
 /// * `dst` - Frame to copy properties to.
-pub fn copy_frame_props(src: &Frame, dst: &mut Frame) {
+pub fn copy_frame_props(src: &AVFrame, dst: &mut AVFrame) {
     unsafe {
         ffi::av_frame_copy_props(dst.as_mut_ptr(), src.as_ptr());
     }
@@ -269,7 +262,7 @@ pub type FrameArray = Array3<u8>;
 ///
 /// An ffmpeg-native `AvFrame`.
 #[cfg(feature = "ndarray")]
-pub fn convert_ndarray_to_frame_rgb24(frame_array: &FrameArray) -> Result<Frame, Error> {
+pub fn convert_ndarray_to_frame_rgb24(frame_array: &FrameArray) -> Result<AVFrame, Error> {
     unsafe {
         assert!(frame_array.is_standard_layout());
 
@@ -277,7 +270,7 @@ pub fn convert_ndarray_to_frame_rgb24(frame_array: &FrameArray) -> Result<Frame,
 
         // Temporary frame structure to place correctly formatted data and linesize stuff in, which
         // we'll copy later.
-        let mut frame_tmp = Frame::empty();
+        let mut frame_tmp = AVFrame::new();
         let frame_tmp_ptr = frame_tmp.as_mut_ptr();
 
         // This does not copy the data, but it sets the `frame_tmp` data and linesize pointers
@@ -296,7 +289,10 @@ pub fn convert_ndarray_to_frame_rgb24(frame_array: &FrameArray) -> Result<Frame,
             return Err(Error::from(bytes_copied));
         }
 
-        let mut frame = Frame::new(Pixel::RGB24, frame_width as u32, frame_height as u32);
+        let mut frame = AVFrame::new();
+        frame.set_format(ffi::AV_PIX_FMT_RGB24);
+        frame.set_width(frame_width as i32);
+        frame.set_height(frame_height as i32);
         let frame_ptr = frame.as_mut_ptr();
 
         // Do the actual copying.
@@ -324,7 +320,7 @@ pub fn convert_ndarray_to_frame_rgb24(frame_array: &FrameArray) -> Result<Frame,
 ///
 /// A three-dimensional `ndarray` with dimensions `(H, W, C)` and type byte.
 #[cfg(feature = "ndarray")]
-pub fn convert_frame_to_ndarray_rgb24(frame: &mut Frame) -> Result<FrameArray, Error> {
+pub fn convert_frame_to_ndarray_rgb24(frame: &mut AVFrame) -> Result<FrameArray, Error> {
     unsafe {
         let frame_ptr = frame.as_mut_ptr();
         let frame_width: i32 = (*frame_ptr).width;
@@ -360,11 +356,11 @@ pub fn convert_frame_to_ndarray_rgb24(frame: &mut Frame) -> Result<FrameArray, E
 ///
 /// * `output` - Output that contains stream to get extradata from.
 /// * `stream_index` - Index of stream.
-pub fn extradata(output: &Output, stream_index: usize) -> Result<&[u8], Error> {
+pub fn extradata(output: &AVFormatContextOutput, stream_index: usize) -> Result<&[u8], Error> {
     let parameters = output
-        .stream(stream_index)
-        .map(|stream| stream.parameters())
-        .ok_or(Error::StreamNotFound)?;
+        .streams().get(stream_index)
+        .unwrap().codecpar();
+        // .ok_or(Error::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
 
     Ok(unsafe {
         std::slice::from_raw_parts(
@@ -379,7 +375,7 @@ pub fn extradata(output: &Output, stream_index: usize) -> Result<&[u8], Error> {
 /// # Arguments
 ///
 /// * `output` - Output format context.
-pub fn rtp_h264_mode_0(output: &Output) -> bool {
+pub fn rtp_h264_mode_0(output: &AVFormatContextOutput) -> bool {
     unsafe {
         ffi::av_opt_flag_is_set(
             (*output.as_ptr()).priv_data,
@@ -392,7 +388,7 @@ pub fn rtp_h264_mode_0(output: &Output) -> bool {
 /// Get the current sequence number and timestamp of the RTP muxer.
 ///
 /// Note: This method is only safe to use on RTP output formats.
-pub fn rtp_seq_and_timestamp(output: &Output) -> (u16, u32) {
+pub fn rtp_seq_and_timestamp(output: &AVFormatContextOutput) -> (u16, u32) {
     unsafe {
         let rtp_mux_context = &*((*output.as_ptr()).priv_data as *const RTPMuxContext);
         (rtp_mux_context.seq, rtp_mux_context.timestamp)
@@ -411,7 +407,7 @@ pub fn rtp_seq_and_timestamp(output: &Output) -> (u16, u32) {
 /// # Return value
 ///
 /// A string with the SDP file contents.
-pub fn sdp(output: &Output) -> Result<String, Error> {
+pub fn sdp(output: &AVFormatContextOutput) -> Result<String, Error> {
     const BUF_SIZE: i32 = 4096;
 
     unsafe {

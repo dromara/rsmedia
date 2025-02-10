@@ -1,6 +1,6 @@
-use ffmpeg::codec::Id as AvCodecId;
-use ffmpeg::{Error as AvError, Rational as AvRational};
-
+use rsmpeg::ffi;
+use rsmpeg::error::RsmpegError;
+use crate::Rational as AvRational;
 use crate::error::Error;
 use crate::extradata::{extract_parameter_sets_h264, Pps, Sps};
 use crate::ffi::extradata;
@@ -39,16 +39,17 @@ impl<W: Write> MuxerBuilder<W> {
     ///   [`Reader::stream_info()`].
     pub fn with_stream(mut self, stream_info: StreamInfo) -> Result<Self> {
         let (index, codec_parameters, reader_stream_time_base) = stream_info.into_parts();
-        let mut writer_stream = self
-            .writer
-            .output_mut()
-            .add_stream(ffmpeg::encoder::find(codec_parameters.id()))?;
-        writer_stream.set_parameters(codec_parameters);
+        {
+            let mut writer_stream = self.writer.output_mut().new_stream();
+            writer_stream.set_codecpar(codec_parameters);
+        }
+
         let stream_description = StreamDescription {
-            index: writer_stream.index(),
+            index: self.writer.output().streams().len() - 1,
             source_time_base: reader_stream_time_base,
         };
         self.mapping.insert(index, stream_description);
+
         Ok(self)
     }
 
@@ -61,7 +62,7 @@ impl<W: Write> MuxerBuilder<W> {
     /// * `reader` - Reader to add streams from.
     pub fn with_streams(mut self, reader: &Reader) -> Result<Self> {
         for stream in reader.input.streams() {
-            self = self.with_stream(reader.stream_info(stream.index())?)?;
+            self = self.with_stream(reader.stream_info(stream.index as usize)?)?;
         }
         Ok(self)
     }
@@ -134,23 +135,23 @@ impl<W: Write> Muxer<W> {
     /// * `packet` - [`Packet`] to mux.
     pub fn mux(&mut self, packet: Packet) -> Result<W::Out> {
         if self.have_written_header {
-            let mut packet = packet.into_inner();
+            let mut packet = packet;
             let stream_description = self
                 .mapping
-                .get(&packet.stream())
-                .ok_or(AvError::StreamNotFound)?;
+                .get(&(packet.stream_index()))
+                .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
 
             let destination_stream = self
                 .writer
                 .output()
-                .stream(stream_description.index)
-                .ok_or(AvError::StreamNotFound)?;
+                .streams().get(stream_description.index)
+                .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
 
-            packet.set_stream(destination_stream.index());
-            packet.set_position(-1);
+            packet.set_stream_index(destination_stream.index as usize);
+            // TODO: packet.set_pts();
             packet.rescale_ts(
                 stream_description.source_time_base,
-                destination_stream.time_base(),
+                destination_stream.time_base,
             );
 
             Ok({
@@ -188,9 +189,9 @@ impl<W: Write> Muxer<W> {
         self.writer
             .output()
             .streams()
-            .map(|stream| {
-                if stream.parameters().id() == AvCodecId::H264 {
-                    extract_parameter_sets_h264(extradata(self.writer.output(), stream.index())?)
+            .iter().map(|stream| {
+                if stream.codecpar().codec_id == ffi::AV_CODEC_ID_H264 {
+                    extract_parameter_sets_h264(extradata(self.writer.output(), stream.index as usize)?)
                 } else {
                     Err(Error::UnsupportedCodecParameterSets)
                 }

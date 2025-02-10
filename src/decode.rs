@@ -1,9 +1,4 @@
-use ffmpeg::codec::decoder::Video as AvDecoder;
-use ffmpeg::codec::Context as AvContext;
-use ffmpeg::format::pixel::Pixel as AvPixel;
-use ffmpeg::software::scaling::{context::Context as AvScaler, flag::Flags as AvScalerFlags};
-use ffmpeg::util::error::EAGAIN;
-use ffmpeg::{Error as AvError, Rational as AvRational};
+use rsmpeg::swscale::SwsContext as AvScaler;
 
 use crate::error::Error;
 use crate::ffi;
@@ -18,11 +13,17 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::time::Time;
+use crate::Rational as AvRational;
+use crate::flags::AvScalerFlags;
+
+use rsmpeg::avcodec::AVCodecContext;
+use rsmpeg::avutil::AVPixelFormat;
+use rsmpeg::error::RsmpegError;
 
 type Result<T> = std::result::Result<T, Error>;
 
 /// Always use NV12 pixel format with hardware acceleration, then rescale later.
-static HWACCEL_PIXEL_FORMAT: AvPixel = AvPixel::NV12;
+static HWACCEL_PIXEL_FORMAT: AVPixelFormat = rsmpeg::ffi::AV_PIX_FMT_NV12;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
@@ -130,14 +131,12 @@ impl Decoder {
     /// Duration of the decoder stream.
     #[inline]
     pub fn duration(&self) -> Result<Time> {
-        let reader_stream = self
-            .reader
-            .input
-            .stream(self.reader_stream_index)
-            .ok_or(AvError::StreamNotFound)?;
+        let reader_stream = self.reader.input.streams().get(self.reader_stream_index).ok_or(
+            RsmpegError::FindStreamInfoError(rsmpeg::ffi::AVERROR_STREAM_NOT_FOUND),
+        )?;
         Ok(Time::new(
-            Some(reader_stream.duration()),
-            reader_stream.time_base(),
+            Some(reader_stream.duration),
+            reader_stream.time_base.into(),
         ))
     }
 
@@ -147,9 +146,11 @@ impl Decoder {
         Ok(self
             .reader
             .input
-            .stream(self.reader_stream_index)
-            .ok_or(AvError::StreamNotFound)?
-            .frames()
+            .streams().get(self.reader_stream_index)
+            .ok_or(RsmpegError::FindStreamInfoError(
+                rsmpeg::ffi::AVERROR_STREAM_NOT_FOUND,
+            ))?
+            .nb_frames
             .max(0) as u64)
     }
 
@@ -259,7 +260,7 @@ impl Decoder {
     pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
         self.reader
             .seek(timestamp_milliseconds)
-            .inspect(|_| self.decoder.decoder.flush())
+            .inspect(|_| self.decoder.flush())
     }
 
     /// Seek to specific frame in reader.
@@ -269,7 +270,7 @@ impl Decoder {
     pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
         self.reader
             .seek_to_frame(frame_number)
-            .inspect(|_| self.decoder.decoder.flush())
+            .inspect(|_| self.decoder.flush())
     }
 
     /// Seek to start of reader.
@@ -279,7 +280,7 @@ impl Decoder {
     pub fn seek_to_start(&mut self) -> Result<()> {
         self.reader
             .seek_to_start()
-            .inspect(|_| self.decoder.decoder.flush())
+            .inspect(|_| self.decoder.flush())
     }
 
     /// Split the decoder into a decoder (of type [`DecoderSplit`]) and a [`Reader`].
@@ -313,8 +314,8 @@ impl Decoder {
         let frame_rate = self
             .reader
             .input
-            .stream(self.reader_stream_index)
-            .map(|stream| stream.rate());
+            .streams().get(self.reader_stream_index)
+            .map(|stream| AvRational::from(stream.r_frame_rate));
 
         if let Some(frame_rate) = frame_rate {
             if frame_rate.denominator() > 0 {
@@ -333,7 +334,7 @@ impl Decoder {
 /// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
 pub struct DecoderSplit {
-    decoder: AvDecoder,
+    decoder: AVCodecContext,
     decoder_time_base: AvRational,
     hwaccel_context: Option<HWContext>,
     scaler: Option<AvScaler>,
@@ -357,59 +358,63 @@ impl DecoderSplit {
     ) -> Result<Self> {
         let reader_stream = reader
             .input
-            .stream(reader_stream_index)
-            .ok_or(AvError::StreamNotFound)?;
+            .streams().get(reader_stream_index)
+            .ok_or(RsmpegError::FindStreamInfoError(rsmpeg::ffi::AVERROR_STREAM_NOT_FOUND))?;
 
-        let mut decoder = AvContext::new();
-        ffi::set_decoder_context_time_base(&mut decoder, reader_stream.time_base());
-        decoder.set_parameters(reader_stream.parameters())?;
+        // new context
+        let mut decoder = unsafe{
+            AVCodecContext::from_raw(std::ptr::NonNull::new(rsmpeg::ffi::avcodec_alloc_context3(std::ptr::null())).unwrap())
+        };
+        ffi::set_decoder_context_time_base(&mut decoder, reader_stream.time_base);
+        decoder.apply_codecpar(&reader_stream.codecpar())?;
 
         let hwaccel_context = match hw_device_type {
             Some(device_type) => Some(HWContext::new(&mut decoder, device_type)?),
             None => None,
         };
 
-        let decoder = decoder.decoder().video()?;
-        let decoder_time_base = decoder.time_base();
-
-        if decoder.format() == AvPixel::None || decoder.width() == 0 || decoder.height() == 0 {
+        let decoder_time_base = decoder.time_base.into();
+        if decoder.pix_fmt == rsmpeg::ffi::AV_PIX_FMT_NONE || decoder.width == 0 || decoder.height == 0 {
             return Err(Error::MissingCodecParameters);
         }
 
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize
-                .compute_for((decoder.width(), decoder.height()))
+                .compute_for((decoder.width as u32, decoder.height as u32))
                 .ok_or(Error::InvalidResizeParameters)?,
-            None => (decoder.width(), decoder.height()),
+            None => (decoder.width as u32, decoder.height as u32),
         };
 
         let scaler_input_format = if hwaccel_context.is_some() {
             HWACCEL_PIXEL_FORMAT
         } else {
-            decoder.format()
+            decoder.pix_fmt
         };
 
         let is_scaler_needed = !(scaler_input_format == crate::frame::FRAME_PIXEL_FORMAT
-            && decoder.width() == resize_width
-            && decoder.height() == resize_height);
+            && decoder.width == resize_width as i32
+            && decoder.height == resize_height as i32);
+
         let scaler = if is_scaler_needed {
             Some(
-                AvScaler::get(
+                AvScaler::get_context(
+                    decoder.width,
+                    decoder.height,
                     scaler_input_format,
-                    decoder.width(),
-                    decoder.height(),
+                    resize_width as i32,
+                    resize_height as i32,
                     crate::frame::FRAME_PIXEL_FORMAT,
-                    resize_width,
-                    resize_height,
-                    AvScalerFlags::AREA,
-                )
-                .map_err(Error::BackendError)?,
+                    AvScalerFlags::AREA.bits(),
+                    None,
+                    None,
+                    None,
+                ).unwrap(),
             )
         } else {
             None
         };
 
-        let size = (decoder.width(), decoder.height());
+        let size = (decoder.width as u32, decoder.height as u32);
         let size_out = (resize_width, resize_height);
 
         Ok(Self {
@@ -495,7 +500,8 @@ impl DecoderSplit {
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
     pub fn drain_raw(&mut self) -> Result<Option<RawFrame>> {
         if !self.draining {
-            self.decoder.send_eof().map_err(Error::BackendError)?;
+            // send_eof
+            self.decoder.send_frame(None).map_err(Error::BackendError).unwrap();
             self.draining = true;
         }
         self.receive_frame_from_decoder()
@@ -503,8 +509,14 @@ impl DecoderSplit {
 
     /// Reset the decoder to be used again after draining.
     pub fn reset(&mut self) {
-        self.decoder.flush();
+        self.flush();
         self.draining = false;
+    }
+
+    pub fn flush(&mut self) {
+        unsafe {
+            rsmpeg::ffi::avcodec_flush_buffers(self.decoder.as_mut_ptr());
+        }
     }
 
     /// Get the decoders input size (resolution dimensions): width and height.
@@ -523,10 +535,10 @@ impl DecoderSplit {
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
     fn send_packet_to_decoder(&mut self, packet: Packet) -> Result<()> {
         let (mut packet, packet_time_base) = packet.into_inner_parts();
-        packet.rescale_ts(packet_time_base, self.decoder_time_base);
+        packet.rescale_ts(packet_time_base.into(), self.decoder_time_base.into());
 
         self.decoder
-            .send_packet(&packet)
+            .send_packet(Some(&packet))
             .map_err(Error::BackendError)?;
 
         Ok(())
@@ -537,7 +549,7 @@ impl DecoderSplit {
         match self.decoder_receive_frame()? {
             Some(frame) => {
                 let frame = match self.hwaccel_context.as_ref() {
-                    Some(hwaccel_context) if hwaccel_context.format() == frame.format() => {
+                    Some(hwaccel_context) if hwaccel_context.format() == frame.format => {
                         Self::download_frame(&frame)?
                     }
                     _ => frame,
@@ -557,19 +569,18 @@ impl DecoderSplit {
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
     /// the decoder signals `EAGAIN`.
     fn decoder_receive_frame(&mut self) -> Result<Option<RawFrame>> {
-        let mut frame = RawFrame::empty();
-        let decode_result = self.decoder.receive_frame(&mut frame);
+        let decode_result = self.decoder.receive_frame();
         match decode_result {
-            Ok(()) => Ok(Some(frame)),
-            Err(AvError::Eof) => Err(Error::ReadExhausted),
-            Err(AvError::Other { errno }) if errno == EAGAIN => Ok(None),
+            Ok(frame) => Ok(Some(frame)),
+            Err(RsmpegError::BufferSinkEofError) => Err(Error::ReadExhausted),
+            Err(RsmpegError::SendFrameAgainError) => Ok(None),
             Err(err) => Err(err.into()),
         }
     }
 
     /// Download frame from foreign hardware acceleration device.
     fn download_frame(frame: &RawFrame) -> Result<RawFrame> {
-        let mut frame_downloaded = RawFrame::empty();
+        let mut frame_downloaded = RawFrame::new();
         frame_downloaded.set_format(HWACCEL_PIXEL_FORMAT);
         ffi_hwaccel::hwdevice_transfer_frame(&mut frame_downloaded, frame)?;
         ffi::copy_frame_props(frame, &mut frame_downloaded);
@@ -578,9 +589,9 @@ impl DecoderSplit {
 
     /// Rescale frame with the scaler.
     fn rescale_frame(frame: &RawFrame, scaler: &mut AvScaler) -> Result<RawFrame> {
-        let mut frame_scaled = RawFrame::empty();
+        let mut frame_scaled = RawFrame::new();
         scaler
-            .run(frame, &mut frame_scaled)
+            .scale_frame(frame, frame.width, frame.height, &mut frame_scaled)
             .map_err(Error::BackendError)?;
         ffi::copy_frame_props(frame, &mut frame_scaled);
         Ok(frame_scaled)
@@ -590,7 +601,7 @@ impl DecoderSplit {
     fn raw_frame_to_time_and_frame(&self, frame: &mut RawFrame) -> Result<(Time, Frame)> {
         // We use the packet DTS here (which is `frame->pkt_dts`) because that is what the
         // encoder will use when encoding for the `PTS` field.
-        let timestamp = Time::new(Some(frame.packet().dts), self.decoder_time_base);
+        let timestamp = Time::new(Some(frame.pkt_dts), self.decoder_time_base);
         let frame = ffi::convert_frame_to_ndarray_rgb24(frame).map_err(Error::BackendError)?;
 
         Ok((timestamp, frame))
@@ -603,8 +614,9 @@ impl Drop for DecoderSplit {
         // queue before giving up.
         const MAX_DRAIN_ITERATIONS: u32 = 100;
 
+        // send eof
         // We need to drain the items still in the decoders queue.
-        if let Ok(()) = self.decoder.send_eof() {
+        if let Ok(()) = self.decoder.send_frame(None) {
             for _ in 0..MAX_DRAIN_ITERATIONS {
                 if self.decoder_receive_frame().is_err() {
                     break;

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use ffmpeg::util::mathematics::rescale::{Rescale, TIME_BASE};
-use ffmpeg::Rational as AvRational;
+use crate::Rational as AvRational;
+use rsmpeg::ffi;
 
 /// Represents a time or duration.
 ///
@@ -106,7 +106,7 @@ impl Time {
 
     /// Whether or not the [`Time`] value is `AV_NOPTS_VALUE`.
     pub fn has_no_pts(&self) -> bool {
-        self.time == Some(ffmpeg::ffi::AV_NOPTS_VALUE)
+        self.time == Some(ffi::AV_NOPTS_VALUE)
     }
 
     /// Align the timestamp with another timestamp, which will convert the `rhs` timestamp to the
@@ -179,6 +179,57 @@ impl Time {
     }
 }
 
+/////////////////////////////////
+/////////////////////////////////
+
+pub const TIME_BASE: AvRational = AvRational(ffi::AV_TIME_BASE_Q.num, ffi::AV_TIME_BASE_Q.den);
+
+pub trait Rescale {
+    fn rescale<S, D>(&self, source: S, destination: D) -> i64
+    where
+        S: Into<AvRational>,
+        D: Into<AvRational>;
+
+    fn rescale_with<S, D>(&self, source: S, destination: D, rounding: ffi::AVRounding) -> i64
+    where
+        S: Into<AvRational>,
+        D: Into<AvRational>;
+}
+
+impl<T: Into<i64> + Clone> Rescale for T {
+    fn rescale<S, D>(&self, source: S, destination: D) -> i64
+    where
+        S: Into<AvRational>,
+        D: Into<AvRational>,
+    {
+        unsafe {
+            ffi::av_rescale_q(
+                self.clone().into(),
+                source.into().into(),
+                destination.into().into(),
+            )
+        }
+    }
+
+    fn rescale_with<S, D>(&self, source: S, destination: D, rounding: ffi::AVRounding) -> i64
+    where
+        S: Into<AvRational>,
+        D: Into<AvRational>,
+    {
+        unsafe {
+            ffi::av_rescale_q_rnd(
+                self.clone().into(),
+                source.into().into(),
+                destination.into().into(),
+                rounding.into(),
+            )
+        }
+    }
+}
+
+/////////////////////////////////
+/////////////////////////////////
+
 impl From<Duration> for Time {
     /// Convert from a [`Duration`] to [`Time`].
     #[inline]
@@ -214,7 +265,7 @@ impl std::fmt::Display for Time {
 ///
 /// On this object, arthmetic operations can be performed that operate on the two contained times.
 /// This virtual object ensures that the interface to these operations is safe.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Aligned {
     lhs: Option<i64>,
     rhs: Option<i64>,
@@ -419,8 +470,8 @@ mod tests {
 
     #[test]
     fn test_av_no_pts_value() {
-        let nopts = Time::new(Some(ffmpeg::ffi::AV_NOPTS_VALUE), AvRational::new(0, 0));
-        assert_eq!(nopts.into_value(), Some(ffmpeg::ffi::AV_NOPTS_VALUE));
+        let nopts = Time::new(Some(ffi::AV_NOPTS_VALUE), AvRational::new(0, 0));
+        assert_eq!(nopts.into_value(), Some(ffi::AV_NOPTS_VALUE));
         assert_eq!(Duration::from(nopts).as_secs_f32(), 0.0);
     }
 }

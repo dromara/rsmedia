@@ -1,14 +1,21 @@
-use ffmpeg::codec::packet::Packet as AvPacket;
-use ffmpeg::format::context::{Input as AvInput, Output as AvOutput};
-use ffmpeg::media::Type as AvMediaType;
-use ffmpeg::Error as AvError;
+use rsmpeg::avformat::AVFormatContextInput as AvInput;
+use rsmpeg::avformat::AVFormatContextOutput as AvOutput;
+use rsmpeg::error::RsmpegError;
 
 use crate::error::Error;
-use crate::ffi;
+use crate::{ffi, Packet};
 use crate::location::Location;
-use crate::options::Options;
-use crate::packet::Packet;
-use crate::stream::StreamInfo;
+use crate::options::{Dictionary, Options};
+use crate::packet::Packet as AvPacket;
+use crate::packet::PacketIter;
+use crate::stream::{Stream, StreamInfo};
+
+use libc::c_int;
+use std::ffi::{CStr, CString};
+use std::fmt::Display;
+use std::path::Path;
+use std::ptr;
+use std::ops::Bound;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -59,16 +66,73 @@ impl<'a> ReaderBuilder<'a> {
     pub fn build(self) -> Result<Reader> {
         match self.options {
             None => Ok(Reader {
-                input: ffmpeg::format::input(&self.source.as_path())?,
+                input: Self::input(&self.source.as_path())?,
                 source: self.source,
             }),
             Some(options) => Ok(Reader {
-                input: ffmpeg::format::input_with_dictionary(
-                    &self.source.as_path(),
-                    options.to_dict(),
-                )?,
+                input: Self::input_with_dictionary(&self.source.as_path(), options.to_dict())?,
                 source: self.source,
             }),
+        }
+    }
+
+    // XXX: use to_cstring when stable
+    fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
+        CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
+    }
+
+    pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AvInput> {
+        unsafe {
+            let mut ps = ptr::null_mut();
+            let path = Self::from_path(path);
+
+            match rsmpeg::ffi::avformat_open_input(
+                &mut ps,
+                path.as_ptr(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            ) {
+                0 => match rsmpeg::ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+                    r if r >= 0 => Ok(AvInput::from_raw(ptr::NonNull::new(ps).unwrap())),
+                    e => {
+                        rsmpeg::ffi::avformat_close_input(&mut ps);
+                        Err(Error::BackendError(RsmpegError::from(e)))
+                    }
+                },
+
+                e => Err(Error::from(RsmpegError::from(e))),
+            }
+        }
+    }
+
+    pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
+        path: &P,
+        options: Dictionary,
+    ) -> Result<AvInput> {
+        unsafe {
+            let mut ps = ptr::null_mut();
+            let path = Self::from_path(path);
+            let opts = options.disown();
+            let res = rsmpeg::ffi::avformat_open_input(
+                &mut ps,
+                path.as_ptr(),
+                ptr::null_mut(),
+                opts as *mut _,
+            );
+
+            Dictionary::own(opts);
+
+            match res {
+                0 => match rsmpeg::ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
+                    r if r >= 0 => Ok(AvInput::from_raw(ptr::NonNull::new(ps).unwrap())),
+                    e => {
+                        rsmpeg::ffi::avformat_close_input(&mut ps);
+                        Err(Error::from(RsmpegError::from(e)))
+                    }
+                },
+
+                e => Err(Error::from(RsmpegError::from(e))),
+            }
         }
     }
 }
@@ -105,10 +169,10 @@ impl Reader {
     /// let stream = reader.best_video_stream_index().unwrap();
     /// let mut packet = reader.read(stream).unwrap();
     /// ```
-    pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
+    pub fn read(&mut self, stream_index: usize) -> Result<AvPacket> {
         let mut error_count = 0;
         loop {
-            match self.input.packets().next() {
+            match self.packets().next() {
                 Some((stream, packet)) => {
                     if stream.index() == stream_index {
                         return Ok(Packet::new(packet, stream.time_base()));
@@ -122,6 +186,10 @@ impl Reader {
                 }
             }
         }
+    }
+
+    pub fn packets(&mut self) -> PacketIter {
+        PacketIter::new(&mut self.input)
     }
 
     /// Retrieve stream information for a stream. Stream information can be used to set up a
@@ -142,16 +210,14 @@ impl Reader {
     /// * `timestamp_milliseconds` - Number of millisecond from start of video to seek to.
     pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
         // Conversion factor from timestamp in milliseconds to `TIME_BASE` units.
-        const CONVERSION_FACTOR: i64 = (ffmpeg::ffi::AV_TIME_BASE_Q.den / 1000) as i64;
+        const CONVERSION_FACTOR: i64 = (rsmpeg::ffi::AV_TIME_BASE_Q.den / 1000) as i64;
         // One second left and right leeway when seeking.
-        const LEEWAY: i64 = ffmpeg::ffi::AV_TIME_BASE_Q.den as i64;
+        const LEEWAY: i64 = rsmpeg::ffi::AV_TIME_BASE_Q.den as i64;
 
         let timestamp = CONVERSION_FACTOR * timestamp_milliseconds;
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
 
-        self.input
-            .seek(timestamp, range)
-            .map_err(Error::BackendError)
+        self._seek(timestamp, range).map_err(|_| Error::BackendError(RsmpegError::Unknown))
     }
 
     /// Seek to a specific frame in the video stream.
@@ -161,9 +227,9 @@ impl Reader {
     /// * `frame_number` - The frame number to seek to.
     pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
         unsafe {
-            match ffmpeg::ffi::av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
+            match rsmpeg::ffi::av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
                 0 => Ok(()),
-                e => Err(Error::BackendError(AvError::from(e))),
+                e => Err(Error::BackendError(RsmpegError::from(e))),
             }
         }
     }
@@ -171,17 +237,39 @@ impl Reader {
     /// Seek to start of reader. This function performs best effort seeking to the start of the
     /// file.
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self.input.seek(i64::MIN, ..).map_err(Error::BackendError)
+        self._seek(i64::MIN, ..).map_err(|_| Error::BackendError(RsmpegError::Unknown))
+    }
+
+    fn _seek<R: std::ops::RangeBounds<i64>>(&mut self, ts: i64, range: R) -> Result<()> {
+        let start = match range.start_bound().cloned() {
+            Bound::Included(i) => i,
+            Bound::Excluded(i) => i.saturating_add(1),
+            Bound::Unbounded => i64::MIN,
+        };
+
+        let end = match range.end_bound().cloned() {
+            Bound::Included(i) => i,
+            Bound::Excluded(i) => i.saturating_sub(1),
+            Bound::Unbounded => i64::MAX,
+        };
+
+        unsafe {
+            match rsmpeg::ffi::avformat_seek_file(self.input.as_mut_ptr(), -1, start, ts, end, 0) {
+                s if s >= 0 => Ok(()),
+                e => Err(Error::from(RsmpegError::from(e))),
+            }
+        }
     }
 
     /// Find the best video stream and return the index.
     pub fn best_video_stream_index(&self) -> Result<usize> {
         Ok(self
             .input
-            .streams()
-            .best(AvMediaType::Video)
-            .ok_or(AvError::StreamNotFound)?
-            .index())
+            .find_best_stream(rsmpeg::ffi::AVMEDIA_TYPE_VIDEO)?
+            .ok_or(RsmpegError::FindStreamInfoError(
+                rsmpeg::ffi::AVERROR_STREAM_NOT_FOUND,
+            ))?
+            .0)
     }
 }
 
@@ -236,28 +324,133 @@ impl<'a> WriterBuilder<'a> {
     pub fn build(self) -> Result<Writer> {
         match (self.format, self.options) {
             (None, None) => Ok(Writer {
-                output: ffmpeg::format::output(&self.destination.as_path())?,
+                output: Self::output(&self.destination.as_path())?,
                 destination: self.destination,
             }),
             (Some(format), None) => Ok(Writer {
-                output: ffmpeg::format::output_as(&self.destination.as_path(), format)?,
+                output: Self::output_as(&self.destination.as_path(), format)?,
                 destination: self.destination,
             }),
             (None, Some(options)) => Ok(Writer {
-                output: ffmpeg::format::output_with(
-                    &self.destination.as_path(),
-                    options.to_dict(),
-                )?,
+                output: Self::output_with(&self.destination.as_path(), options.to_dict())?,
                 destination: self.destination,
             }),
             (Some(format), Some(options)) => Ok(Writer {
-                output: ffmpeg::format::output_as_with(
+                output: Self::output_as_with(
                     &self.destination.as_path(),
                     format,
                     options.to_dict(),
                 )?,
                 destination: self.destination,
             }),
+        }
+    }
+
+    // XXX: use to_cstring when stable
+    fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
+        CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
+    }
+
+    pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AvOutput> {
+        Ok(AvOutput::create(&Self::from_path(path), None)?)
+    }
+
+    pub fn output_with<P: AsRef<Path> + ?Sized>(path: &P, options: Dictionary) -> Result<AvOutput> {
+        unsafe {
+            let mut ps = ptr::null_mut();
+            let path = Self::from_path(path);
+            let opts = options.disown();
+
+            match rsmpeg::ffi::avformat_alloc_output_context2(
+                &mut ps,
+                ptr::null_mut(),
+                ptr::null(),
+                path.as_ptr(),
+            ) {
+                0 => {
+                    let res = rsmpeg::ffi::avio_open2(
+                        &mut (*ps).pb,
+                        path.as_ptr(),
+                        rsmpeg::ffi::AVIO_FLAG_WRITE as c_int,
+                        ptr::null(),
+                        opts as *mut _,
+                    );
+
+                    Dictionary::own(opts);
+
+                    match res {
+                        0 => Ok(AvOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
+                        e => Err(Error::from(RsmpegError::from(e))),
+                    }
+                }
+
+                e => Err(Error::from(RsmpegError::from(e))),
+            }
+        }
+    }
+
+    pub fn output_as<P: AsRef<Path> + ?Sized>(path: &P, format: &str) -> Result<AvOutput> {
+        unsafe {
+            let mut ps = ptr::null_mut();
+            let path = Self::from_path(path);
+            let format = CString::new(format).unwrap();
+
+            match rsmpeg::ffi::avformat_alloc_output_context2(
+                &mut ps,
+                ptr::null_mut(),
+                format.as_ptr(),
+                path.as_ptr(),
+            ) {
+                0 => match rsmpeg::ffi::avio_open(
+                    &mut (*ps).pb,
+                    path.as_ptr(),
+                    rsmpeg::ffi::AVIO_FLAG_WRITE as c_int,
+                ) {
+                    0 => Ok(AvOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
+                    e => Err(Error::from(RsmpegError::from(e))),
+                },
+
+                e => Err(Error::from(RsmpegError::from(e))),
+            }
+        }
+    }
+
+    pub fn output_as_with<P: AsRef<Path> + ?Sized>(
+        path: &P,
+        format: &str,
+        options: Dictionary,
+    ) -> Result<AvOutput> {
+        unsafe {
+            let mut ps = ptr::null_mut();
+            let path = Self::from_path(path);
+            let format = CString::new(format).unwrap();
+            let opts = options.disown();
+
+            match rsmpeg::ffi::avformat_alloc_output_context2(
+                &mut ps,
+                ptr::null_mut(),
+                format.as_ptr(),
+                path.as_ptr(),
+            ) {
+                0 => {
+                    let res = rsmpeg::ffi::avio_open2(
+                        &mut (*ps).pb,
+                        path.as_ptr(),
+                        rsmpeg::ffi::AVIO_FLAG_WRITE as c_int,
+                        ptr::null(),
+                        opts as *mut _,
+                    );
+
+                    Dictionary::own(opts);
+
+                    match res {
+                        0 => Ok(AvOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
+                        e => Err(Error::from(RsmpegError::from(e))),
+                    }
+                }
+
+                e => Err(Error::from(RsmpegError::from(e))),
+            }
         }
     }
 }
@@ -489,6 +682,7 @@ unsafe impl Send for PacketizedBufWriter {}
 unsafe impl Sync for PacketizedBufWriter {}
 
 pub(crate) mod private {
+    use rsmpeg::avformat::AVOutputFormat;
     use super::*;
 
     type Result<T> = std::result::Result<T, Error>;
@@ -521,7 +715,8 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            Ok(self.output.write_header()?)
+            self.output.write_header(&mut None).unwrap();
+            Ok(())
         }
 
         fn write(&mut self, packet: &mut AvPacket) -> Result<()> {
@@ -535,7 +730,7 @@ pub(crate) mod private {
         }
 
         fn write_trailer(&mut self) -> Result<()> {
-            Ok(self.output.write_trailer()?)
+            Ok(self.output.write_trailer().unwrap())
         }
     }
 
@@ -544,7 +739,7 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            self.output.write_header_with(self.options.to_dict())?;
+            self.output.write_header(&mut None)?;
             Ok(self.end_write())
         }
 
@@ -574,7 +769,7 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            self.output.write_header_with(self.options.to_dict())?;
+            self.output.write_header(&mut None)?;
             self.end_write();
             Ok(self.take_buffers())
         }

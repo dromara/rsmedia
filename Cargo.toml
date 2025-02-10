@@ -12,15 +12,16 @@ readme = "README.md"
 
 [features]
 default = ["ffmpeg7", "ndarray"]
-ffmpeg5 = ["ffmpeg/ffmpeg5", "ffmpeg/link_system_ffmpeg"]
-ffmpeg6 = ["ffmpeg/ffmpeg6", "ffmpeg/link_system_ffmpeg"]
-ffmpeg7 = ["ffmpeg/ffmpeg7", "ffmpeg/link_system_ffmpeg"]
+ffmpeg6 = ["rsmpeg/ffmpeg6", "rsmpeg/link_system_ffmpeg"]
+ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
 
 [dependencies]
-ffmpeg = { path = "./ffmpeg", default-features = false }
+rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", features = ["ffmpeg7", "link_system_ffmpeg"] }
 ndarray = { version = "0.16", optional = true }
 tracing = "0.1"
 url = "2"
+libc = "0.2"
+bitflags = "2.8"
 
 [dev-dependencies]
 image = "0.25"
@@ -28,3 +29,6 @@ tokio = { version = "1", features = ["full"] }
 
 [package.metadata.docs.rs]
 all-features = true
+
+[profile.dev]
+debug = true

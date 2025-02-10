@@ -1,15 +1,16 @@
-use ffmpeg::util::format::Pixel as AvPixel;
-use ffmpeg::util::frame::Video as AvFrame;
+use rsmpeg::ffi;
+use rsmpeg::avutil::AVPixelFormat;
+use rsmpeg::avutil::AVFrame;
 
 /// Re-export internal `AvPixel` as `PixelFormat` for callers.
-pub type PixelFormat = AvPixel;
+pub type PixelFormat = AVPixelFormat;
 
 /// Re-export internal `AvFrame` for caller to use.
-pub type RawFrame = AvFrame;
+pub type RawFrame = AVFrame;
 
 /// Re-export frame type as ndarray.
 #[cfg(feature = "ndarray")]
 pub type Frame = crate::ffi::FrameArray;
 
 /// Default frame pixel format.
-pub(crate) const FRAME_PIXEL_FORMAT: AvPixel = AvPixel::RGB24;
+pub(crate) const FRAME_PIXEL_FORMAT: AVPixelFormat = ffi::AV_PIX_FMT_RGB24;

@@ -14,9 +14,11 @@ pub mod resize;
 pub mod rtp;
 pub mod stream;
 pub mod time;
+pub mod rational;
 
 mod ffi;
 mod ffi_hwaccel;
+mod flags;
 
 pub use decode::{Decoder, DecoderBuilder};
 pub use encode::{Encoder, EncoderBuilder};
@@ -31,3 +33,4 @@ pub use options::Options;
 pub use packet::Packet;
 pub use resize::Resize;
 pub use time::Time;
+pub use rational::Rational;

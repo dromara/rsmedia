@@ -1,31 +1,22 @@
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters};
-use rsmpeg::avcodec::AVCodecContext as AvEncoder;
-
-
-use rsmpeg::swscale::SwsContext as AvScaler;
-use rsmpeg::error::RsmpegError;
-use rsmpeg::avutil::{AVDictionary, AVPixelFormat};
-use crate::time::TIME_BASE;
-use crate::packet::Packet as AvPacket;
-use crate::Rational as AvRational;
+use crate::error::Error as MediaError;
 use crate::flags::{AvCodecFlags, AvFormatFlags, AvScalerFlags};
-
-use crate::error::Error;
-use crate::ffi;
 #[cfg(feature = "ndarray")]
-use crate::frame::Frame;
-use crate::frame::{self, PixelFormat, RawFrame};
-use crate::io::private::Write;
+use crate::frame::{self, FrameArray};
 use crate::io::{Writer, WriterBuilder};
 use crate::location::Location;
 use crate::options::Options;
-#[cfg(feature = "ndarray")]
-use crate::time::Time;
+use crate::packet::Packet as AvPacket;
+use crate::time::{Time, TIME_BASE};
+use crate::{PixelFormat, Rational, RawFrame};
+use anyhow::{Context, Error, Result};
+use rsmpeg::avcodec::AVCodecContext as AvEncoder;
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters};
+use rsmpeg::avutil::{AVDictionary, AVPixelFormat};
+use rsmpeg::error::RsmpegError;
+use rsmpeg::swscale::SwsContext as AvScaler;
 
-use std::ffi::CString;
 use libc::c_uint;
-
-type Result<T> = std::result::Result<T, Error>;
+use std::ffi::CString;
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
@@ -130,7 +121,7 @@ pub struct Encoder {
     writer: Writer,
     writer_stream_index: usize,
     encoder: AvEncoder,
-    encoder_time_base: AvRational,
+    encoder_time_base: Rational,
     keyframe_interval: u64,
     interleaved: bool,
     scaler: AvScaler,
@@ -159,21 +150,23 @@ impl Encoder {
     /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
-    pub fn encode(&mut self, frame: &Frame, source_timestamp: Time) -> Result<()> {
+    pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<()> {
         let (height, width, channels) = frame.dim();
         if height != self.scaler_height as usize
             || width != self.scaler_width as usize
             || channels != 3
         {
-            return Err(Error::InvalidFrameFormat);
+            return Err(Error::new(MediaError::InvalidFrameFormat));
         }
 
-        let mut frame = ffi::convert_ndarray_to_frame_rgb24(frame).map_err(Error::BackendError)?;
+        let mut frame =
+            frame::convert_ndarray_to_frame_rgb24(frame).map_err(MediaError::BackendError)?;
 
         frame.set_pts(
             source_timestamp
                 .aligned_with_rational(self.encoder_time_base.into())
-                .into_value().unwrap(),
+                .into_value()
+                .unwrap(),
         );
 
         self.encode_raw(frame)
@@ -187,9 +180,9 @@ impl Encoder {
     pub fn encode_raw(&mut self, frame: RawFrame) -> Result<()> {
         if frame.width as u32 != self.scaler_width
             || frame.height as u32 != self.scaler_height
-            || frame.format != frame::FRAME_PIXEL_FORMAT
+            || frame.format != crate::FRAME_PIXEL_FORMAT
         {
-            return Err(Error::InvalidFrameFormat);
+            return Err(Error::new(MediaError::InvalidFrameFormat));
         }
 
         // Write file header if we hadn't done that yet.
@@ -207,7 +200,8 @@ impl Encoder {
 
         self.encoder
             .send_frame(Some(&frame))
-            .map_err(Error::BackendError).unwrap();
+            .map_err(MediaError::BackendError)
+            .unwrap();
         // Increment frame count regardless of whether or not frame is written, see
         // https://github.com/oddity-ai/video-rs/issues/46.
         self.frame_count += 1;
@@ -237,7 +231,7 @@ impl Encoder {
 
     /// Get encoder time base.
     #[inline]
-    pub fn time_base(&self) -> AvRational {
+    pub fn time_base(&self) -> Rational {
         self.encoder_time_base
     }
 
@@ -254,49 +248,46 @@ impl Encoder {
                 .contains(AvFormatFlags::GLOBAL_HEADER)
         };
 
-        let writer_stream_index = {
-            let mut writer_stream = writer.output.new_stream();
-            let mut params = AVCodecParameters::new();
-            params.from_context(&mut AVCodecContext::new(&settings.codec().unwrap()));
-            writer_stream.set_codecpar(params);
-            writer_stream.index as usize
-        };
-
-        let mut encoder_context = ffi::codec_context_as(settings.codec())?;
-
+        // FIXME:
+        let mut encode_context = AVCodecContext::new(&settings.codec().unwrap());
         // Some formats require this flag to be set or the output will
         // not be playable by dumb players.
         if global_header {
-            encoder_context.set_flags(AvCodecFlags::GLOBAL_HEADER.bits() as i32);
+            encode_context.set_flags(AvCodecFlags::GLOBAL_HEADER.bits() as i32);
         }
 
-        settings.apply_to(&mut encoder_context);
+        settings.apply_to(&mut encode_context);
+        encode_context.open(None).context("Could not open codec")?;
 
-        // TODO:
-        // let opts = unsafe { settings.options().to_dict().disown() };
-        encoder_context.open(None).map_err(Error::BackendError).unwrap();
+        let writer_stream_index = {
+            let mut out_stream = writer.output.new_stream();
+            out_stream.set_codecpar(encode_context.extract_codecpar());
+            out_stream.set_time_base(encode_context.time_base);
+            out_stream.index as usize
+        };
 
-        let encoder_time_base = encoder_context.time_base.into();
+        let encoder_time_base = encode_context.time_base.into();
 
-        let scaler_width = encoder_context.width;
-        let scaler_height = encoder_context.height;
+        let scaler_width = encode_context.width;
+        let scaler_height = encode_context.height;
         let scaler = AvScaler::get_context(
             scaler_width,
             scaler_height,
-            frame::FRAME_PIXEL_FORMAT,
+            crate::FRAME_PIXEL_FORMAT,
             scaler_width,
             scaler_height,
-            encoder_context.pix_fmt,
+            encode_context.pix_fmt,
             AvScalerFlags::empty().bits(),
             None,
             None,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         Ok(Self {
             writer,
             writer_stream_index,
-            encoder: encoder_context,
+            encoder: encode_context,
             encoder_time_base,
             keyframe_interval: settings.keyframe_interval,
             interleaved,
@@ -318,8 +309,8 @@ impl Encoder {
     fn scale(&mut self, frame: RawFrame) -> Result<RawFrame> {
         let mut frame_scaled = RawFrame::new();
         self.scaler
-            .scale_frame(&frame, frame.width, frame.height,&mut frame_scaled)
-            .map_err(Error::BackendError)?;
+            .scale_frame(&frame, frame.width, frame.height, &mut frame_scaled)
+            .map_err(MediaError::BackendError)?;
         // Copy over PTS from old frame.
         frame_scaled.set_pts(frame.pts);
 
@@ -342,12 +333,14 @@ impl Encoder {
     }
 
     /// Acquire the time base of the output stream.
-    fn stream_time_base(&mut self) -> AvRational {
+    fn stream_time_base(&mut self) -> Rational {
         self.writer
             .output
-            .streams().get(self.writer_stream_index)
+            .streams()
+            .get(self.writer_stream_index)
             .unwrap()
-            .time_base.into()
+            .time_base
+            .into()
     }
 
     /// Write encoded packet to output stream.
@@ -362,7 +355,7 @@ impl Encoder {
         if self.interleaved {
             self.writer.write_interleaved(&mut packet)?;
         } else {
-            self.writer.write(&mut packet)?;
+            self.writer.write_frame(&mut packet)?;
         };
 
         Ok(())
@@ -497,7 +490,7 @@ impl Settings {
         encoder.set_height(self.height);
         encoder.set_pix_fmt(self.pixel_format);
         encoder.set_bit_rate(Self::BIT_RATE);
-        encoder.set_framerate(AvRational::new(Self::FRAME_RATE, 1).into());
+        encoder.set_framerate(Rational::new(Self::FRAME_RATE, 1).into());
         // Just use the ffmpeg global time base which is precise enough
         // that we should never get in trouble.
         encoder.set_time_base(TIME_BASE.into());
@@ -511,9 +504,13 @@ impl Settings {
             let codec = AVCodec::find_encoder_by_name(&CString::new("libx264").unwrap());
             if codec.is_none() {
                 let encoder = AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_H264)?;
-                Some(AVCodec::from_raw(std::ptr::NonNull::new(encoder.as_ptr() as *mut _)?))
+                Some(AVCodec::from_raw(std::ptr::NonNull::new(
+                    encoder.as_ptr() as *mut _
+                )?))
             } else {
-                Some(AVCodec::from_raw(std::ptr::NonNull::new(codec.unwrap().as_ptr() as *mut _)?))
+                Some(AVCodec::from_raw(std::ptr::NonNull::new(
+                    codec.unwrap().as_ptr() as *mut _,
+                )?))
             }
         }
     }

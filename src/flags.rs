@@ -1,5 +1,5 @@
-use libc::{c_int, c_uint};
 use bitflags::bitflags;
+use libc::{c_int, c_uint};
 use rsmpeg::ffi;
 
 bitflags! {

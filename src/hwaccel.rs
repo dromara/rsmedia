@@ -1,13 +1,11 @@
-use std::ops::Deref;
-use crate::error::Error;
+use crate::error::Error as MediaError;
 use crate::ffi_hwaccel;
-
-use rsmpeg::ffi;
-use rsmpeg::avutil::AVPixelFormat;
+use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avcodec::AVCodecContext;
-
-type Result<T> = std::result::Result<T, Error>;
+use rsmpeg::avutil::AVPixelFormat;
+use rsmpeg::ffi;
+use std::ops::Deref;
 
 pub(crate) struct HWContext {
     pixel_format: AVPixelFormat,
@@ -15,15 +13,11 @@ pub(crate) struct HWContext {
 }
 
 impl HWContext {
-    pub(crate) fn new(
-        decoder: &mut AVCodecContext,
-        device_type: HWDeviceType,
-    ) -> Result<Self> {
-        let codec = AVCodec::find_encoder(decoder.codec_id)
-            .ok_or(Error::UninitializedCodec)?;
-        let pixel_format =
-            ffi_hwaccel::codec_find_hwaccel_pixfmt(codec.deref(), device_type)
-                .ok_or(Error::UnsupportedCodecHardwareAccelerationDeviceType)?;
+    pub(crate) fn new(decoder: &mut AVCodecContext, device_type: HWDeviceType) -> Result<Self> {
+        let codec =
+            AVCodec::find_encoder(decoder.codec_id).ok_or(MediaError::UninitializedCodec)?;
+        let pixel_format = ffi_hwaccel::codec_find_hwaccel_pixfmt(codec.deref(), device_type)
+            .ok_or(MediaError::UnsupportedCodecHardwareAccelerationDeviceType)?;
 
         ffi_hwaccel::codec_context_hwaccel_set_get_format(decoder, pixel_format);
 

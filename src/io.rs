@@ -1,23 +1,21 @@
-use rsmpeg::avformat::AVFormatContextInput as AvInput;
-use rsmpeg::avformat::AVFormatContextOutput as AvOutput;
-use rsmpeg::error::RsmpegError;
-
-use crate::error::Error;
-use crate::{ffi, Packet};
+use crate::error::Error as MediaError;
 use crate::location::Location;
 use crate::options::{Dictionary, Options};
 use crate::packet::Packet as AvPacket;
 use crate::packet::PacketIter;
 use crate::stream::{Stream, StreamInfo};
+use anyhow::{Context, Error, Result};
+use rsmpeg::avformat::AVFormatContextInput as AvInput;
+use rsmpeg::avformat::AVFormatContextOutput as AvOutput;
+use rsmpeg::error::RsmpegError;
 
+use crate::Packet;
 use libc::c_int;
 use std::ffi::{CStr, CString};
 use std::fmt::Display;
+use std::ops::Bound;
 use std::path::Path;
 use std::ptr;
-use std::ops::Bound;
-
-type Result<T> = std::result::Result<T, Error>;
 
 /// Builds a [`Reader`].
 ///
@@ -96,7 +94,7 @@ impl<'a> ReaderBuilder<'a> {
                     r if r >= 0 => Ok(AvInput::from_raw(ptr::NonNull::new(ps).unwrap())),
                     e => {
                         rsmpeg::ffi::avformat_close_input(&mut ps);
-                        Err(Error::BackendError(RsmpegError::from(e)))
+                        Err(Error::new(MediaError::BackendError(RsmpegError::from(e))))
                     }
                 },
 
@@ -175,13 +173,13 @@ impl Reader {
             match self.packets().next() {
                 Some((stream, packet)) => {
                     if stream.index() == stream_index {
-                        return Ok(Packet::new(packet, stream.time_base()));
+                        return Ok(AvPacket::new(packet, stream.time_base()));
                     }
                 }
                 None => {
                     error_count += 1;
                     if error_count > 3 {
-                        return Err(Error::ReadExhausted);
+                        return Err(Error::new(MediaError::ReadExhausted));
                     }
                 }
             }
@@ -217,7 +215,8 @@ impl Reader {
         let timestamp = CONVERSION_FACTOR * timestamp_milliseconds;
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
 
-        self._seek(timestamp, range).map_err(|_| Error::BackendError(RsmpegError::Unknown))
+        self._seek(timestamp, range)
+            .context("Failed to seek in reader")
     }
 
     /// Seek to a specific frame in the video stream.
@@ -229,7 +228,7 @@ impl Reader {
         unsafe {
             match rsmpeg::ffi::av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
                 0 => Ok(()),
-                e => Err(Error::BackendError(RsmpegError::from(e))),
+                e => Err(Error::new(MediaError::BackendError(RsmpegError::from(e)))),
             }
         }
     }
@@ -237,7 +236,8 @@ impl Reader {
     /// Seek to start of reader. This function performs best effort seeking to the start of the
     /// file.
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self._seek(i64::MIN, ..).map_err(|_| Error::BackendError(RsmpegError::Unknown))
+        self._seek(i64::MIN, ..)
+            .context("Failed to seek to start of reader")
     }
 
     fn _seek<R: std::ops::RangeBounds<i64>>(&mut self, ts: i64, range: R) -> Result<()> {
@@ -275,9 +275,6 @@ impl Reader {
 
 unsafe impl Send for Reader {}
 unsafe impl Sync for Reader {}
-
-/// Any type that implements this can write video packets.
-pub trait Write: private::Write + private::Output {}
 
 /// Build a [`Writer`].
 pub struct WriterBuilder<'a> {
@@ -455,384 +452,26 @@ impl<'a> WriterBuilder<'a> {
     }
 }
 
-/// File writer for video files.
-///
-/// # Example
-///
-/// Create a video writer that produces fragmented MP4:
-///
-/// ```ignore
-/// let mut options = HashMap::new();
-/// options.insert(
-///     "movflags".to_string(),
-///     "frag_keyframe+empty_moov".to_string(),
-/// );
-///
-/// let mut writer = WriterBuilder::new(Path::new("my_file.mp4"))
-/// .with_options(&options.into())
-/// .unwrap();
-/// ```
+/// Video writer that can write to files.
 pub struct Writer {
     pub destination: Location,
-    pub(crate) output: AvOutput,
+    pub output: AvOutput,
 }
 
 impl Writer {
-    /// Create a new file writer for video files.
-    ///
-    /// # Arguments
-    ///
-    /// * `dest` - Where to write to.
-    #[inline]
-    pub fn new(destination: impl Into<Location>) -> Result<Self> {
-        WriterBuilder::new(destination).build()
-    }
-}
-
-impl Write for Writer {}
-
-unsafe impl Send for Writer {}
-unsafe impl Sync for Writer {}
-
-/// Type alias for a byte buffer.
-pub type Buf = Vec<u8>;
-
-/// Type alias for multiple buffers.
-pub type Bufs = Vec<Buf>;
-
-/// Build a [`BufWriter`].
-pub struct BufWriterBuilder<'a> {
-    format: &'a str,
-    options: Option<&'a Options>,
-}
-
-impl<'a> BufWriterBuilder<'a> {
-    /// Create a new writer that writes to a buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `format` - Container format to use.
-    pub fn new(format: &'a str) -> Self {
-        Self {
-            format,
-            options: None,
-        }
+    pub(crate) fn write_header(&self) -> Result<()> {
+        todo!()
     }
 
-    /// Specify options for the backend.
-    ///
-    /// # Arguments
-    ///
-    /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
-        self.options = Some(options);
-        self
+    pub(crate) fn write_trailer(&self) -> Result<()> {
+        todo!()
     }
 
-    /// Build [`BufWriter`].
-    pub fn build(self) -> Result<BufWriter> {
-        Ok(BufWriter {
-            output: ffi::output_raw(self.format)?,
-            options: self.options.cloned().unwrap_or_default(),
-        })
-    }
-}
-
-/// Video writer that writes to a buffer.
-///
-/// # Example
-///
-/// ```ignore
-/// let mut writer = BufWriter::new("mp4").unwrap();
-/// let bytes = writer.write_header()?;
-/// ```
-pub struct BufWriter {
-    pub(crate) output: AvOutput,
-    options: Options,
-}
-
-impl BufWriter {
-    /// Create a video writer that writes to a buffer and returns the resulting bytes.
-    ///
-    /// # Arguments
-    ///
-    /// * `format` - Container format to use.
-    #[inline]
-    pub fn new(format: &str) -> Result<Self> {
-        BufWriterBuilder::new(format).build()
+    pub(crate) fn write_interleaved(&self, p0: &mut Packet) -> Result<()> {
+        todo!()
     }
 
-    fn begin_write(&mut self) {
-        ffi::output_raw_buf_start(&mut self.output);
-    }
-
-    fn end_write(&mut self) -> Buf {
-        ffi::output_raw_buf_end(&mut self.output)
-    }
-}
-
-impl Write for BufWriter {}
-
-impl Drop for BufWriter {
-    fn drop(&mut self) {
-        // Make sure to close the buffer properly before dropping the object or `avio_close` will
-        // get confused and double free. We can simply ignore the resulting buffer.
-        let _ = ffi::output_raw_buf_end(&mut self.output);
-    }
-}
-
-unsafe impl Send for BufWriter {}
-unsafe impl Sync for BufWriter {}
-
-/// Build a [`PacketizedBufWriter`].
-pub struct PacketizedBufWriterBuilder<'a> {
-    format: &'a str,
-    options: Option<&'a Options>,
-}
-
-impl<'a> PacketizedBufWriterBuilder<'a> {
-    /// Create a new writer that writes to a packetized buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `format` - Container format to use.
-    pub fn new(format: &'a str) -> Self {
-        Self {
-            format,
-            options: None,
-        }
-    }
-
-    /// Specify options for the backend.
-    ///
-    /// # Arguments
-    ///
-    /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
-        self.options = Some(options);
-        self
-    }
-
-    /// Build [`PacketizedBufWriter`].
-    pub fn build(self) -> Result<PacketizedBufWriter> {
-        Ok(PacketizedBufWriter {
-            output: ffi::output_raw(self.format)?,
-            options: self.options.cloned().unwrap_or_default(),
-            buffers: Vec::new(),
-        })
-    }
-}
-
-/// Video writer that writes multiple packets to a buffer and returns the resulting
-/// bytes for each packet.
-///
-/// # Example
-///
-/// ```ignore
-/// let mut writer = BufPacketizedWriter::new("rtp").unwrap();
-/// let bytes = writer.write_header()?;
-/// ```
-pub struct PacketizedBufWriter {
-    pub(crate) output: AvOutput,
-    options: Options,
-    buffers: Bufs,
-}
-
-impl PacketizedBufWriter {
-    /// Actual packet size. Value should be below MTU.
-    const PACKET_SIZE: usize = 1024;
-
-    /// Create a video writer that writes multiple packets to a buffer and returns the resulting
-    /// bytes for each packet.
-    ///
-    /// # Arguments
-    ///
-    /// * `format` - Container format to use.
-    #[inline]
-    pub fn new(format: &str) -> Result<Self> {
-        PacketizedBufWriterBuilder::new(format).build()
-    }
-
-    fn begin_write(&mut self) {
-        ffi::output_raw_packetized_buf_start(
-            &mut self.output,
-            // Note: `ffi::output_raw_packetized_bug_start` requires that this value lives until
-            // `ffi::output_raw_packetized_buf_end`. This is guaranteed by the fact that
-            // `begin_write` is always followed by an invocation of `end_write` in the same function
-            // (see the implementation) of `Write` for `PacketizedBufWriter`.
-            &mut self.buffers,
-            Self::PACKET_SIZE,
-        );
-    }
-
-    fn end_write(&mut self) {
-        ffi::output_raw_packetized_buf_end(&mut self.output);
-    }
-
-    #[inline]
-    fn take_buffers(&mut self) -> Bufs {
-        // We take the buffers here and replace them with an empty `Vec`.
-        std::mem::take(&mut self.buffers)
-    }
-}
-
-impl Write for PacketizedBufWriter {}
-
-unsafe impl Send for PacketizedBufWriter {}
-unsafe impl Sync for PacketizedBufWriter {}
-
-pub(crate) mod private {
-    use rsmpeg::avformat::AVOutputFormat;
-    use super::*;
-
-    type Result<T> = std::result::Result<T, Error>;
-
-    pub trait Write {
-        type Out;
-
-        /// Write the container header.
-        fn write_header(&mut self) -> Result<Self::Out>;
-
-        /// Write a packet into the container.
-        ///
-        /// # Arguments
-        ///
-        /// * `packet` - Packet to write.
-        fn write(&mut self, packet: &mut AvPacket) -> Result<Self::Out>;
-
-        /// Write a packet into the container and take care of interleaving.
-        ///
-        /// # Arguments
-        ///
-        /// * `packet` - Packet to write.
-        fn write_interleaved(&mut self, packet: &mut AvPacket) -> Result<Self::Out>;
-
-        /// Write the container trailer.
-        fn write_trailer(&mut self) -> Result<Self::Out>;
-    }
-
-    impl Write for Writer {
-        type Out = ();
-
-        fn write_header(&mut self) -> Result<()> {
-            self.output.write_header(&mut None).unwrap();
-            Ok(())
-        }
-
-        fn write(&mut self, packet: &mut AvPacket) -> Result<()> {
-            packet.write(&mut self.output)?;
-            Ok(())
-        }
-
-        fn write_interleaved(&mut self, packet: &mut AvPacket) -> Result<()> {
-            packet.write_interleaved(&mut self.output)?;
-            Ok(())
-        }
-
-        fn write_trailer(&mut self) -> Result<()> {
-            Ok(self.output.write_trailer().unwrap())
-        }
-    }
-
-    impl Write for BufWriter {
-        type Out = Buf;
-
-        fn write_header(&mut self) -> Result<Buf> {
-            self.begin_write();
-            self.output.write_header(&mut None)?;
-            Ok(self.end_write())
-        }
-
-        fn write(&mut self, packet: &mut AvPacket) -> Result<Buf> {
-            self.begin_write();
-            packet.write(&mut self.output)?;
-            ffi::flush_output(&mut self.output)?;
-            Ok(self.end_write())
-        }
-
-        fn write_interleaved(&mut self, packet: &mut AvPacket) -> Result<Buf> {
-            self.begin_write();
-            packet.write_interleaved(&mut self.output)?;
-            ffi::flush_output(&mut self.output)?;
-            Ok(self.end_write())
-        }
-
-        fn write_trailer(&mut self) -> Result<Buf> {
-            self.begin_write();
-            self.output.write_trailer()?;
-            Ok(self.end_write())
-        }
-    }
-
-    impl Write for PacketizedBufWriter {
-        type Out = Bufs;
-
-        fn write_header(&mut self) -> Result<Bufs> {
-            self.begin_write();
-            self.output.write_header(&mut None)?;
-            self.end_write();
-            Ok(self.take_buffers())
-        }
-
-        fn write(&mut self, packet: &mut AvPacket) -> Result<Bufs> {
-            self.begin_write();
-            packet.write(&mut self.output)?;
-            ffi::flush_output(&mut self.output)?;
-            self.end_write();
-            Ok(self.take_buffers())
-        }
-
-        fn write_interleaved(&mut self, packet: &mut AvPacket) -> Result<Bufs> {
-            self.begin_write();
-            packet.write_interleaved(&mut self.output)?;
-            ffi::flush_output(&mut self.output)?;
-            self.end_write();
-            Ok(self.take_buffers())
-        }
-
-        fn write_trailer(&mut self) -> Result<Bufs> {
-            self.begin_write();
-            self.output.write_trailer()?;
-            self.end_write();
-            Ok(self.take_buffers())
-        }
-    }
-
-    pub trait Output {
-        /// Obtain reference to output context.
-        fn output(&self) -> &AvOutput;
-
-        /// Obtain mutable reference to output context.
-        fn output_mut(&mut self) -> &mut AvOutput;
-    }
-
-    impl Output for Writer {
-        fn output(&self) -> &AvOutput {
-            &self.output
-        }
-
-        fn output_mut(&mut self) -> &mut AvOutput {
-            &mut self.output
-        }
-    }
-
-    impl Output for BufWriter {
-        fn output(&self) -> &AvOutput {
-            &self.output
-        }
-
-        fn output_mut(&mut self) -> &mut AvOutput {
-            &mut self.output
-        }
-    }
-
-    impl Output for PacketizedBufWriter {
-        fn output(&self) -> &AvOutput {
-            &self.output
-        }
-
-        fn output_mut(&mut self) -> &mut AvOutput {
-            &mut self.output
-        }
+    pub(crate) fn write_frame(&self, p0: &mut Packet) -> Result<()> {
+        todo!()
     }
 }

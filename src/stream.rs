@@ -1,21 +1,19 @@
+use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::AVCodecParameters;
-use rsmpeg::error::RsmpegError;
 use rsmpeg::avformat::AVFormatContextInput;
-use rsmpeg::ffi::{AVDiscard, AVPacketSideDataType};
+use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
+use rsmpeg::ffi::{AVDiscard, AVPacketSideDataType};
 
-use std::ops::Deref;
-use std::marker::PhantomData;
 use libc::{c_int, c_uint};
+use std::marker::PhantomData;
+use std::ops::Deref;
 
-use crate::Rational;
-use crate::error::Error;
-use crate::io::Reader;
 use crate::flags::AvDispositionFlags;
+use crate::io::Reader;
 use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
-
-type Result<T> = std::result::Result<T, Error>;
+use crate::Rational;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
@@ -34,12 +32,20 @@ impl StreamInfo {
     /// * `reader` - Reader to find stream information from.
     /// * `stream_index` - Index of stream in reader.
     pub(crate) fn from_reader(reader: &Reader, stream_index: usize) -> Result<Self> {
-        let stream = reader
-            .input
-            .streams().get(stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
+        let stream =
+            reader
+                .input
+                .streams()
+                .get(stream_index)
+                .ok_or(RsmpegError::FindStreamInfoError(
+                    ffi::AVERROR_STREAM_NOT_FOUND,
+                ))?;
 
-        Self::from_params(stream.codecpar().to_owned(), stream.time_base.into(), stream_index)
+        Self::from_params(
+            stream.codecpar().to_owned(),
+            stream.time_base.into(),
+            stream_index,
+        )
     }
 
     pub fn from_params(
@@ -71,7 +77,6 @@ impl StreamInfo {
 
 unsafe impl Send for StreamInfo {}
 unsafe impl Sync for StreamInfo {}
-
 
 /////////////////////////////////////////
 pub struct SideData<'a> {

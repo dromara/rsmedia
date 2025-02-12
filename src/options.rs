@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::ffi::{c_int, CStr, CString};
-use std::marker::PhantomData;
-use std::ptr;
 use std::fmt;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::ptr;
 use std::str::from_utf8_unchecked;
 
 use rsmpeg::ffi;
@@ -48,7 +48,12 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
             let empty = CString::new("").unwrap();
-            let entry = ffi::av_dict_get(self.ptr, empty.as_ptr(), self.cur, ffi::AV_DICT_IGNORE_SUFFIX as c_int);
+            let entry = ffi::av_dict_get(
+                self.ptr,
+                empty.as_ptr(),
+                self.cur,
+                ffi::AV_DICT_IGNORE_SUFFIX as c_int,
+            );
 
             if !entry.is_null() {
                 let key = from_utf8_unchecked(CStr::from_ptr((*entry).key).to_bytes());
@@ -313,9 +318,9 @@ impl<'a> fmt::Debug for Owned<'a> {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+pub use ImmutableRef as DictionaryRef;
 pub use MutableRef as DictionaryMut;
 pub use Owned as Dictionary;
-pub use ImmutableRef as DictionaryRef;
 
 /// A wrapper type for ffmpeg options.
 #[derive(Debug, Clone)]
@@ -370,22 +375,11 @@ impl Options {
     pub fn preset_h264() -> Self {
         let mut opts = Dictionary::new();
         // Set H264 encoder to the medium preset.
-        // 1. 基础编码参数
         // preset: 预设编码配置,控制编码速度和质量的平衡
         // - ultrafast,superfast,veryfast,faster,fast
         // - medium (默认)
         // - slow,slower,veryslow
         opts.set("preset", "medium");
-
-        // profile: H.264编码配置文件
-        // - baseline: 基本画质,适用于低延迟视频通话
-        // - main: 主要画质,用于一般视频流
-        // - high: 高画质,用于高清视频,支持8位色深
-        opts.set("profile:v", "high");
-
-        // H.264编码级别
-        // - 常用级别: 3.0, 3.1, 4.0, 4.1, 4.2, 5.0, 5.1
-        opts.set("level", "4.1");
 
         Self(opts)
     }
@@ -409,12 +403,6 @@ impl Options {
 
         // Tune for low latency
         opts.set("tune", "zerolatency");
-
-        // profile: H.264编码配置文件
-        // - baseline: 基本画质,适用于低延迟视频通话
-        // - main: 主要画质,用于一般视频流
-        // - high: 高画质,用于高清视频,支持8位色深
-        opts.set("profile:v", "main");
 
         Self(opts)
     }

@@ -1,19 +1,19 @@
 use crate::flags::AvPacketFlags;
+use crate::stream::Stream;
 use crate::time::Time;
 use crate::time::TIME_BASE;
-use crate::Rational as AvRational;
+use crate::Rational;
 use libc::{c_int, c_uint};
 use rsmpeg::avcodec::AVPacket;
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
-use crate::stream::Stream;
 
 /// Represents a stream packet.
 #[derive(Debug)]
 pub struct Packet {
     inner: AVPacket,
-    time_base: AvRational,
+    time_base: Rational,
 }
 
 impl Packet {
@@ -104,8 +104,8 @@ impl Packet {
     #[inline]
     pub fn rescale_ts<S, D>(&mut self, source: S, destination: D)
     where
-        S: Into<AvRational>,
-        D: Into<AvRational>,
+        S: Into<Rational>,
+        D: Into<Rational>,
     {
         unsafe {
             ffi::av_packet_rescale_ts(
@@ -192,7 +192,7 @@ impl Packet {
     ///
     /// * `inner` - Inner `AvPacket`.
     /// * `time_base` - Source time base.
-    pub fn new(inner: Packet, time_base: AvRational) -> Self {
+    pub fn new(inner: Packet, time_base: Rational) -> Self {
         Self {
             inner: inner.into_inner(),
             time_base,
@@ -205,7 +205,7 @@ impl Packet {
     }
 
     /// Downcast to native inner type and time base.
-    pub(crate) fn into_inner_parts(self) -> (AVPacket, AvRational) {
+    pub(crate) fn into_inner_parts(self) -> (AVPacket, Rational) {
         (self.inner, self.time_base)
     }
 
@@ -224,12 +224,8 @@ impl Packet {
     #[inline]
     pub fn empty() -> Self {
         unsafe {
-            let mut pkt: ffi::AVPacket = std::mem::zeroed();
-
-            ffi::av_init_packet(&mut pkt);
-
-            Packet{
-                inner: AVPacket::from_raw(std::ptr::NonNull::new(&mut pkt).unwrap()),
+            Packet {
+                inner: AVPacket::new(),
                 time_base: TIME_BASE,
             }
         }
@@ -288,7 +284,10 @@ impl<'a> Iterator for PacketIter<'a> {
             match packet.read(self.context.as_mut_ptr()) {
                 Ok(..) => unsafe {
                     return Some((
-                        Stream::wrap(std::mem::transmute_copy(&self.context), packet.stream_index()),
+                        Stream::wrap(
+                            std::mem::transmute_copy(&self.context),
+                            packet.stream_index(),
+                        ),
                         packet,
                     ));
                 },

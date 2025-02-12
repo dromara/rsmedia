@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
-use rsmpeg::ffi;
 use libc::c_int;
+use rsmpeg::ffi;
 
 #[derive(Copy, Clone)]
 pub struct Rational(pub i32, pub i32);

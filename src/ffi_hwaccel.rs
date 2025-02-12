@@ -1,17 +1,17 @@
-use rsmpeg::ffi;
-use rsmpeg::avutil::AVFrame;
+use crate::hwaccel::HWDeviceType;
 use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avcodec::AVCodecContext;
+use rsmpeg::avutil::AVFrame;
 use rsmpeg::avutil::AVPixelFormat;
-use rsmpeg::error::{RsmpegError as Error};
-use crate::hwaccel::HWDeviceType;
+use rsmpeg::error::RsmpegError;
+use rsmpeg::ffi;
 
 pub struct HWDeviceContext {
     ptr: *mut ffi::AVBufferRef,
 }
 
 impl HWDeviceContext {
-    pub fn new(device_type: HWDeviceType) -> Result<HWDeviceContext, Error> {
+    pub fn new(device_type: HWDeviceType) -> Result<HWDeviceContext, RsmpegError> {
         let mut ptr: *mut ffi::AVBufferRef = std::ptr::null_mut();
 
         unsafe {
@@ -23,7 +23,7 @@ impl HWDeviceContext {
                 0,
             ) {
                 0 => Ok(HWDeviceContext { ptr }),
-                e => Err(Error::from(e)),
+                e => Err(RsmpegError::from(e)),
             }
         }
     }
@@ -43,8 +43,7 @@ impl Drop for HWDeviceContext {
 
 pub fn hwdevice_list_available_device_types() -> Vec<HWDeviceType> {
     let mut hwdevice_types = Vec::new();
-    let mut hwdevice_type =
-        unsafe { ffi::av_hwdevice_iterate_types(ffi::AV_HWDEVICE_TYPE_NONE) };
+    let mut hwdevice_type = unsafe { ffi::av_hwdevice_iterate_types(ffi::AV_HWDEVICE_TYPE_NONE) };
     while hwdevice_type != ffi::AV_HWDEVICE_TYPE_NONE {
         hwdevice_types.push(HWDeviceType::from(hwdevice_type).unwrap());
         hwdevice_type = unsafe { ffi::av_hwdevice_iterate_types(hwdevice_type) };
@@ -55,15 +54,11 @@ pub fn hwdevice_list_available_device_types() -> Vec<HWDeviceType> {
 pub fn hwdevice_transfer_frame(
     target_frame: &mut AVFrame,
     hwdevice_frame: &AVFrame,
-) -> Result<(), Error> {
+) -> Result<(), RsmpegError> {
     unsafe {
-        match ffi::av_hwframe_transfer_data(
-            target_frame.as_mut_ptr(),
-            hwdevice_frame.as_ptr(),
-            0,
-        ) {
+        match ffi::av_hwframe_transfer_data(target_frame.as_mut_ptr(), hwdevice_frame.as_ptr(), 0) {
             0 => Ok(()),
-            e => Err(Error::from(e)),
+            e => Err(RsmpegError::from(e)),
         }
     }
 }

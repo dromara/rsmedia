@@ -4,7 +4,7 @@
 
 Low / High-level video toolkit based on ffmpeg.
 
-ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
+ffmpeg 5.1, 6.1, 7.1 is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
 ## FFI bindings
 
@@ -13,42 +13,43 @@ ffmpeg 5.x, 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCEx
 - [ffmpeg-sys-next](https://github.com/zmwangx/rust-ffmpeg-sys)
 - [ffmpeg-the-third](https://github.com/shssoichiro/ffmpeg-the-third)
 
-## See also: 
-> https://github.com/zmwangx/rust-ffmpeg
-> 
-> https://github.com/larksuite/rsmpeg
+## See also
 >
-> https://github.com/oddity-ai/video-rs
-> 
-> https://github.com/remotia/remotia-ffmpeg-codecs
+> <https://github.com/zmwangx/rust-ffmpeg>
+>
+> <https://github.com/larksuite/rsmpeg>
+>
+> <https://github.com/oddity-ai/video-rs>
+>
+> <https://github.com/remotia/remotia-ffmpeg-codecs>
 
-## Test on:
-
-### ffmpeg container [jrottenberg/ffmpeg](https://github.com/jrottenberg/ffmpeg):
+## Test on: [jrottenberg/ffmpeg](https://github.com/jrottenberg/ffmpeg)
+>
 > ffmpeg:5.1-ubuntu [🟢]
-> 
+>
 > ffmpeg:6.1-ubuntu [🟢]
 >
 > ffmpeg:7.1-ubuntu [🟢]
 
-### Architecture:
+### Architecture
+>
 > ubuntu-latest: [🟢]
-> 
+>
 > macos-latest: [🟢]
 >
 > windows-latest: [🟢]
 
 ## Status
+>
 > ⛔ 格式不正确
-> 
+>
 > ✔️ 注册成功
 >
 > ⭕ 成功
-> 
+>
 > 🔴 构建失败
-> 
+>
 > 🟢 测试通过
-
 
 ## Advanced usage
 

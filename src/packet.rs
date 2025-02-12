@@ -1,4 +1,3 @@
-use crate::error::MediaError;
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
 use crate::time::Time;
@@ -225,23 +224,17 @@ impl Packet {
 
     #[inline]
     pub fn empty() -> Self {
-        unsafe {
-            Packet {
-                inner: AVPacket::new(),
-                time_base: TIME_BASE,
-            }
+        Packet {
+            inner: AVPacket::new(),
+            time_base: TIME_BASE,
         }
     }
 
     #[inline]
-    pub fn copy_props(&mut self, packet: AVPacket) -> Result<(), RsmpegError> {
-        unsafe {
-            let _res = ffi::av_packet_copy_props(self.inner.as_mut_ptr(), packet.as_ptr());
-            if _res < 0 {
-                Err(RsmpegError::from(_res))
-            } else {
-                Ok(())
-            }
+    pub fn new_with_avpacket(pkt: AVPacket) -> Self {
+        Packet {
+            inner: pkt,
+            time_base: TIME_BASE,
         }
     }
 
@@ -285,7 +278,10 @@ impl<'a> Iterator for PacketIter<'a> {
         match packet.read(self.context.as_mut_ptr()) {
             Ok(..) => unsafe {
                 Some(Ok((
-                    Stream::wrap(std::mem::transmute_copy(&self.context), packet.stream_index()),
+                    Stream::wrap(
+                        std::mem::transmute_copy(&self.context),
+                        packet.stream_index(),
+                    ),
                     packet,
                 )))
             },

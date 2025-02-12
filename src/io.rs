@@ -352,7 +352,18 @@ impl<'a> WriterBuilder<'a> {
     }
 
     pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
-        Ok(AVFormatContextOutput::create(&Self::from_path(path), None)?)
+        //Ok(AVFormatContextOutput::create(&Self::from_path(path), None)?)
+        unsafe {
+            let mut ps = ptr::null_mut();
+            let path = Self::from_path(path);
+            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
+                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as c_int) {
+                    0 => Ok(AVFormatContextOutput::from_raw(std::ptr::NonNull::new(ps).unwrap())),
+                    e => Err(MediaError::BackendError(RsmpegError::from(e))),
+                },
+                e => Err(MediaError::BackendError(RsmpegError::from(e))),
+            }
+        }
     }
 
     pub fn output_with<P: AsRef<Path> + ?Sized>(
@@ -467,7 +478,23 @@ impl<'a> WriterBuilder<'a> {
     }
 }
 
-/// Video writer that can write to files.
+/// File writer for video files.
+///
+/// # Example
+///
+/// Create a video writer that produces fragmented MP4:
+///
+/// ```ignore
+/// let mut options = HashMap::new();
+/// options.insert(
+///     "movflags".to_string(),
+///     "frag_keyframe+empty_moov".to_string(),
+/// );
+///
+/// let mut writer = WriterBuilder::new(Path::new("my_file.mp4"))
+/// .with_options(&options.into())
+/// .unwrap();
+/// ```
 pub struct Writer {
     pub destination: Location,
     pub output: AVFormatContextOutput,
@@ -482,28 +509,6 @@ impl Writer {
     #[inline]
     pub fn new(destination: impl Into<Location>) -> Result<Self> {
         WriterBuilder::new(destination).build()
-    }
-
-    pub(crate) fn write_header(&mut self) -> Result<()> {
-        self.output.write_header(&mut None)?;
-        Ok(())
-    }
-
-    pub(crate) fn write_trailer(&mut self) -> Result<()> {
-        self.output.write_trailer()?;
-        Ok(())
-    }
-
-    pub(crate) fn write_interleaved(&mut self, pkt: Packet) -> Result<()> {
-        let mut pkt = pkt.into_inner();
-        self.output.interleaved_write_frame(&mut pkt)?;
-        Ok(())
-    }
-
-    pub(crate) fn write_frame(&mut self, pkt: Packet) -> Result<()> {
-        let mut pkt = pkt.into_inner();
-        self.output.write_frame(&mut pkt)?;
-        Ok(())
     }
 }
 
@@ -715,7 +720,7 @@ pub(crate) mod private {
         /// # Arguments
         ///
         /// * `packet` - Packet to write.
-        fn write(&mut self, packet: &mut Packet) -> Result<Self::Out>;
+        fn write_frame(&mut self, packet: &mut Packet) -> Result<Self::Out>;
 
         /// Write a packet into the container and take care of interleaving.
         ///
@@ -732,11 +737,10 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            // FIXME:
             Ok(self.output.write_header(&mut None)?)
         }
 
-        fn write(&mut self, packet: &mut Packet) -> Result<()> {
+        fn write_frame(&mut self, packet: &mut Packet) -> Result<()> {
             packet.write(&mut self.output)?;
             Ok(())
         }
@@ -761,11 +765,15 @@ pub(crate) mod private {
             Ok(self.end_write())
         }
 
-        fn write(&mut self, packet: &mut Packet) -> Result<Buf> {
+        fn write_frame(&mut self, packet: &mut Packet) -> Result<Buf> {
             self.begin_write();
             packet.write(&mut self.output)?;
             flush_output(&mut self.output).unwrap();
             Ok(self.end_write())
+
+            // let mut pkt = pkt.into_inner();
+            // self.output.write_frame(&mut pkt)?;
+            // Ok(())
         }
 
         fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Buf> {
@@ -773,6 +781,10 @@ pub(crate) mod private {
             packet.write_interleaved(&mut self.output)?;
             flush_output(&mut self.output).unwrap();
             Ok(self.end_write())
+
+            // let mut pkt = pkt.into_inner();
+            // self.output.interleaved_write_frame(&mut pkt)?;
+            // Ok(())
         }
 
         fn write_trailer(&mut self) -> Result<Buf> {
@@ -793,7 +805,7 @@ pub(crate) mod private {
             Ok(self.take_buffers())
         }
 
-        fn write(&mut self, packet: &mut Packet) -> Result<Bufs> {
+        fn write_frame(&mut self, packet: &mut Packet) -> Result<Bufs> {
             self.begin_write();
             packet.write(&mut self.output)?;
             flush_output(&mut self.output).unwrap();

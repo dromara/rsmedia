@@ -11,11 +11,11 @@ use crate::time::Time;
 use crate::{ffi_hwaccel, frame};
 use crate::{Rational, RawFrame};
 
-use rsmpeg::swscale::SwsContext as AvScaler;
-use rsmpeg::ffi;
-use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::AVPixelFormat;
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
+use rsmpeg::avutil::{AVPixelFormat};
 use rsmpeg::error::RsmpegError;
+use rsmpeg::ffi;
+use rsmpeg::swscale::SwsContext as AvScaler;
 
 type Result<T> = std::result::Result<T, MediaError>;
 
@@ -475,13 +475,8 @@ impl DecoderSplit {
 
     /// Sends a NULL packet to the decoder to signal end of stream and enter
     /// draining mode.
-    pub fn send_eof(&mut self) -> Result<()> {
-        unsafe {
-            match ffi::avcodec_send_packet(self.decoder.as_mut_ptr(), std::ptr::null()) {
-                e if e < 0 => Err(MediaError::BackendError(RsmpegError::from(e))),
-                _ => Ok(()),
-            }
-        }
+    fn send_eof(&mut self) -> Result<()> {
+        Ok(self.decoder.send_packet(None)?)
     }
 
     /// Reset the decoder to be used again after draining.
@@ -569,9 +564,8 @@ impl Drop for DecoderSplit {
         // queue before giving up.
         const MAX_DRAIN_ITERATIONS: u32 = 100;
 
-        // send eof
         // We need to drain the items still in the decoders queue.
-        if let Ok(()) = self.decoder.send_frame(None) {
+        if let Ok(()) = self.send_eof() {
             for _ in 0..MAX_DRAIN_ITERATIONS {
                 if self.decoder_receive_frame().is_err() {
                     break;

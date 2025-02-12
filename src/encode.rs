@@ -8,11 +8,12 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::time::{Time, TIME_BASE};
 use crate::{PixelFormat, Rational, RawFrame};
-use rsmpeg::avcodec::{AVCodec, AVCodecRef, AVCodecContext};
-use rsmpeg::avutil::{ AVPixelFormat};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef, AVPacket};
+use rsmpeg::avutil::{AVPixelFormat};
 use rsmpeg::error::RsmpegError;
 
-use libc::c_uint;
+use crate::io::private::Write;
+use libc::{c_uint};
 use rsmpeg::ffi;
 use std::ffi::CString;
 
@@ -183,7 +184,6 @@ impl Encoder {
             self.have_written_header = true;
         }
 
-        // FIXME: reformat
         let mut frame = raw_frame.clone();
 
         // Producer key frame every once in a while
@@ -213,7 +213,7 @@ impl Encoder {
     pub fn finish(&mut self) -> Result<()> {
         if self.have_written_header && !self.have_written_trailer {
             self.have_written_trailer = true;
-            self.flush()?;
+            self.flush().unwrap();
             self.writer.write_trailer()?;
         }
 
@@ -286,15 +286,16 @@ impl Encoder {
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
     fn encoder_receive_packet(&mut self) -> Result<Option<Packet>> {
-        let mut packet = Packet::empty();
-        let encode_result = self.encoder.receive_packet();
-        match encode_result {
-            Ok(p) => {
-                packet.copy_props(p)?;
-                Ok(Some(packet))
-            }
-            Err(RsmpegError::EncoderDrainError) => Ok(None),
-            Err(err) => Err(err.into()),
+        loop {
+            let packet = match self.encoder.receive_packet() {
+                Ok(p) => Packet::new_with_avpacket(p),
+                Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
+                    return Ok(None)
+                }
+                Err(err) => return Err(MediaError::BackendError(err)),
+            };
+
+            return Ok(Some(packet));
         }
     }
 
@@ -319,9 +320,9 @@ impl Encoder {
         packet.set_position(-1);
         packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {
-            self.writer.write_interleaved(packet)?;
+            self.writer.write_interleaved(&mut packet)?;
         } else {
-            self.writer.write_frame(packet)?;
+            self.writer.write_frame(&mut packet)?;
         };
 
         Ok(())
@@ -333,9 +334,8 @@ impl Encoder {
         // to drain the items still on the queue before giving up.
         const MAX_DRAIN_ITERATIONS: u32 = 100;
 
-        // send eof
         // Notify the encoder that the last frame has been sent.
-        self.encoder.send_frame(None)?;
+        self.send_eof()?;
 
         // We need to drain the items still in the encoders queue.
         for _ in 0..MAX_DRAIN_ITERATIONS {
@@ -347,6 +347,10 @@ impl Encoder {
         }
 
         Ok(())
+    }
+
+    fn send_eof(&mut self) -> Result<()> {
+        Ok(self.encoder.send_frame(None)?)
     }
 }
 

@@ -1,9 +1,8 @@
-use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::AVCodecParameters;
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
-use rsmpeg::ffi::{AVDiscard, AVPacketSideDataType};
+use ffi::{AVDiscard, AVPacketSideDataType};
 
 use libc::{c_int, c_uint};
 use std::marker::PhantomData;
@@ -14,6 +13,9 @@ use crate::io::Reader;
 use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
 use crate::Rational;
+use crate::error::MediaError;
+
+type Result<T> = std::result::Result<T, MediaError>;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.

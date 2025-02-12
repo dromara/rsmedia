@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 use std::str::from_utf8_unchecked;
-
+use rsmpeg::avutil::AVDictionary;
 use rsmpeg::ffi;
 
 /// Dictionary micro

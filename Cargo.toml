@@ -18,11 +18,10 @@ ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
 [dependencies]
 rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", features = ["ffmpeg7", "link_system_ffmpeg"] }
 ndarray = { version = "0.16", optional = true }
-tracing = "0.1"
 url = "2"
 libc = "0.2"
+tracing = "0.1"
 bitflags = "2.8"
-anyhow = "1.0.95"
 
 [dev-dependencies]
 image = "0.25"

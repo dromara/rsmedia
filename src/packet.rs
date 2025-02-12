@@ -1,8 +1,10 @@
+use crate::error::MediaError;
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
 use crate::time::Time;
 use crate::time::TIME_BASE;
 use crate::Rational;
+
 use libc::{c_int, c_uint};
 use rsmpeg::avcodec::AVPacket;
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};
@@ -275,27 +277,20 @@ impl<'a> PacketIter<'a> {
 }
 
 impl<'a> Iterator for PacketIter<'a> {
-    type Item = (Stream<'a>, Packet);
+    type Item = Result<(Stream<'a>, Packet), RsmpegError>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         let mut packet = Packet::empty();
 
-        loop {
-            match packet.read(self.context.as_mut_ptr()) {
-                Ok(..) => unsafe {
-                    return Some((
-                        Stream::wrap(
-                            std::mem::transmute_copy(&self.context),
-                            packet.stream_index(),
-                        ),
-                        packet,
-                    ));
-                },
-
-                Err(RsmpegError::BufferSinkEofError) => return None,
-
-                Err(..) => (),
-            }
+        match packet.read(self.context.as_mut_ptr()) {
+            Ok(..) => unsafe {
+                Some(Ok((
+                    Stream::wrap(std::mem::transmute_copy(&self.context), packet.stream_index()),
+                    packet,
+                )))
+            },
+            Err(RsmpegError::BufferSinkEofError) => None,
+            Err(e) => Some(Err(e)),
         }
     }
 }

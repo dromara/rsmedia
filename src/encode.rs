@@ -1,22 +1,22 @@
-use crate::error::Error as MediaError;
-use crate::flags::{AvCodecFlags, AvFormatFlags, AvScalerFlags};
+use crate::error::MediaError;
+use crate::flags::{AvCodecFlags, AvFormatFlags};
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::io::{Writer, WriterBuilder};
 use crate::location::Location;
 use crate::options::Options;
-use crate::packet::Packet as AvPacket;
+use crate::packet::Packet;
 use crate::time::{Time, TIME_BASE};
 use crate::{PixelFormat, Rational, RawFrame};
-use anyhow::{Context, Error, Result};
-use rsmpeg::avcodec::AVCodecContext as AvEncoder;
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters};
-use rsmpeg::avutil::{AVDictionary, AVPixelFormat};
+use rsmpeg::avcodec::{AVCodec, AVCodecRef, AVCodecContext};
+use rsmpeg::avutil::{ AVPixelFormat};
 use rsmpeg::error::RsmpegError;
-use rsmpeg::swscale::SwsContext as AvScaler;
 
 use libc::c_uint;
+use rsmpeg::ffi;
 use std::ffi::CString;
+
+type Result<T> = std::result::Result<T, MediaError>;
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
@@ -120,13 +120,9 @@ impl<'a> EncoderBuilder<'a> {
 pub struct Encoder {
     writer: Writer,
     writer_stream_index: usize,
-    encoder: AvEncoder,
-    encoder_time_base: Rational,
+    encoder: AVCodecContext,
     keyframe_interval: u64,
     interleaved: bool,
-    scaler: AvScaler,
-    scaler_width: u32,
-    scaler_height: u32,
     frame_count: u64,
     have_written_header: bool,
     have_written_trailer: bool,
@@ -152,24 +148,23 @@ impl Encoder {
     #[cfg(feature = "ndarray")]
     pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<()> {
         let (height, width, channels) = frame.dim();
-        if height != self.scaler_height as usize
-            || width != self.scaler_width as usize
+        if height != self.encoder.height as usize
+            || width != self.encoder.width as usize
             || channels != 3
         {
-            return Err(Error::new(MediaError::InvalidFrameFormat));
+            return Err(MediaError::InvalidFrameFormat);
         }
 
-        let mut frame =
-            frame::convert_ndarray_to_frame_rgb24(frame).map_err(MediaError::BackendError)?;
+        let mut frame = frame::convert_ndarray_to_frame_rgb24(frame).unwrap();
 
         frame.set_pts(
             source_timestamp
-                .aligned_with_rational(self.encoder_time_base.into())
+                .aligned_with_rational(self.encoder.time_base.into())
                 .into_value()
                 .unwrap(),
         );
 
-        self.encode_raw(frame)
+        self.encode_raw(&frame)
     }
 
     /// Encode a single raw frame.
@@ -177,12 +172,9 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, frame: RawFrame) -> Result<()> {
-        if frame.width as u32 != self.scaler_width
-            || frame.height as u32 != self.scaler_height
-            || frame.format != crate::FRAME_PIXEL_FORMAT
-        {
-            return Err(Error::new(MediaError::InvalidFrameFormat));
+    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
+        if raw_frame.width != self.encoder.width || raw_frame.height != self.encoder.height {
+            return Err(MediaError::InvalidFrameFormat);
         }
 
         // Write file header if we hadn't done that yet.
@@ -191,22 +183,21 @@ impl Encoder {
             self.have_written_header = true;
         }
 
-        // Reformat frame to target pixel format.
-        let mut frame = self.scale(frame)?;
+        // FIXME: reformat
+        let mut frame = raw_frame.clone();
+
         // Producer key frame every once in a while
         if self.frame_count % self.keyframe_interval == 0 {
-            frame.set_pict_type(rsmpeg::ffi::AV_PICTURE_TYPE_I);
+            frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
 
-        self.encoder
-            .send_frame(Some(&frame))
-            .map_err(MediaError::BackendError)
-            .unwrap();
+        self.encoder.send_frame(Some(&frame)).unwrap();
+
         // Increment frame count regardless of whether or not frame is written, see
         // https://github.com/oddity-ai/video-rs/issues/46.
         self.frame_count += 1;
 
-        if let Some(packet) = self.encoder_receive_packet()? {
+        if let Some(packet) = self.encoder_receive_packet().unwrap() {
             self.write(packet)?;
         }
 
@@ -232,7 +223,22 @@ impl Encoder {
     /// Get encoder time base.
     #[inline]
     pub fn time_base(&self) -> Rational {
-        self.encoder_time_base
+        self.encoder.time_base.into()
+    }
+
+    #[inline]
+    pub fn width(&self) -> i32 {
+        self.encoder.width
+    }
+
+    #[inline]
+    pub fn height(&self) -> i32 {
+        self.encoder.height
+    }
+
+    #[inline]
+    pub fn pix_fmt(&self) -> AVPixelFormat {
+        self.encoder.pix_fmt
     }
 
     /// Create an encoder from a `FileWriter` instance.
@@ -248,7 +254,6 @@ impl Encoder {
                 .contains(AvFormatFlags::GLOBAL_HEADER)
         };
 
-        // FIXME:
         let mut encode_context = AVCodecContext::new(&settings.codec().unwrap());
         // Some formats require this flag to be set or the output will
         // not be playable by dumb players.
@@ -257,7 +262,7 @@ impl Encoder {
         }
 
         settings.apply_to(&mut encode_context);
-        encode_context.open(None).context("Could not open codec")?;
+        encode_context.open(None).expect("Could not open codec");
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();
@@ -266,68 +271,29 @@ impl Encoder {
             out_stream.index as usize
         };
 
-        let encoder_time_base = encode_context.time_base.into();
-
-        let scaler_width = encode_context.width;
-        let scaler_height = encode_context.height;
-        let scaler = AvScaler::get_context(
-            scaler_width,
-            scaler_height,
-            crate::FRAME_PIXEL_FORMAT,
-            scaler_width,
-            scaler_height,
-            encode_context.pix_fmt,
-            AvScalerFlags::empty().bits(),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-
         Ok(Self {
             writer,
             writer_stream_index,
             encoder: encode_context,
-            encoder_time_base,
             keyframe_interval: settings.keyframe_interval,
             interleaved,
-            scaler,
-            scaler_width: scaler_width as u32,
-            scaler_height: scaler_height as u32,
             frame_count: 0,
             have_written_header: false,
             have_written_trailer: false,
         })
     }
 
-    /// Apply scaling (or pixel reformatting in this case) on the frame with the scaler we
-    /// initialized earlier.
-    ///
-    /// # Arguments
-    ///
-    /// * `frame` - Frame to rescale.
-    fn scale(&mut self, frame: RawFrame) -> Result<RawFrame> {
-        let mut frame_scaled = RawFrame::new();
-        self.scaler
-            .scale_frame(&frame, frame.width, frame.height, &mut frame_scaled)
-            .map_err(MediaError::BackendError)?;
-        // Copy over PTS from old frame.
-        frame_scaled.set_pts(frame.pts);
-
-        Ok(frame_scaled)
-    }
-
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
-    fn encoder_receive_packet(&mut self) -> Result<Option<AvPacket>> {
-        let mut packet = AvPacket::empty();
+    fn encoder_receive_packet(&mut self) -> Result<Option<Packet>> {
+        let mut packet = Packet::empty();
         let encode_result = self.encoder.receive_packet();
         match encode_result {
             Ok(p) => {
                 packet.copy_props(p)?;
                 Ok(Some(packet))
             }
-            Err(RsmpegError::SendFrameAgainError) => Ok(None),
+            Err(RsmpegError::EncoderDrainError) => Ok(None),
             Err(err) => Err(err.into()),
         }
     }
@@ -348,14 +314,14 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `packet` - Encoded packet.
-    fn write(&mut self, mut packet: AvPacket) -> Result<()> {
+    fn write(&mut self, mut packet: Packet) -> Result<()> {
         packet.set_stream_index(self.writer_stream_index);
         packet.set_position(-1);
-        packet.rescale_ts(self.encoder_time_base, self.stream_time_base());
+        packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {
-            self.writer.write_interleaved(&mut packet)?;
+            self.writer.write_interleaved(packet)?;
         } else {
-            self.writer.write_frame(&mut packet)?;
+            self.writer.write_frame(packet)?;
         };
 
         Ok(())
@@ -430,7 +396,7 @@ impl Settings {
         Self {
             width: width as i32,
             height: height as i32,
-            pixel_format: rsmpeg::ffi::AV_PIX_FMT_YUV420P,
+            pixel_format: ffi::AV_PIX_FMT_YUV420P,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             options,
         }
@@ -485,7 +451,7 @@ impl Settings {
     /// # Return value
     ///
     /// New encoder with settings applied.
-    fn apply_to(&self, encoder: &mut AvEncoder) {
+    fn apply_to(&self, encoder: &mut AVCodecContext) {
         encoder.set_width(self.width);
         encoder.set_height(self.height);
         encoder.set_pix_fmt(self.pixel_format);
@@ -497,20 +463,15 @@ impl Settings {
     }
 
     /// Get codec.
-    fn codec(&self) -> Option<AVCodec> {
+    fn codec(&self) -> Option<AVCodecRef> {
         // Try to use the libx264 decoder. If it is not available, then use use whatever default
         // h264 decoder we have.
         unsafe {
             let codec = AVCodec::find_encoder_by_name(&CString::new("libx264").unwrap());
             if codec.is_none() {
-                let encoder = AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_H264)?;
-                Some(AVCodec::from_raw(std::ptr::NonNull::new(
-                    encoder.as_ptr() as *mut _
-                )?))
+                AVCodec::find_encoder(ffi::AV_CODEC_ID_H264)
             } else {
-                Some(AVCodec::from_raw(std::ptr::NonNull::new(
-                    codec.unwrap().as_ptr() as *mut _,
-                )?))
+                codec
             }
         }
     }

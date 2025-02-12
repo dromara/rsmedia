@@ -1,11 +1,12 @@
-use crate::error::Error as MediaError;
+use crate::error::MediaError;
 use crate::ffi_hwaccel;
-use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avcodec::AVCodecContext;
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::ffi;
 use std::ops::Deref;
+
+type Result<T> = std::result::Result<T, MediaError>;
 
 pub(crate) struct HWContext {
     pixel_format: AVPixelFormat,

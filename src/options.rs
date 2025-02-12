@@ -1,3 +1,5 @@
+use rsmpeg::avutil::AVDictionary;
+use rsmpeg::ffi;
 use std::collections::HashMap;
 use std::ffi::{c_int, CStr, CString};
 use std::fmt;
@@ -5,8 +7,6 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 use std::str::from_utf8_unchecked;
-use rsmpeg::avutil::AVDictionary;
-use rsmpeg::ffi;
 
 /// Dictionary micro
 #[macro_export]

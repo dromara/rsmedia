@@ -12,7 +12,7 @@ use crate::{ffi_hwaccel, frame};
 use crate::{Rational, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
-use rsmpeg::avutil::{AVPixelFormat};
+use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 use rsmpeg::swscale::SwsContext as AvScaler;
@@ -531,7 +531,7 @@ impl DecoderSplit {
         match decode_result {
             Ok(frame) => Ok(Some(frame)),
             Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => Ok(None),
-            Err(e) => Err(e).expect("Error during decoding"),
+            Err(e) => panic!("{1}: {:?}", e, "Error during decoding"),
         }
     }
 

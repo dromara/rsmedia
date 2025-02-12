@@ -76,7 +76,7 @@ pub fn codec_find_hwaccel_pixfmt(
                     & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
                     != 0;
                 if hw_config_supports_codec && (*hw_config).device_type == hwaccel_type.into() {
-                    break Some((*hw_config).pix_fmt.into());
+                    break Some((*hw_config).pix_fmt);
                 }
             } else {
                 break None;

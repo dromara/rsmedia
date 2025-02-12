@@ -9,11 +9,11 @@ use crate::packet::Packet;
 use crate::time::{Time, TIME_BASE};
 use crate::{PixelFormat, Rational, RawFrame};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef, AVPacket};
-use rsmpeg::avutil::{AVPixelFormat};
+use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 
 use crate::io::private::Write;
-use libc::{c_uint};
+use libc::c_uint;
 use rsmpeg::ffi;
 use std::ffi::CString;
 
@@ -286,17 +286,14 @@ impl Encoder {
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
     fn encoder_receive_packet(&mut self) -> Result<Option<Packet>> {
-        loop {
-            let packet = match self.encoder.receive_packet() {
-                Ok(p) => Packet::new_with_avpacket(p),
-                Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
-                    return Ok(None)
-                }
-                Err(err) => return Err(MediaError::BackendError(err)),
-            };
-
-            return Ok(Some(packet));
-        }
+        let packet = match self.encoder.receive_packet() {
+            Ok(p) => Packet::new_with_avpacket(p),
+            Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
+                return Ok(None)
+            }
+            Err(err) => return Err(MediaError::BackendError(err)),
+        };
+        Ok(Some(packet))
     }
 
     /// Acquire the time base of the output stream.

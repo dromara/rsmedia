@@ -95,7 +95,7 @@ pub fn convert_frame_to_ndarray_rgb24(frame: &AVFrame) -> Result<FrameArray, Med
 
         // 复制图像数据到缓冲区
         let bytes_copied = ffi::av_image_copy_to_buffer(
-            frame_array.as_mut_ptr() as *mut u8,
+            frame_array.as_mut_ptr(),
             frame_array.len() as i32,
             rgb_frame.as_ptr() as *const *const u8,
             rgb_frame.linesize.as_ptr(),
@@ -184,13 +184,12 @@ pub fn convert_avframe(
      */
     // SWS_ACCURATE_RND   = 1 << 18,
     // SWS_BITEXACT       = 1 << 19,
-
-    let flags = ffi::SWS_BICUBIC |
-        ffi::SWS_FULL_CHR_H_INT |
-        ffi::SWS_FULL_CHR_H_INP |
-        ffi::SWS_ACCURATE_RND |
-        ffi::SWS_BITEXACT |
-        ffi::SWS_PRINT_INFO;
+    let flags = ffi::SWS_BICUBIC
+        | ffi::SWS_FULL_CHR_H_INT
+        | ffi::SWS_FULL_CHR_H_INP
+        | ffi::SWS_ACCURATE_RND
+        | ffi::SWS_BITEXACT
+        | ffi::SWS_PRINT_INFO;
 
     // 创建转换上下文，将帧转换为 RGB 格式
     let mut sws_ctx = SwsContext::get_context(

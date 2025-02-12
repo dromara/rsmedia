@@ -356,9 +356,20 @@ impl<'a> WriterBuilder<'a> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = Self::from_path(path);
-            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
-                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as c_int) {
-                    0 => Ok(AVFormatContextOutput::from_raw(std::ptr::NonNull::new(ps).unwrap())),
+            match ffi::avformat_alloc_output_context2(
+                &mut ps,
+                ptr::null_mut(),
+                ptr::null(),
+                path.as_ptr(),
+            ) {
+                0 => match ffi::avio_open(
+                    &mut (*ps).pb,
+                    path.as_ptr(),
+                    ffi::AVIO_FLAG_WRITE as c_int,
+                ) {
+                    0 => Ok(AVFormatContextOutput::from_raw(
+                        std::ptr::NonNull::new(ps).unwrap(),
+                    )),
                     e => Err(MediaError::BackendError(RsmpegError::from(e))),
                 },
                 e => Err(MediaError::BackendError(RsmpegError::from(e))),
@@ -737,7 +748,8 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            Ok(self.output.write_header(&mut None)?)
+            self.output.write_header(&mut None)?;
+            Ok(())
         }
 
         fn write_frame(&mut self, packet: &mut Packet) -> Result<()> {
@@ -751,7 +763,8 @@ pub(crate) mod private {
         }
 
         fn write_trailer(&mut self) -> Result<()> {
-            Ok(self.output.write_trailer()?)
+            self.output.write_trailer()?;
+            Ok(())
         }
     }
 

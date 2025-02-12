@@ -1,19 +1,19 @@
+use ffi::{AVDiscard, AVPacketSideDataType};
 use rsmpeg::avcodec::AVCodecParameters;
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
-use ffi::{AVDiscard, AVPacketSideDataType};
 
 use libc::{c_int, c_uint};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+use crate::error::MediaError;
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
 use crate::Rational;
-use crate::error::MediaError;
 
 type Result<T> = std::result::Result<T, MediaError>;
 

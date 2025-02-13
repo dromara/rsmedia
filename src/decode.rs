@@ -12,14 +12,10 @@ use crate::{ffi_hwaccel, frame};
 use crate::{Rational, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 type Result<T> = std::result::Result<T, MediaError>;
-
-/// Always use NV12 pixel format with hardware acceleration, then rescale later.
-static HWACCEL_PIXEL_FORMAT: AVPixelFormat = ffi::AV_PIX_FMT_NV12;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
@@ -551,7 +547,7 @@ impl DecoderSplit {
     /// Download frame from foreign hardware acceleration device.
     fn download_frame(frame: &RawFrame) -> Result<RawFrame> {
         let mut frame_downloaded = RawFrame::new();
-        frame_downloaded.set_format(HWACCEL_PIXEL_FORMAT);
+        frame_downloaded.set_format(crate::PIXEL_FORMAT_NV12);
         ffi_hwaccel::hwdevice_transfer_frame(&mut frame_downloaded, frame)?;
         unsafe {
             // Copy frame properties

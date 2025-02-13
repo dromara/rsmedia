@@ -390,11 +390,12 @@ impl Settings {
 
     /// Default bit rate.
     /// 分辨率(width, height) + 推荐比特率（单位：bps）
-    /// 标清 480p:     (640, 480) =>  1_000_000,    // 1 Mbps
-    /// 高清 720p:     (1280, 720) => 2_500_000,    // 2.5 Mbps
-    /// 全高清 1080p:  (1920, 1080) => 5_000_000,   // 5 Mbps
-    /// 超高清 2K:     (2560, 1440) => 8_000_000,   // 8 Mbps
-    /// 超高清 4K:     (3840, 2160) => 20_000_000,  // 20 Mbps
+    /// * 标清 Sd_480p:          (640, 480)   => 1_000_000,   // 1 Mbps
+    /// * 高清 Hd_720p:          (1280, 720)  => 2_500_000,   // 2.5 Mbps
+    /// * 全高清 FullHd(1080p):  (1920, 1080) => 5_000_000,   // 5 Mbps
+    /// * 超高清 FullHd_2k:      (2560, 1440) => 8_000_000,   // 8 Mbps
+    /// * 超高清 UltraHd_4K:     (3840, 2160) => 20_000_000,  // 20 Mbps
+    /// * 超高清 FullUltraHd_8K: (7680, 4320) => 60_000_000,  // 60 Mbps
     const BIT_RATE: i64 = 1_000_000;
 
     /// Create encoder settings for an H264 stream with YUV420p pixel format. This will encode to

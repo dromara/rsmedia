@@ -80,17 +80,20 @@ rsmedia = { version = "0.1.0", features = ["ffmpeg7"] }
 Decode a video and print the RGB value for the top left pixel:
 
 ```rust
-use std::error::Error;
-use rsmedia::decode::Decoder;
-use url::Url;
 use image::{ImageBuffer, Rgb};
+use rsmedia::decode::Decoder;
+use rsmedia::frame;
+use std::error::Error;
 use tokio::task;
+use url::Url;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>>  {
+async fn main() -> Result<(), Box<dyn Error>> {
     rsmedia::init()?;
 
-    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4".parse::<Url>().unwrap();
+    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
+        .parse::<Url>()
+        .unwrap();
     let mut decoder = Decoder::new(source).expect("failed to create decoder");
 
     let output_folder = "frames_video_rs";
@@ -100,22 +103,24 @@ async fn main() -> Result<(), Box<dyn Error>>  {
     let frame_rate = decoder.frame_rate(); // Assuming 30 FPS if not available
 
     let max_duration = 20.0; // Max duration in seconds
-    let max_frames = (frame_rate * max_duration).ceil() as usize;
+    let _max_frames = (frame_rate * max_duration).ceil() as usize;
 
     let mut frame_count = 0;
     let mut elapsed_time = 0.0;
     let mut tasks = vec![];
 
     for frame in decoder.decode_iter() {
-        if let Ok((_timestamp, frame)) = frame {
+        if let Ok((_timestamp, yuv_frame)) = frame {
             if elapsed_time > max_duration {
                 break;
             }
 
-            let rgb = frame.slice(ndarray::s![.., .., 0..3]).to_slice().unwrap();
+            // Notes: yuv frame
+            let rgb_frame = frame::convert_ndarray_yuv_to_rgb(&yuv_frame).unwrap();
 
-            let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, rgb.to_vec())
-                .expect("failed to create image buffer");
+            let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
+                ImageBuffer::from_raw(width, height, rgb_frame.as_slice().unwrap().to_vec())
+                    .expect("failed to create image buffer");
 
             let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);
 
@@ -145,20 +150,23 @@ async fn main() -> Result<(), Box<dyn Error>>  {
 Encode a 🌈 video, using `ndarray` to create each frame:
 
 ```rust
-use std::path::Path;
-use ndarray::Array3;
-use rsmedia::encode::{Encoder, Settings};
+use rsmedia::encode::Settings;
 use rsmedia::time::Time;
+use rsmedia::{EncoderBuilder, FrameArray};
+use std::path::Path;
 
 fn main() {
     rsmedia::init().unwrap();
 
     let settings = Settings::preset_h264_yuv420p(1280, 720, false);
-    let mut encoder =
-        Encoder::new(Path::new("rainbow.mp4"), settings).expect("failed to create encoder");
+    let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), settings)
+        .with_format("mp4")
+        .build()
+        .expect("failed to create encoder");
 
     let duration: Time = Time::from_nth_of_a_second(24);
     let mut position = Time::zero();
+
     for i in 0..256 {
         // This will create a smooth rainbow animation video!
         let frame = rainbow_frame(i as f32 / 256.0);
@@ -174,14 +182,14 @@ fn main() {
     encoder.finish().expect("failed to finish encoder");
 }
 
-fn rainbow_frame(p: f32) -> Array3<u8> {
-    // This is what generated the rainbow effect! We loop through the HSV color spectrum and convert
-    // to RGB.
+fn rainbow_frame(p: f32) -> FrameArray {
+    // This is what generated the rainbow effect!
+    // We loop through the HSV color spectrum and convert to RGB.
     let rgb = hsv_to_rgb(p * 360.0, 100.0, 100.0);
 
     // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
     // pixel are equal, and determined by the `rgb` we chose above.
-    Array3::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
+    FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
 }
 
 fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {

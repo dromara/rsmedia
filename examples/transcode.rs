@@ -14,12 +14,13 @@ fn main() {
     let duration = Time::from_nth_of_a_second(24);
     let mut position = Time::zero();
 
+    // array frame
     for frame in decoder.decode_iter() {
-        if let Ok((_, frame)) = frame {
+        if let Ok((ts, frame)) = frame {
             let rgb = frame.slice(ndarray::s![0, 0, ..]).to_slice().unwrap();
-            println!("pixel at 0, 0: {}, {}, {}", rgb[0], rgb[1], rgb[2],);
+            println!("pixel at 0, 0: {}, {}, {}, time:{:?}", rgb[0], rgb[1], rgb[2], ts);
             encoder
-                .encode(&frame, duration)
+                .encode(&frame, position)
                 .expect("failed to encode frame");
         } else {
             break;
@@ -29,6 +30,7 @@ fn main() {
         position = position.aligned_with(duration).add();
     }
 
+    // raw frame
     // for frame in decoder.decode_raw_iter() {
     //     if let Ok(raw_frame) = frame {
     //         println!("frame width: {}, height: {}, pix_format: {}", raw_frame.width, raw_frame.height, raw_frame.format);

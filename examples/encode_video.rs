@@ -1,7 +1,6 @@
-use rsmedia::encode::{Encoder, Settings};
-use rsmedia::time::Time;
-use rsmedia::EncoderBuilder;
-use rsmpeg::avutil::AVFrame;
+use rsmedia::encode::Settings;
+use rsmedia::time::{Time};
+use rsmedia::{EncoderBuilder, RawFrame};
 use std::path::Path;
 
 fn main() {
@@ -13,10 +12,10 @@ fn main() {
         .build()
         .expect("failed to create encoder");
 
-    let duration: Time = Time::from_nth_of_a_second(24);
+    let duration: Time = Time::from_nth_of_a_second(30);
     let mut position = Time::zero();
 
-    let mut frame = AVFrame::new();
+    let mut frame = RawFrame::new();
     frame.set_format(encoder.pix_fmt());
     frame.set_width(encoder.width());
     frame.set_height(encoder.height());
@@ -26,7 +25,7 @@ fn main() {
 
     let height = encoder.height() as usize;
 
-    for i in 0..25 {
+    for i in 0..128 {
         frame
             .make_writable()
             .expect("Failed to make frame writable");
@@ -38,7 +37,8 @@ fn main() {
             let linesize_y = linesize[0] as usize;
             let linesize_cb = linesize[1] as usize;
             let linesize_cr = linesize[2] as usize;
-            let y_data = unsafe { std::slice::from_raw_parts_mut(data[0], height * linesize_y) };
+            let y_data =
+                unsafe { std::slice::from_raw_parts_mut(data[0], height * linesize_y) };
             let cb_data =
                 unsafe { std::slice::from_raw_parts_mut(data[1], height / 2 * linesize_cb) };
             let cr_data =
@@ -58,7 +58,9 @@ fn main() {
             }
         }
 
-        frame.set_pts(i as i64);
+        let pos = position.into_value().unwrap();
+        println!("frame pos:{}", pos);
+        frame.set_pts(pos);
 
         encoder.encode_raw(&frame).expect("failed to encode frame");
 

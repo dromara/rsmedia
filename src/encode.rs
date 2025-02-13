@@ -156,7 +156,7 @@ impl Encoder {
             return Err(MediaError::InvalidFrameFormat);
         }
 
-        let mut frame = frame::convert_ndarray_to_frame_rgb24(frame).unwrap();
+        let mut frame = frame::ndarray_to_avframe_yuv(frame).unwrap();
 
         frame.set_pts(
             source_timestamp
@@ -184,7 +184,12 @@ impl Encoder {
             self.have_written_header = true;
         }
 
-        let mut frame = raw_frame.clone();
+        // Reformat frame to target pixel format
+        let mut frame = if raw_frame.format != frame::PIXEL_FORMAT_YUV420P {
+            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, frame::PIXEL_FORMAT_YUV420P).unwrap()
+        } else {
+            raw_frame.clone()
+        };
 
         // Producer key frame every once in a while
         if self.frame_count % self.keyframe_interval == 0 {

@@ -35,7 +35,3 @@ pub type PixelFormat = rsmpeg::avutil::AVPixelFormat;
 
 /// Re-export internal `AvFrame` for caller to use.
 pub type RawFrame = rsmpeg::avutil::AVFrame;
-
-/// Default frame pixel format.
-pub(crate) const FRAME_PIXEL_FORMAT_RGB24: rsmpeg::avutil::AVPixelFormat =
-    rsmpeg::ffi::AV_PIX_FMT_RGB24;

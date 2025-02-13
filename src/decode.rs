@@ -552,7 +552,7 @@ impl DecoderSplit {
         // We use the packet DTS here (which is `frame->pkt_dts`) because that is what the
         // encoder will use when encoding for the `PTS` field.
         let timestamp = Time::new(Some(frame.pkt_dts), self.decoder_time_base);
-        let frame = frame::convert_frame_to_ndarray_rgb24(frame).unwrap();
+        let frame = frame::avframe_yuv_to_ndarray(frame).unwrap();
 
         Ok((timestamp, frame))
     }

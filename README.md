@@ -2,9 +2,9 @@
   <code>rsmedia</code>
 </h1>
 
-Low / High-level video toolkit based on ffmpeg.
+Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rsmpeg).
 
-ffmpeg 5.1, 6.1, 7.1 is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
+ffmpeg 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
 ## FFI bindings
 
@@ -69,26 +69,7 @@ rsmedia = "0.1.0"
 Use the `ndarray` feature to be able to use raw frames with the
 [`ndarray`](https://github.com/rust-ndarray/ndarray) crate:
 
-```toml
-rsmedia = { version = "0.1.0", features = ["ndarray"] }
-```
-
-- `ffmpeg5`:
-    use `ffmpeg5` feature to enable ffmpeg 5.x
-
-```toml
-rsmedia = { version = "0.1.0", features = ["ffmpeg5"] }
-```
-
-- `ffmpeg6`:
-    use `ffmpeg6` feature to enable ffmpeg 6.x
-
-```toml
-rsmedia = { version = "0.1.0", features = ["ffmpeg6"] }
-```
-
-- `ffmpeg7`:
-    use `ffmpeg7` feature to enable ffmpeg 7.x
+- `ffmpeg6` or `ffmpeg7`:
 
 ```toml
 rsmedia = { version = "0.1.0", features = ["ffmpeg7"] }

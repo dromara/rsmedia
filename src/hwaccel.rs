@@ -18,7 +18,7 @@ impl HWContext {
         let codec =
             AVCodec::find_encoder(decoder.codec_id).ok_or(MediaError::UninitializedCodec)?;
         let pixel_format = ffi_hwaccel::codec_find_hwaccel_pixfmt(codec.deref(), device_type)
-            .ok_or(MediaError::UnsupportedCodecHardwareAccelerationDeviceType)?;
+            .ok_or(MediaError::UnsupportedCodecHWDeviceType)?;
 
         ffi_hwaccel::codec_context_hwaccel_set_get_format(decoder, pixel_format);
 

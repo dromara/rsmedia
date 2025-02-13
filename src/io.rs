@@ -19,6 +19,11 @@ use std::ptr;
 
 type Result<T> = std::result::Result<T, MediaError>;
 
+/// use to_cstring when stable
+pub(crate) fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
+    CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
+}
+
 /// Builds a [`Reader`].
 ///
 /// # Example
@@ -76,15 +81,10 @@ impl<'a> ReaderBuilder<'a> {
         }
     }
 
-    // XXX: use to_cstring when stable
-    fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
-        CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
-    }
-
     pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = Self::from_path(path);
+            let path = from_path(path);
 
             match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut())
             {
@@ -109,7 +109,7 @@ impl<'a> ReaderBuilder<'a> {
     ) -> Result<AVFormatContextInput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = Self::from_path(path);
+            let path = from_path(path);
             let opts = options.disown();
             let res =
                 ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), opts as *mut _);
@@ -346,16 +346,11 @@ impl<'a> WriterBuilder<'a> {
         }
     }
 
-    // XXX: use to_cstring when stable
-    fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
-        CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
-    }
-
     pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
         //Ok(AVFormatContextOutput::create(&Self::from_path(path), None)?)
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = Self::from_path(path);
+            let path = from_path(path);
             match ffi::avformat_alloc_output_context2(
                 &mut ps,
                 ptr::null_mut(),
@@ -383,7 +378,7 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = Self::from_path(path);
+            let path = from_path(path);
             let opts = options.disown();
 
             match ffi::avformat_alloc_output_context2(
@@ -422,7 +417,7 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = Self::from_path(path);
+            let path = from_path(path);
             let format = CString::new(format).unwrap();
 
             match ffi::avformat_alloc_output_context2(
@@ -454,7 +449,7 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = Self::from_path(path);
+            let path = from_path(path);
             let format = CString::new(format).unwrap();
             let opts = options.disown();
 

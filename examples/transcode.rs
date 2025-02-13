@@ -18,7 +18,10 @@ fn main() {
     for frame in decoder.decode_iter() {
         if let Ok((ts, frame)) = frame {
             let rgb = frame.slice(ndarray::s![0, 0, ..]).to_slice().unwrap();
-            println!("pixel at 0, 0: {}, {}, {}, time:{:?}", rgb[0], rgb[1], rgb[2], ts);
+            println!(
+                "pixel at 0, 0: {}, {}, {}, time:{:?}",
+                rgb[0], rgb[1], rgb[2], ts
+            );
             encoder
                 .encode(&frame, position)
                 .expect("failed to encode frame");

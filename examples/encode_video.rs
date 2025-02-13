@@ -1,5 +1,5 @@
 use rsmedia::encode::Settings;
-use rsmedia::time::{Time};
+use rsmedia::time::Time;
 use rsmedia::{EncoderBuilder, RawFrame};
 use std::path::Path;
 
@@ -37,8 +37,7 @@ fn main() {
             let linesize_y = linesize[0] as usize;
             let linesize_cb = linesize[1] as usize;
             let linesize_cr = linesize[2] as usize;
-            let y_data =
-                unsafe { std::slice::from_raw_parts_mut(data[0], height * linesize_y) };
+            let y_data = unsafe { std::slice::from_raw_parts_mut(data[0], height * linesize_y) };
             let cb_data =
                 unsafe { std::slice::from_raw_parts_mut(data[1], height / 2 * linesize_cb) };
             let cr_data =

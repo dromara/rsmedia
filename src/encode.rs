@@ -8,7 +8,7 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::time::{Time, TIME_BASE};
 use crate::{PixelFormat, Rational, RawFrame};
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef, AVPacket};
+use rsmpeg::avcodec::{AVCodec, AVCodecRef, AVCodecContext};
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 
@@ -186,7 +186,13 @@ impl Encoder {
 
         // Reformat frame to target pixel format
         let mut frame = if raw_frame.format != frame::PIXEL_FORMAT_YUV420P {
-            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, frame::PIXEL_FORMAT_YUV420P).unwrap()
+            frame::convert_avframe(
+                raw_frame,
+                raw_frame.width,
+                raw_frame.height,
+                frame::PIXEL_FORMAT_YUV420P,
+            )
+            .unwrap()
         } else {
             raw_frame.clone()
         };

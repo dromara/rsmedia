@@ -158,8 +158,8 @@ pub fn ndarray_to_avframe_yuv(array: &FrameArray) -> Result<AVFrame, Box<dyn std
         }
 
         // 下采样并复制 U、V 平面数据
-        for y in 0..height/2 {
-            for x in 0..width/2 {
+        for y in 0..height / 2 {
+            for x in 0..width / 2 {
                 let mut u_sum = 0u16;
                 let mut v_sum = 0u16;
 
@@ -311,8 +311,8 @@ mod tests {
             for y in 0..height as usize {
                 for x in 0..width as usize {
                     let offset = y * linesize + x * 3;
-                    *data.add(offset) = (x % 256) as u8;                 // R
-                    *data.add(offset + 1) = (y % 256) as u8;       // G
+                    *data.add(offset) = (x % 256) as u8; // R
+                    *data.add(offset + 1) = (y % 256) as u8; // G
                     *data.add(offset + 2) = ((x + y) % 256) as u8; // B
                 }
             }
@@ -416,7 +416,9 @@ mod tests {
                 assert_eq!(
                     array[[y, x, 0]],
                     ((x + y) % 256) as u8,
-                    "Y plane mismatch at position [{}, {}]", y, x
+                    "Y plane mismatch at position [{}, {}]",
+                    y,
+                    x
                 );
             }
         }
@@ -478,7 +480,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_ndarray_to_avframe_yuv_normal() {
         // 创建测试数组
@@ -532,7 +533,9 @@ mod tests {
                     assert_eq!(
                         *y_data.add(y * y_linesize + x),
                         array[[y, x, 0]],
-                        "Y plane mismatch at position [{}, {}]", y, x
+                        "Y plane mismatch at position [{}, {}]",
+                        y,
+                        x
                     );
                 }
             }
@@ -547,12 +550,16 @@ mod tests {
                     assert_eq!(
                         u_val,
                         array[[y * 2, x * 2, 1]],
-                        "U plane mismatch at position [{}, {}]", y, x
+                        "U plane mismatch at position [{}, {}]",
+                        y,
+                        x
                     );
                     assert_eq!(
                         v_val,
                         array[[y * 2, x * 2, 2]],
-                        "V plane mismatch at position [{}, {}]", y, x
+                        "V plane mismatch at position [{}, {}]",
+                        y,
+                        x
                     );
                 }
             }
@@ -726,8 +733,6 @@ mod tests {
             handle.join().unwrap();
         }
     }
-
-
 
     #[test]
     fn test_metadata() {

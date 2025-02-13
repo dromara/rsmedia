@@ -13,7 +13,7 @@ pub enum MediaError {
     UnsupportedCodecParameterSets,
     InvalidResizeParameters,
     UninitializedCodec,
-    UnsupportedCodecHardwareAccelerationDeviceType,
+    UnsupportedCodecHWDeviceType,
     BackendError(RsmpegError),
 }
 
@@ -29,7 +29,7 @@ impl std::error::Error for MediaError {
             MediaError::UnsupportedCodecParameterSets => None,
             MediaError::InvalidResizeParameters => None,
             MediaError::UninitializedCodec => None,
-            MediaError::UnsupportedCodecHardwareAccelerationDeviceType => None,
+            MediaError::UnsupportedCodecHWDeviceType => None,
             MediaError::BackendError(ref internal) => Some(internal),
         }
     }
@@ -59,7 +59,7 @@ impl std::fmt::Display for MediaError {
             MediaError::UninitializedCodec => {
                 write!(f, "codec context is not initialized properly")
             }
-            MediaError::UnsupportedCodecHardwareAccelerationDeviceType => {
+            MediaError::UnsupportedCodecHWDeviceType => {
                 write!(f, "codec does not supported hardware acceleration device")
             }
             MediaError::BackendError(ref internal) => internal.fmt(f),

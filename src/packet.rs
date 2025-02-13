@@ -187,19 +187,6 @@ impl Packet {
         }
     }
 
-    /// Create a new packet.
-    ///
-    /// # Arguments
-    ///
-    /// * `inner` - Inner `AvPacket`.
-    /// * `time_base` - Source time base.
-    pub fn new(inner: Packet, time_base: Rational) -> Self {
-        Self {
-            inner: inner.into_inner(),
-            time_base,
-        }
-    }
-
     /// Downcast to native inner type.
     pub(crate) fn into_inner(self) -> AVPacket {
         self.inner
@@ -222,12 +209,22 @@ impl Packet {
         packet
     }
 
+    /// Create a new packet.
+    ///
+    /// # Arguments
+    ///
+    /// * `inner` - Inner `AvPacket`.
+    /// * `time_base` - Source time base.
+    pub fn new(inner: Packet, time_base: Rational) -> Self {
+        Self {
+            inner: inner.into_inner(),
+            time_base,
+        }
+    }
+
     #[inline]
     pub fn empty() -> Self {
-        Packet {
-            inner: AVPacket::new(),
-            time_base: TIME_BASE,
-        }
+        Packet::new_with_avpacket(AVPacket::new())
     }
 
     #[inline]
@@ -246,10 +243,7 @@ impl Packet {
             ffi::av_init_packet(pkt.as_mut_ptr());
             ffi::av_new_packet(pkt.as_mut_ptr(), size as c_int);
 
-            Packet {
-                inner: pkt,
-                time_base: TIME_BASE,
-            }
+            Packet::new_with_avpacket(pkt)
         }
     }
 }

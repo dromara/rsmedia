@@ -11,7 +11,7 @@ use crate::time::Time;
 use crate::{ffi_hwaccel, frame};
 use crate::{Rational, RawFrame};
 
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;

@@ -145,9 +145,9 @@ impl Packet {
     }
 
     #[inline]
-    pub fn read(&mut self, format: *mut ffi::AVFormatContext) -> Result<(), RsmpegError> {
+    pub fn read(&mut self, format: &mut AVFormatContextInput) -> Result<(), RsmpegError> {
         unsafe {
-            match ffi::av_read_frame(format, self.inner.as_mut_ptr()) {
+            match ffi::av_read_frame(format.as_mut_ptr(), self.inner.as_mut_ptr()) {
                 0 => Ok(()),
                 e => Err(RsmpegError::from(e)),
             }
@@ -272,7 +272,7 @@ pub struct PacketIter<'a> {
     context: &'a mut AVFormatContextInput,
 }
 
-impl<'a> PacketIter<'a> {
+impl PacketIter<'_> {
     pub fn new(context: &mut AVFormatContextInput) -> PacketIter {
         PacketIter { context }
     }
@@ -284,7 +284,7 @@ impl<'a> Iterator for PacketIter<'a> {
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         let mut packet = Packet::empty();
 
-        match packet.read(self.context.as_mut_ptr()) {
+        match packet.read(self.context) {
             Ok(..) => unsafe {
                 Some(Ok((
                     Stream::wrap(

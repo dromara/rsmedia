@@ -7,7 +7,7 @@ use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
 use crate::time::Time;
-use crate::{PixelFormat, Rational, RawFrame};
+use crate::{Rational, RawFrame, PIXEL_FORMAT_YUV420P};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
@@ -185,12 +185,12 @@ impl Encoder {
         }
 
         // Reformat frame to target pixel format
-        let mut frame = if raw_frame.format != frame::PIXEL_FORMAT_YUV420P {
+        let mut frame = if raw_frame.format != PIXEL_FORMAT_YUV420P {
             frame::convert_avframe(
                 raw_frame,
                 raw_frame.width,
                 raw_frame.height,
-                frame::PIXEL_FORMAT_YUV420P,
+                PIXEL_FORMAT_YUV420P,
             )
             .unwrap()
         } else {
@@ -375,7 +375,7 @@ impl Drop for Encoder {
 pub struct Settings {
     width: i32,
     height: i32,
-    pixel_format: AVPixelFormat,
+    pixel_format: i32,
     keyframe_interval: u64,
     options: Options,
 }
@@ -433,7 +433,7 @@ impl Settings {
     pub fn preset_h264_custom(
         width: usize,
         height: usize,
-        pixel_format: PixelFormat,
+        pixel_format: i32,
         options: Options,
     ) -> Settings {
         Self {

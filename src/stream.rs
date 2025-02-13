@@ -19,7 +19,7 @@ type Result<T> = std::result::Result<T, MediaError>;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct StreamInfo {
     pub index: usize,
     codec_parameters: AVCodecParameters,
@@ -86,7 +86,7 @@ pub struct SideData<'a> {
     _marker: PhantomData<&'a Packet>,
 }
 
-impl<'a> SideData<'a> {
+impl SideData<'_> {
     /// # Safety
     pub unsafe fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
         SideData {
@@ -101,7 +101,7 @@ impl<'a> SideData<'a> {
     }
 }
 
-impl<'a> SideData<'a> {
+impl SideData<'_> {
     pub fn kind(&self) -> AVPacketSideDataType {
         unsafe { AVPacketSideDataType::from((*self.as_ptr()).type_) }
     }
@@ -121,7 +121,7 @@ pub struct Stream<'a> {
     index: usize,
 }
 
-impl<'a> Stream<'a> {
+impl Stream<'_> {
     pub fn wrap(context: &AVFormatContextInput, index: usize) -> Stream {
         Stream { context, index }
     }
@@ -131,7 +131,7 @@ impl<'a> Stream<'a> {
     }
 }
 
-impl<'a> Stream<'a> {
+impl Stream<'_> {
     pub fn id(&self) -> i32 {
         unsafe { (*self.as_ptr()).id }
     }
@@ -187,20 +187,20 @@ impl<'a> Stream<'a> {
     }
 }
 
-impl<'a> PartialEq for Stream<'a> {
+impl PartialEq for Stream<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.as_ptr() == other.as_ptr()
     }
 }
 
-impl<'a> Eq for Stream<'a> {}
+impl Eq for Stream<'_> {}
 
 pub struct SideDataIter<'a> {
     stream: &'a Stream<'a>,
     current: c_int,
 }
 
-impl<'a> SideDataIter<'a> {
+impl SideDataIter<'_> {
     pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> SideDataIter<'sd> {
         SideDataIter { stream, current: 0 }
     }
@@ -237,7 +237,7 @@ impl<'a> Iterator for SideDataIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for SideDataIter<'a> {}
+impl ExactSizeIterator for SideDataIter<'_> {}
 
 /////////////////////////////////////////
 pub struct StreamMut<'a> {
@@ -246,7 +246,7 @@ pub struct StreamMut<'a> {
     immutable: Stream<'a>,
 }
 
-impl<'a> StreamMut<'a> {
+impl StreamMut<'_> {
     /// Wraps a mutable reference to `AVFormatContextInput` and an index into a `StreamMut`.
     ///
     /// # Safety
@@ -265,7 +265,7 @@ impl<'a> StreamMut<'a> {
     }
 }
 
-impl<'a> StreamMut<'a> {
+impl StreamMut<'_> {
     pub fn set_time_base<R: Into<Rational>>(&mut self, value: R) {
         unsafe {
             (*self.as_mut_ptr()).time_base = value.into().into();

@@ -1,0 +1,131 @@
+//! Ported from http://dranger.com/ffmpeg/tutorial01.c
+//!
+//! Extracts the first five rgb frames from the video and save them as ppm
+//! files.
+
+use anyhow::{Context, Result};
+use rsmpeg::{
+    avcodec::{AVCodec, AVCodecContext},
+    avformat::AVFormatContextInput,
+    avutil::{AVFrameWithImage, AVImage},
+    error::RsmpegError,
+    ffi,
+    swscale::SwsContext,
+};
+use std::{ffi::CStr, fs};
+
+fn _main(file: &CStr, out_dir: &str) -> Result<()> {
+    fs::create_dir_all(out_dir)?;
+    let mut input_format_context = AVFormatContextInput::open(file, None, &mut None)?;
+    input_format_context.dump(0, file)?;
+
+    let video_stream_index = input_format_context
+        .streams()
+        .into_iter()
+        .position(|stream| stream.codecpar().codec_type().is_video())
+        .context("No video stream")?;
+
+    let mut decode_context = {
+        let video_stream = &input_format_context.streams()[video_stream_index];
+        let decoder = AVCodec::find_decoder(video_stream.codecpar().codec_id)
+            .context("Cannot find the decoder for video stream")?;
+
+        let mut decode_context = AVCodecContext::new(&decoder);
+        decode_context.apply_codecpar(&video_stream.codecpar())?;
+        decode_context.open(None)?;
+        decode_context
+    };
+
+    let image_buffer = AVImage::new(
+        ffi::AV_PIX_FMT_RGB32,
+        decode_context.width,
+        decode_context.height,
+        1,
+    )
+    .context("Failed to create image buffer.")?;
+
+    let mut frame_rgb = AVFrameWithImage::new(image_buffer);
+
+    let mut sws_context = SwsContext::get_context(
+        decode_context.width,
+        decode_context.height,
+        decode_context.pix_fmt,
+        decode_context.width,
+        decode_context.height,
+        ffi::AV_PIX_FMT_RGB32,
+        ffi::SWS_BILINEAR,
+        None,
+        None,
+        None,
+    )
+    .context("Failed to create a swscale context.")?;
+
+    let mut i = 0;
+    while let Some(packet) = input_format_context.read_packet().unwrap() {
+        if packet.stream_index != video_stream_index as i32 {
+            continue;
+        }
+        decode_context.send_packet(Some(&packet))?;
+        loop {
+            let frame = match decode_context.receive_frame() {
+                Ok(frame) => frame,
+                Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => {
+                    break
+                }
+                Err(e) => return Err(e.into()),
+            };
+
+            sws_context.scale_frame(&frame, 0, decode_context.height, &mut frame_rgb)?;
+            if i >= 5 {
+                break;
+            }
+
+            i += 1;
+            // Save the frame as a ppm file
+            crate::misc::avio::pgm_save(&frame_rgb, &format!("{}/frame{}.ppm", out_dir, i))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cstr::cstr;
+
+    #[test]
+    fn tutorial01_test0() {
+        _main(
+            cstr!("tests/assets/vids/centaur.mpg"),
+            "tests/output/tutorial01/centaur",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tutorial01_test1() {
+        _main(
+            cstr!("tests/assets/vids/bear.mp4"),
+            "tests/output/tutorial01/bear",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tutorial01_test2() {
+        _main(
+            cstr!("tests/assets/vids/mov_sample.mov"),
+            "tests/output/tutorial01/mov_sample",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tutorial01_test3() {
+        _main(
+            cstr!("tests/assets/vids/vp8.mp4"),
+            "tests/output/tutorial01/vp8",
+        )
+        .unwrap();
+    }
+}

@@ -30,8 +30,9 @@ pub use rational::Rational;
 pub use resize::Resize;
 pub use time::Time;
 
-/// Re-export internal `AvPixel` as `PixelFormat` for callers.
-pub type PixelFormat = rsmpeg::avutil::AVPixelFormat;
-
 /// Re-export internal `AvFrame` for caller to use.
 pub type RawFrame = rsmpeg::avutil::AVFrame;
+
+/// pixel format
+pub const PIXEL_FORMAT_RGB24: rsmpeg::ffi::AVPixelFormat = rsmpeg::ffi::AV_PIX_FMT_RGB24;
+pub const PIXEL_FORMAT_YUV420P: rsmpeg::ffi::AVPixelFormat = rsmpeg::ffi::AV_PIX_FMT_YUV420P;

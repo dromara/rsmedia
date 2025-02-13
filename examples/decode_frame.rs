@@ -1,5 +1,6 @@
 use image::{ImageBuffer, Rgb};
 use rsmedia::decode::Decoder;
+use rsmedia::frame;
 use std::error::Error;
 use tokio::task;
 use url::Url;
@@ -28,15 +29,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut tasks = vec![];
 
     for frame in decoder.decode_iter() {
-        if let Ok((_timestamp, frame)) = frame {
+        if let Ok((_timestamp, yuv_frame)) = frame {
             if elapsed_time > max_duration {
                 break;
             }
 
-            let rgb = frame.slice(ndarray::s![.., .., 0..3]).to_slice().unwrap();
+            // Notes: yuv frame
+            let rgb_frame = frame::convert_ndarray_yuv_to_rgb(&yuv_frame).unwrap();
 
             let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-                ImageBuffer::from_raw(width, height, rgb.to_vec())
+                ImageBuffer::from_raw(width, height, rgb_frame.as_slice().unwrap().to_vec())
                     .expect("failed to create image buffer");
 
             let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);

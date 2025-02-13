@@ -1,0 +1,86 @@
+use anyhow::{Context, Result};
+use rsmpeg::{avcodec::AVCodecContext, avformat::AVFormatContextInput, avutil, ffi};
+use std::ffi::CString;
+
+/// Get metadata key-value pair form a video file.
+pub fn metadata(file: &str) -> Result<Vec<(String, String)>> {
+    let mut result = vec![];
+    result.push(("file_path".into(), file.to_string()));
+
+    let file = CString::new(file).unwrap();
+    let input_format_context = AVFormatContextInput::open(&file, None, &mut None).unwrap();
+
+    // Get `duration` and `bit_rate` from `input_format_context`.
+    result.push(("duration".into(), input_format_context.duration.to_string()));
+    result.push(("bit_rate".into(), input_format_context.bit_rate.to_string()));
+
+    // Get additional info from `input_format_context.metadata()`
+    if let Some(metadata) = input_format_context.metadata() {
+        for entry in metadata.iter() {
+            result.push((
+                entry.key().to_str().unwrap().to_string(),
+                entry.value().to_str().unwrap().to_string(),
+            ));
+        }
+    }
+
+    {
+        // Get `frame_rate` from `video_stream`
+        let (video_stream_index, decoder) = input_format_context
+            .find_best_stream(ffi::AVMEDIA_TYPE_VIDEO)?
+            .context("Failed to find video stream")?;
+
+        let video_stream = &input_format_context.streams()[video_stream_index];
+
+        result.push((
+            "frame_rate".into(),
+            avutil::av_q2d(video_stream.r_frame_rate).to_string(),
+        ));
+
+        // Get `width` and `height` from `decode_context`
+        let mut decode_context = AVCodecContext::new(&decoder);
+        decode_context
+            .apply_codecpar(&video_stream.codecpar())
+            .unwrap();
+        decode_context.open(None).unwrap();
+        result.push(("width".into(), decode_context.width.to_string()));
+        result.push(("height".into(), decode_context.height.to_string()));
+    };
+
+    Ok(result)
+}
+
+#[test]
+fn metadata_test0() {
+    assert_eq!(
+        metadata("tests/assets/vids/bear.mp4").unwrap(),
+        vec![
+            ("image_path".into(), "tests/assets/vids/bear.mp4".into()),
+            ("duration".into(), "1068118".into()),
+            ("bit_rate".into(), "307823".into()),
+            ("major_brand".into(), "isom".into()),
+            ("minor_version".into(), "1".into()),
+            ("compatible_brands".into(), "isomavc1".into()),
+            ("creation_time".into(), "2009-07-09T17:29:47.000000Z".into()),
+            ("frame_rate".into(), "29.97002997002997".into()),
+            ("width".into(), "320".into()),
+            ("height".into(), "180".into()),
+        ]
+    );
+}
+
+#[test]
+fn metadata_test1() {
+    assert_eq!(
+        metadata("tests/assets/vids/vp8.mp4").unwrap(),
+        vec![
+            ("image_path".into(), "tests/assets/vids/vp8.mp4".into()),
+            ("duration".into(), "17600000".into()),
+            ("bit_rate".into(), "242823".into()),
+            ("encoder".into(), "whammy".into()),
+            ("frame_rate".into(), "5".into()),
+            ("width".into(), "604".into()),
+            ("height".into(), "604".into()),
+        ]
+    );
+}

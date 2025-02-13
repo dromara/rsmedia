@@ -366,8 +366,8 @@ impl DecoderSplit {
             .expect("Failed to find decoder for stream");
 
         let mut decode_ctx = AVCodecContext::new(&decoder);
+        decode_ctx.set_time_base(reader_stream.time_base);
         decode_ctx.apply_codecpar(&reader_stream.codecpar())?;
-        decode_ctx.set_pkt_timebase(reader_stream.time_base);
         decode_ctx
             .open(None)
             .expect("Failed to open decoder for stream");

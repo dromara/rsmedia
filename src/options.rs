@@ -207,8 +207,13 @@ impl<'a> Owned<'a> {
     pub unsafe fn disown(mut self) -> *mut ffi::AVDictionary {
         let result = self.inner.as_mut_ptr();
         self.inner = MutableRef::wrap(ptr::null_mut());
-
         result
+    }
+
+    pub fn av_dict(mut self) -> AVDictionary {
+         unsafe {
+            AVDictionary::from_raw(ptr::NonNull::new(self.disown()).unwrap())
+        }
     }
 }
 

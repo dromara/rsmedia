@@ -273,8 +273,9 @@ impl Encoder {
         }
 
         settings.apply_to(&mut encode_context);
-        // TODO: settings.options().to_dict()
-        encode_context.open(None).expect("Could not open codec");
+
+        encode_context.open(Some(settings.options().to_dict().av_dict()))
+            .expect("Could not open encode context");
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();

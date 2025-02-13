@@ -211,9 +211,7 @@ impl<'a> Owned<'a> {
     }
 
     pub fn av_dict(mut self) -> AVDictionary {
-         unsafe {
-            AVDictionary::from_raw(ptr::NonNull::new(self.disown()).unwrap())
-        }
+        unsafe { AVDictionary::from_raw(ptr::NonNull::new(self.disown()).unwrap()) }
     }
 }
 

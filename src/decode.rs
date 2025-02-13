@@ -532,7 +532,7 @@ impl DecoderSplit {
                 // TODO: rescale_frame at hwaccel_context
 
                 Ok(Some(frame))
-            },
+            }
             None => Ok(None),
         }
     }

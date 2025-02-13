@@ -8,7 +8,7 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::time::Time;
 use crate::{PixelFormat, Rational, RawFrame};
-use rsmpeg::avcodec::{AVCodec, AVCodecRef, AVCodecContext};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 
@@ -274,7 +274,8 @@ impl Encoder {
 
         settings.apply_to(&mut encode_context);
 
-        encode_context.open(Some(settings.options().to_dict().av_dict()))
+        encode_context
+            .open(Some(settings.options().to_dict().av_dict()))
             .expect("Could not open encode context");
 
         let writer_stream_index = {

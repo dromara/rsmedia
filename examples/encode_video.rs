@@ -19,7 +19,9 @@ fn main() {
         // This will create a smooth rainbow animation video!
         let frame = rainbow_frame(i as f32 / 256.0);
 
-        encoder.encode(&frame, position).expect("failed to encode frame");
+        encoder
+            .encode(&frame, position)
+            .expect("failed to encode frame");
 
         // Update the current position and add the inter-frame duration to it.
         position = position.aligned_with(duration).add();

@@ -1,6 +1,6 @@
-use rsmedia::EncoderBuilder;
 use rsmedia::decode::Decoder;
 use rsmedia::encode::Settings;
+use rsmedia::EncoderBuilder;
 use std::path::Path;
 
 fn main() {

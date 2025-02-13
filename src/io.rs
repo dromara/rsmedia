@@ -1,9 +1,9 @@
-use crate::Packet;
 use crate::error::MediaError;
 use crate::location::Location;
 use crate::options::{Dictionary, Options};
 use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
+use crate::Packet;
 
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::avformat::AVFormatContextOutput;

@@ -1,8 +1,7 @@
-use crate::Rational;
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
-use crate::time::TIME_BASE;
-use crate::time::Time;
+use crate::time::{Time, TIME_BASE};
+use crate::Rational;
 
 use libc::{c_int, c_uint};
 use rsmpeg::avcodec::AVPacket;

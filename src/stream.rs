@@ -8,12 +8,12 @@ use libc::{c_int, c_uint};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-use crate::Rational;
 use crate::error::MediaError;
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
+use crate::Rational;
 
 type Result<T> = std::result::Result<T, MediaError>;
 

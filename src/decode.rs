@@ -8,8 +8,8 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::time::Time;
-use crate::{Rational, RawFrame};
 use crate::{ffi_hwaccel, frame};
+use crate::{Rational, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::AVPixelFormat;

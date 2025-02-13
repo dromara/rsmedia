@@ -1,9 +1,9 @@
+use crate::Packet;
 use crate::error::MediaError;
 use crate::location::Location;
 use crate::options::{Dictionary, Options};
 use crate::packet::PacketIter;
-use crate::stream::{Stream, StreamInfo};
-use crate::Packet;
+use crate::stream::StreamInfo;
 
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::avformat::AVFormatContextOutput;
@@ -11,8 +11,7 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use libc::c_int;
-use std::ffi::{CStr, CString};
-use std::fmt::Display;
+use std::ffi::CString;
 use std::ops::Bound;
 use std::path::Path;
 use std::ptr;

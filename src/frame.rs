@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_avframe_rgb_to_ndarray_empty() {
-        let mut frame = AVFrame::new();
+        let frame = AVFrame::new();
         let result = avframe_rgb_to_ndarray(&frame);
         assert!(result.is_err());
     }
@@ -783,7 +783,7 @@ mod tests {
         println!("Test timestamp: 2025-02-13 02:05:56 UTC");
 
         // 创建一个带时间戳的测试帧
-        let mut frame = create_test_rgb_frame(64, 48);
+        let frame = create_test_rgb_frame(64, 48);
         unsafe {
             // 在帧的某个位置编码时间戳
             let data = frame.data[0];

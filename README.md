@@ -4,7 +4,7 @@
 
 Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rsmpeg).
 
-ffmpeg 6.x, 7.x is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
+ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
 ## FFI bindings
 

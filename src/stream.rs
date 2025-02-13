@@ -8,12 +8,12 @@ use libc::{c_int, c_uint};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+use crate::Rational;
 use crate::error::MediaError;
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
-use crate::Rational;
 
 type Result<T> = std::result::Result<T, MediaError>;
 
@@ -87,6 +87,7 @@ pub struct SideData<'a> {
 }
 
 impl<'a> SideData<'a> {
+    /// # Safety
     pub unsafe fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
         SideData {
             ptr,
@@ -94,6 +95,7 @@ impl<'a> SideData<'a> {
         }
     }
 
+    /// # Safety
     pub unsafe fn as_ptr(&self) -> *const ffi::AVPacketSideData {
         self.ptr as *const _
     }
@@ -120,12 +122,12 @@ pub struct Stream<'a> {
 }
 
 impl<'a> Stream<'a> {
-    pub unsafe fn wrap(context: &AVFormatContextInput, index: usize) -> Stream {
+    pub fn wrap(context: &AVFormatContextInput, index: usize) -> Stream {
         Stream { context, index }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVStream {
-        *(*self.context.as_ptr()).streams.add(self.index)
+    pub fn as_ptr(&self) -> *const ffi::AVStream {
+        unsafe { *(*self.context.as_ptr()).streams.add(self.index) }
     }
 }
 
@@ -187,7 +189,7 @@ impl<'a> Stream<'a> {
 
 impl<'a> PartialEq for Stream<'a> {
     fn eq(&self, other: &Self) -> bool {
-        unsafe { self.as_ptr() == other.as_ptr() }
+        self.as_ptr() == other.as_ptr()
     }
 }
 
@@ -245,16 +247,21 @@ pub struct StreamMut<'a> {
 }
 
 impl<'a> StreamMut<'a> {
+    /// Wraps a mutable reference to `AVFormatContextInput` and an index into a `StreamMut`.
+    ///
+    /// # Safety
     pub unsafe fn wrap(context: &mut AVFormatContextInput, index: usize) -> StreamMut {
-        StreamMut {
-            context: std::mem::transmute_copy(&context),
-            index,
-            immutable: Stream::wrap(std::mem::transmute_copy(&context), index),
+        unsafe {
+            StreamMut {
+                context: std::mem::transmute_copy(&context),
+                index,
+                immutable: Stream::wrap(std::mem::transmute_copy(&context), index),
+            }
         }
     }
 
-    pub unsafe fn as_mut_ptr(&mut self) -> *mut ffi::AVStream {
-        *(*self.context.as_mut_ptr()).streams.add(self.index)
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::AVStream {
+        unsafe { *(*self.context.as_mut_ptr()).streams.add(self.index) }
     }
 }
 

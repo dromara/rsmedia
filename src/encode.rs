@@ -260,10 +260,9 @@ impl Encoder {
     /// * `interleaved` - Whether or not to use interleaved write.
     /// * `settings` - Encoder settings to use.
     fn from_writer(mut writer: Writer, interleaved: bool, settings: Settings) -> Result<Self> {
-        let global_header = unsafe {
+        let global_header =
             AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
-                .contains(AvFormatFlags::GLOBAL_HEADER)
-        };
+                .contains(AvFormatFlags::GLOBAL_HEADER);
 
         let mut encode_context = AVCodecContext::new(&settings.codec().unwrap());
         // Some formats require this flag to be set or the output will
@@ -303,7 +302,7 @@ impl Encoder {
         let packet = match self.encoder.receive_packet() {
             Ok(p) => Packet::new_with_avpacket(p),
             Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
-                return Ok(None)
+                return Ok(None);
             }
             Err(err) => return Err(MediaError::BackendError(err)),
         };
@@ -481,13 +480,11 @@ impl Settings {
     fn codec(&self) -> Option<AVCodecRef> {
         // Try to use the libx264 decoder. If it is not available, then use use whatever default
         // h264 decoder we have.
-        unsafe {
-            let codec = AVCodec::find_encoder_by_name(&CString::new("libx264").unwrap());
-            if codec.is_none() {
-                AVCodec::find_encoder(ffi::AV_CODEC_ID_H264)
-            } else {
-                codec
-            }
+        let codec = AVCodec::find_encoder_by_name(&CString::new("libx264").unwrap());
+        if codec.is_none() {
+            AVCodec::find_encoder(ffi::AV_CODEC_ID_H264)
+        } else {
+            codec
         }
     }
 

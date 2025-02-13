@@ -1,8 +1,8 @@
+use crate::Rational;
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
-use crate::time::Time;
 use crate::time::TIME_BASE;
-use crate::Rational;
+use crate::time::Time;
 
 use libc::{c_int, c_uint};
 use rsmpeg::avcodec::AVPacket;
@@ -67,7 +67,7 @@ impl Packet {
     }
 
     #[inline(always)]
-    pub unsafe fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.inner.size == 0
     }
 
@@ -252,12 +252,14 @@ impl Packet {
     #[inline]
     pub fn new_with_size(size: usize) -> Self {
         unsafe {
-            let mut pkt = std::mem::zeroed::<AVPacket>();
+            let mut pkt = std::mem::MaybeUninit::<ffi::AVPacket>::uninit();
 
             ffi::av_init_packet(pkt.as_mut_ptr());
             ffi::av_new_packet(pkt.as_mut_ptr(), size as c_int);
 
-            Packet::new_with_avpacket(pkt)
+            Packet::new_with_avpacket(AVPacket::from_raw(
+                std::ptr::NonNull::new(pkt.as_mut_ptr()).unwrap(),
+            ))
         }
     }
 }

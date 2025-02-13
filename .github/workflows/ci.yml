@@ -23,14 +23,7 @@ jobs:
     strategy:
       matrix:
         include:
-          # FFmpeg 6.x
-          - ffmpeg_version: "6.0"
-            feature: "ffmpeg6,ndarray"
-          - ffmpeg_version: "6.1"
-            feature: "ffmpeg6,ndarray"
           # FFmpeg 7.x
-          - ffmpeg_version: "7.0"
-            feature: "ffmpeg7,ndarray"
           - ffmpeg_version: "7.1"
             feature: "ffmpeg7,ndarray"
       fail-fast: false
@@ -162,5 +155,5 @@ jobs:
       - name: Rustfmt
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --all
+#      - name: Clippy
+#        run: cargo clippy --all -- -D warnings

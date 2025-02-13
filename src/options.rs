@@ -1,7 +1,7 @@
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::ffi;
 use std::collections::HashMap;
-use std::ffi::{c_int, CStr, CString};
+use std::ffi::{CStr, CString};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -52,7 +52,7 @@ impl<'a> Iterator for Iter<'a> {
                 self.ptr,
                 empty.as_ptr(),
                 self.cur,
-                ffi::AV_DICT_IGNORE_SUFFIX as c_int,
+                ffi::AV_DICT_IGNORE_SUFFIX as i32,
             );
 
             if !entry.is_null() {
@@ -78,14 +78,14 @@ pub struct ImmutableRef<'a> {
 }
 
 impl<'a> ImmutableRef<'a> {
-    pub unsafe fn wrap(ptr: *const ffi::AVDictionary) -> Self {
+    pub fn wrap(ptr: *const ffi::AVDictionary) -> Self {
         ImmutableRef {
             ptr,
             _marker: PhantomData,
         }
     }
 
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVDictionary {
+    pub fn as_ptr(&self) -> *const ffi::AVDictionary {
         self.ptr
     }
 }
@@ -107,7 +107,7 @@ impl<'a> ImmutableRef<'a> {
     }
 
     pub fn iter(&self) -> Iter {
-        unsafe { Iter::new(self.as_ptr()) }
+        Iter::new(self.as_ptr())
     }
 
     pub fn to_owned<'b>(&self) -> Owned<'b> {
@@ -140,7 +140,7 @@ pub struct MutableRef<'a> {
 }
 
 impl<'a> MutableRef<'a> {
-    pub unsafe fn wrap(ptr: *mut ffi::AVDictionary) -> Self {
+    pub fn wrap(ptr: *mut ffi::AVDictionary) -> Self {
         MutableRef {
             ptr,
             imm: ImmutableRef::wrap(ptr),
@@ -148,7 +148,7 @@ impl<'a> MutableRef<'a> {
         }
     }
 
-    pub unsafe fn as_mut_ptr(&self) -> *mut ffi::AVDictionary {
+    pub fn as_mut_ptr(&self) -> *mut ffi::AVDictionary {
         self.ptr
     }
 }
@@ -198,29 +198,27 @@ impl<'a> Default for Owned<'a> {
 }
 
 impl<'a> Owned<'a> {
-    pub unsafe fn own(ptr: *mut ffi::AVDictionary) -> Self {
+    pub fn own(ptr: *mut ffi::AVDictionary) -> Self {
         Owned {
             inner: MutableRef::wrap(ptr),
         }
     }
 
-    pub unsafe fn disown(mut self) -> *mut ffi::AVDictionary {
+    pub fn disown(mut self) -> *mut ffi::AVDictionary {
         let result = self.inner.as_mut_ptr();
         self.inner = MutableRef::wrap(ptr::null_mut());
         result
     }
 
-    pub fn av_dict(mut self) -> AVDictionary {
+    pub fn av_dict(self) -> AVDictionary {
         unsafe { AVDictionary::from_raw(ptr::NonNull::new(self.disown()).unwrap()) }
     }
 }
 
 impl<'a> Owned<'a> {
     pub fn new() -> Self {
-        unsafe {
-            Owned {
-                inner: MutableRef::wrap(ptr::null_mut()),
-            }
+        Owned {
+            inner: MutableRef::wrap(ptr::null_mut()),
         }
     }
 }

@@ -29,7 +29,7 @@ impl HWDeviceContext {
     }
 
     unsafe fn ref_raw(&self) -> *mut ffi::AVBufferRef {
-        ffi::av_buffer_ref(self.ptr)
+        unsafe { ffi::av_buffer_ref(self.ptr) }
     }
 }
 
@@ -105,17 +105,19 @@ pub fn codec_context_hwaccel_set_hw_device_ctx(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn hwaccel_get_format(
     ctx: *mut ffi::AVCodecContext,
     pix_fmts: *const ffi::AVPixelFormat,
 ) -> ffi::AVPixelFormat {
-    let mut p = pix_fmts;
-    while *p != ffi::AV_PIX_FMT_NONE {
-        if *p == ((*ctx).opaque as i32) as ffi::AVPixelFormat {
-            return *p;
+    unsafe {
+        let mut p = pix_fmts;
+        while *p != ffi::AV_PIX_FMT_NONE {
+            if *p == ((*ctx).opaque as i32) as ffi::AVPixelFormat {
+                return *p;
+            }
+            p = p.add(1);
         }
-        p = p.add(1);
+        ffi::AV_PIX_FMT_NONE
     }
-    ffi::AV_PIX_FMT_NONE
 }

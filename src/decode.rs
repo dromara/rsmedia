@@ -15,7 +15,6 @@ use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
-use rsmpeg::swscale::SwsContext as AvScaler;
 
 type Result<T> = std::result::Result<T, MediaError>;
 
@@ -341,7 +340,6 @@ pub struct DecoderSplit {
     decoder: AVCodecContext,
     decoder_time_base: Rational,
     hwaccel_context: Option<HWContext>,
-    scaler: Option<AvScaler>,
     size: (u32, u32),
     size_out: (u32, u32),
     draining: bool,
@@ -358,7 +356,7 @@ impl DecoderSplit {
         reader: &Reader,
         reader_stream_index: usize,
         resize: Option<Resize>,
-        _hw_device_type: Option<HWDeviceType>,
+        hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
         let reader_stream = reader.input.streams().get(reader_stream_index).ok_or(
             RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND),
@@ -374,6 +372,11 @@ impl DecoderSplit {
             .open(None)
             .expect("Failed to open decoder for stream");
 
+        let hwaccel_context = match hw_device_type {
+            Some(device_type) => Some(HWContext::new(&mut decode_ctx, device_type)?),
+            None => None,
+        };
+
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize
                 .compute_for((decode_ctx.width as u32, decode_ctx.height as u32))
@@ -387,8 +390,7 @@ impl DecoderSplit {
         Ok(Self {
             decoder: decode_ctx,
             decoder_time_base: reader_stream.time_base.into(),
-            hwaccel_context: None,
-            scaler: None,
+            hwaccel_context,
             size,
             size_out,
             draining: false,
@@ -519,7 +521,18 @@ impl DecoderSplit {
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
     fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
         match self.decoder_receive_frame().unwrap() {
-            Some(frame) => Ok(Some(frame)),
+            Some(frame) => {
+                let frame = match self.hwaccel_context.as_ref() {
+                    Some(hw_ctx) if hw_ctx.format() == frame.format => {
+                        Self::download_frame(&frame)?
+                    }
+                    _ => frame,
+                };
+
+                // TODO: rescale_frame at hwaccel_context
+
+                Ok(Some(frame))
+            },
             None => Ok(None),
         }
     }

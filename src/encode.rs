@@ -6,7 +6,7 @@ use crate::io::{Writer, WriterBuilder};
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
-use crate::time::{Time, TIME_BASE};
+use crate::time::Time;
 use crate::{PixelFormat, Rational, RawFrame};
 use rsmpeg::avcodec::{AVCodec, AVCodecRef, AVCodecContext};
 use rsmpeg::avutil::AVPixelFormat;
@@ -160,7 +160,7 @@ impl Encoder {
 
         frame.set_pts(
             source_timestamp
-                .aligned_with_rational(self.encoder.time_base.into())
+                .aligned_with_rational(self.time_base())
                 .into_value()
                 .unwrap(),
         );
@@ -204,8 +204,8 @@ impl Encoder {
 
         self.encoder.send_frame(Some(&frame)).unwrap();
 
-        // Increment frame count regardless of whether or not frame is written, see
-        // https://github.com/oddity-ai/video-rs/issues/46.
+        // Increment frame count regardless of whether or not frame is written,
+        // see https://github.com/oddity-ai/video-rs/issues/46.
         self.frame_count += 1;
 
         if let Some(packet) = self.encoder_receive_packet().unwrap() {
@@ -273,6 +273,7 @@ impl Encoder {
         }
 
         settings.apply_to(&mut encode_context);
+        // TODO: settings.options().to_dict()
         encode_context.open(None).expect("Could not open codec");
 
         let writer_stream_index = {
@@ -468,10 +469,10 @@ impl Settings {
         encoder.set_height(self.height);
         encoder.set_pix_fmt(self.pixel_format);
         encoder.set_bit_rate(Self::BIT_RATE);
+        // 30
         encoder.set_framerate(Rational::new(Self::FRAME_RATE, 1).into());
-        // Just use the ffmpeg global time base which is precise enough
-        // that we should never get in trouble.
-        encoder.set_time_base(TIME_BASE.into());
+        // 30 * 1000
+        encoder.set_time_base(Rational::new(1, Self::FRAME_RATE * 1000).into());
     }
 
     /// Get codec.

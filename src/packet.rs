@@ -187,6 +187,16 @@ impl Packet {
         }
     }
 
+    // 获取可变引用
+    pub fn as_inner(&mut self) -> &mut AVPacket {
+        &mut self.inner
+    }
+
+    // 获取不可变引用
+    pub fn as_inner_ref(&self) -> &AVPacket {
+        &self.inner
+    }
+
     /// Downcast to native inner type.
     pub(crate) fn into_inner(self) -> AVPacket {
         self.inner
@@ -195,6 +205,10 @@ impl Packet {
     /// Downcast to native inner type and time base.
     pub(crate) fn into_inner_parts(self) -> (AVPacket, Rational) {
         (self.inner, self.time_base)
+    }
+
+    pub fn time_base(&self) -> Rational {
+        self.time_base
     }
 
     /////////////////////

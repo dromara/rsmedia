@@ -748,12 +748,14 @@ pub(crate) mod private {
         }
 
         fn write_frame(&mut self, packet: &mut Packet) -> Result<()> {
-            packet.write(&mut self.output)?;
+            // packet.write(&mut self.output)?;
+            self.output.write_frame(packet.as_inner())?;
             Ok(())
         }
 
         fn write_interleaved(&mut self, packet: &mut Packet) -> Result<()> {
-            packet.write_interleaved(&mut self.output)?;
+            // packet.write_interleaved(&mut self.output)?;
+            self.output.interleaved_write_frame(packet.as_inner())?;
             Ok(())
         }
 
@@ -768,7 +770,6 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            // FIXME: self.options.to_dict()
             self.output.write_header(&mut None)?;
             Ok(self.end_write())
         }
@@ -778,10 +779,6 @@ pub(crate) mod private {
             packet.write(&mut self.output)?;
             flush_output(&mut self.output).unwrap();
             Ok(self.end_write())
-
-            // let mut pkt = pkt.into_inner();
-            // self.output.write_frame(&mut pkt)?;
-            // Ok(())
         }
 
         fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Buf> {
@@ -789,10 +786,6 @@ pub(crate) mod private {
             packet.write_interleaved(&mut self.output)?;
             flush_output(&mut self.output).unwrap();
             Ok(self.end_write())
-
-            // let mut pkt = pkt.into_inner();
-            // self.output.interleaved_write_frame(&mut pkt)?;
-            // Ok(())
         }
 
         fn write_trailer(&mut self) -> Result<Buf> {
@@ -807,7 +800,6 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            // FIXME: self.options.to_dict()
             self.output.write_header(&mut None)?;
             self.end_write();
             Ok(self.take_buffers())

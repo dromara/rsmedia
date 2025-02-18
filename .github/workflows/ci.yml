@@ -75,7 +75,7 @@ jobs:
             "-C", "link-arg=-ldl",
             "-C", "link-arg=-pthread",
             "-C", "link-arg=-lc",
-            "-C", "link-arg=-Wl,--copy-dt-needed-entries"
+            "-C", "link-arg=-Wl,--copy-dt-needed-entries",
             "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
           ]
           EOF
@@ -196,7 +196,7 @@ jobs:
             "-C", "link-arg=-ldl",
             "-C", "link-arg=-pthread",
             "-C", "link-arg=-lc",
-            "-C", "link-arg=-Wl,--copy-dt-needed-entries"
+            "-C", "link-arg=-Wl,--copy-dt-needed-entries",
             "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
           ]
           EOF

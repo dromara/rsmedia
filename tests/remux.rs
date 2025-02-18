@@ -84,8 +84,8 @@ fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
         .context("Write trailer failed.")
 }
 
-/// Remux MP4 to MOV, with h.264 codec.
 #[test]
+#[ignore = "Remux MP4 to MOV, with h.264 codec 测试运行依赖测试文件，暂时忽略"]
 fn remux_test0() {
     std::fs::create_dir_all("tests/output/remux/").unwrap();
     remux(

@@ -273,6 +273,7 @@ fn transcode_aac(input_file: &CStr, output_file: &CStr) -> Result<()> {
 }
 
 #[test]
+#[ignore = "transcode_aac_test0 测试运行依赖测试文件，暂时忽略"]
 fn transcode_aac_test0() {
     std::fs::create_dir_all("tests/output/transcode_aac/").unwrap();
     transcode_aac(
@@ -283,6 +284,7 @@ fn transcode_aac_test0() {
 }
 
 #[test]
+#[ignore = "transcode_aac_test1 测试运行依赖测试文件，暂时忽略"]
 fn transcode_aac_test1() {
     std::fs::create_dir_all("tests/output/transcode_aac/").unwrap();
     transcode_aac(

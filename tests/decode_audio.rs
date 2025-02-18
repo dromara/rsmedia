@@ -154,6 +154,7 @@ fn decode_audio(audio_path: &str, out_file_path: &str) -> Result<()> {
 }
 
 #[test]
+#[ignore = "decode_audio_test 测试运行依赖测试文件，暂时忽略"]
 fn decode_audio_test() {
     decode_audio(
         "tests/assets/audios/sample1_short.aac",

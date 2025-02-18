@@ -16,12 +16,19 @@ ffmpeg6 = ["rsmpeg/ffmpeg6", "rsmpeg/link_system_ffmpeg"]
 ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
 
 [dependencies]
-rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", features = ["ffmpeg7", "link_system_ffmpeg"] }
-ndarray = { version = "0.16", optional = true }
 url = "2"
 libc = "0.2"
 tracing = "0.1"
 bitflags = "2.8"
+ndarray = { version = "0.16", optional = true }
+rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", features = [
+    "ffmpeg7", "link_system_ffmpeg"
+] }
+opencv = { version = "0.94", optional = true, features = [
+    "imgproc",
+    "imgcodecs",
+    "clang-runtime",
+] }
 
 [dev-dependencies]
 cstr = "0.2"

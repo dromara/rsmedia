@@ -121,6 +121,7 @@ fn decode_video(video_path: &str, out_dir: &str) -> Result<()> {
 }
 
 #[test]
+#[ignore = "decode_video_test 测试运行依赖测试文件，暂时忽略"]
 fn decode_video_test() {
     decode_video("tests/assets/vids/centaur.mpg", "tests/output/decode_video").unwrap();
 }

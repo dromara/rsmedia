@@ -107,6 +107,7 @@ fn encode_video(codec_name: &CStr, file_name: &str) -> Result<()> {
 }
 
 #[test]
+#[ignore = "encode_video_test 测试运行依赖测试文件，暂时忽略"]
 fn encode_video_test() {
     fs::create_dir_all("tests/output/encode_video/").unwrap();
     encode_video(cstr!("mpeg4"), "tests/output/encode_video/output.mp4").unwrap();

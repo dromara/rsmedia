@@ -18,7 +18,7 @@ jobs:
   build-linux:
     name: build / linux / ffmpeg ${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-nvidia2404
+    container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
 
     strategy:
       matrix:
@@ -33,7 +33,15 @@ jobs:
       - name: Install dependencies
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ca-certificates clang curl pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            libc6-dev \
+            pkg-config
+          # Verify GLIBC version
+          ldd --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -107,7 +115,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:7.1-nvidia2404
+    container: jrottenberg/ffmpeg:7.1-ubuntu
 
     steps:
       - name: Checkout
@@ -116,7 +124,15 @@ jobs:
       - name: Install dependencies
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ca-certificates clang curl pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            libc6-dev \
+            pkg-config
+          # Verify GLIBC version
+          ldd --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -126,7 +142,7 @@ jobs:
 
   lints:
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:7.1-nvidia2404
+    container: jrottenberg/ffmpeg:7.1-ubuntu
 
     steps:
       - name: Checkout
@@ -135,7 +151,15 @@ jobs:
       - name: Install dependencies
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ca-certificates clang curl pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            libc6-dev \
+            pkg-config
+          # Verify GLIBC version
+          ldd --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

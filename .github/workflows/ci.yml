@@ -12,10 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_LOG: debug
+  RUST_LOG: "debug"
   RUST_BACKTRACE: 1
-  RUSTFLAGS: "-D warnings -C link-args=-Wl,--copy-dt-needed-entries -C link-arg=-Wl,--no-as-needed"
-  LD_LIBRARY_PATH: "/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+  RUSTFLAGS: "-D warnings"
 
 jobs:
 
@@ -69,7 +68,6 @@ jobs:
           mkdir -p .cargo
           cat > .cargo/config.toml << EOF
           [target.x86_64-unknown-linux-gnu]
-          linker = "clang"
           rustflags = [
             "-C", "link-arg=-Wl,--no-as-needed",
             "-C", "link-arg=-ldl",
@@ -190,7 +188,6 @@ jobs:
           mkdir -p .cargo
           cat > .cargo/config.toml << EOF
           [target.x86_64-unknown-linux-gnu]
-          linker = "clang"
           rustflags = [
             "-C", "link-arg=-Wl,--no-as-needed",
             "-C", "link-arg=-ldl",

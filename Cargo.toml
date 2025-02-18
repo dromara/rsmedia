@@ -30,18 +30,6 @@ imgproc = "0.3"
 anyhow = "1.0"
 camino = "1.1"
 tokio = { version = "1", features = ["full"] }
-opencv = { version = "0.94", default-features = false, features = [
-    "dnn",
-    "videoio",
-    "highgui",
-    "imgproc",
-    "imgcodecs",
-    "features2d",
-    "objdetect",
-    "tracking",
-    "stitching",
-    "clang-runtime",
-] }
 
 [package.metadata.docs.rs]
 all-features = true

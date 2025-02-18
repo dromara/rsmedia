@@ -43,7 +43,7 @@ pub fn avio_reading(file_path: &CStr) -> Result<()> {
             frame.set_pts(frame.best_effort_timestamp);
 
             // avio::pgm_save(&frame, &format!("{}/frame_{}.pgm", "/tmp", frame_index.fetch_add(1, atomic::Ordering::SeqCst)))?;
-            avio::save_image_avframe_yuv(
+            avio::save_avframe_to_image(
                 &frame,
                 &format!(
                     "{}/frame_{}.jpeg",

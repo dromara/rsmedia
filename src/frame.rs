@@ -181,7 +181,11 @@ pub fn ndarray_to_avframe_yuv(array: &FrameArray) -> Result<AVFrame, Box<dyn std
     Ok(frame)
 }
 
-/// RGB 转 YUV420P
+/// RGB => YUV420P
+/// RGB to YUV conversion formulas (BT.601):
+/// Y = 0.299 * R + 0.587 * G + 0.114 * B
+/// U = -0.169 * R - 0.331 * G + 0.500 * B + 128
+/// V = 0.500 * R - 0.419 * G - 0.081 * B + 128
 pub fn convert_ndarray_rgb_to_yuv(
     rgb: &FrameArray,
 ) -> Result<FrameArray, Box<dyn std::error::Error>> {
@@ -205,11 +209,7 @@ pub fn convert_ndarray_rgb_to_yuv(
             let g = rgb[[y, x, 1]] as f32;
             let b = rgb[[y, x, 2]] as f32;
 
-            // RGB to YUV 转换公式
-            // Y = 0.299R + 0.587G + 0.114B
-            // U = -0.169R - 0.331G + 0.500B + 128
-            // V = 0.500R - 0.419G - 0.081B + 128
-
+            // RGB => YUV:
             let y_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
             yuv[[y, x, 0]] = y_val;
 
@@ -253,7 +253,11 @@ pub fn convert_ndarray_rgb_to_yuv(
     Ok(yuv)
 }
 
-/// YUV420P 转 RGB
+/// YUV => RGB
+/// YUV to RGB conversion formulas (BT.601):
+/// R = Y + 1.402 * (V - 128)
+/// G = Y - 0.344136 * (U - 128) - 0.714136 * (V - 128)
+/// B = Y + 1.772 * (U - 128)
 pub fn convert_ndarray_yuv_to_rgb(
     yuv: &FrameArray,
 ) -> Result<FrameArray, Box<dyn std::error::Error>> {
@@ -274,11 +278,7 @@ pub fn convert_ndarray_yuv_to_rgb(
             let u_val = yuv[[y, x, 1]] as f32 - 128.0;
             let v_val = yuv[[y, x, 2]] as f32 - 128.0;
 
-            // YUV to RGB 转换公式
-            // R = Y + 1.403V
-            // G = Y - 0.344U - 0.714V
-            // B = Y + 1.773U
-
+            // YUV => RGB:
             let r = (y_val + 1.403 * v_val).clamp(0.0, 255.0) as u8;
             let g = (y_val - 0.344 * u_val - 0.714 * v_val).clamp(0.0, 255.0) as u8;
             let b = (y_val + 1.773 * u_val).clamp(0.0, 255.0) as u8;

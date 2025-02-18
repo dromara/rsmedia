@@ -5,7 +5,7 @@ use std::io::{SeekFrom, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use image::DynamicImage;
 
 use rsmpeg::{
@@ -82,13 +82,18 @@ impl Decoder {
 
                 while let Ok(yuv_frame) = self.codec_context.receive_frame() {
                     // 注意这里的 frame 编码格式为 YUV420P，需要转换为 RGB24
-                    let rgb_frame = crate::misc::av_convert::avframe_yuv_to_rgb24(&yuv_frame)?;
+                    let rgb_frame = crate::misc::av_convert::avframe_convert(
+                        &yuv_frame,
+                        yuv_frame.width,
+                        yuv_frame.height,
+                        ffi::AV_PIX_FMT_RGB24,
+                    )?;
                     println!(
                         "convert frame from yuv420p to rgb24 pts: {}, time_base: {:?}",
                         rgb_frame.pts, rgb_frame.time_base
                     );
 
-                    let img = crate::misc::av_convert::avframe_rgb24_to_rgb_image_2(&rgb_frame)?;
+                    let img = crate::misc::av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
                     return Ok(Some((yuv_frame.pts, DynamicImage::ImageRgb8(img))));
                 }
             } else {
@@ -334,9 +339,14 @@ pub fn pgm_save(frame: &AVFrame, filename: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn save_image_avframe_yuv(yuv_frame: &AVFrame, output_file_name: &str) -> anyhow::Result<()> {
+pub fn save_avframe_to_image(yuv_frame: &AVFrame, output_file_name: &str) -> Result<()> {
     // 转换为 RGB24 格式
-    let rgb_frame = crate::misc::av_convert::avframe_yuv_to_rgb24(yuv_frame)?;
+    let rgb_frame = crate::misc::av_convert::avframe_convert(
+        &yuv_frame,
+        yuv_frame.width,
+        yuv_frame.height,
+        ffi::AV_PIX_FMT_RGB24,
+    )?;
 
     // 保存图像
     save_image_avframe_rgb24(&rgb_frame, output_file_name)
@@ -345,34 +355,29 @@ pub fn save_image_avframe_yuv(yuv_frame: &AVFrame, output_file_name: &str) -> an
     Ok(())
 }
 
-pub fn save_image_avframe_rgb24(
-    rgb_frame: &AVFrame,
-    output_file_name: &str,
-) -> anyhow::Result<(), Box<dyn std::error::Error>> {
+pub fn save_image_avframe_rgb24(rgb_frame: &AVFrame, output_file_name: &str) -> Result<()> {
     if rgb_frame.format != ffi::AV_PIX_FMT_RGB24 {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Unsupported pixel format",
-        )));
+        return Err(Error::msg("Unsupported pixel format"));
     }
 
     // 转换为图像
-    let rgb_image = crate::misc::av_convert::avframe_rgb24_to_rgb_image(rgb_frame)?;
+    let rgb_image = crate::misc::av_convert::avframe_rgb24_to_image_rgb(rgb_frame)?;
 
     // 确定输出格式并写入文件
     let path = Path::new(output_file_name);
     let extension = path
         .extension()
         .and_then(std::ffi::OsStr::to_str)
-        .ok_or_else(|| "Unknown image format")?;
+        .ok_or_else(|| "Unknown image format")
+        .unwrap();
 
     match extension.to_lowercase().as_str() {
         "png" => rgb_image.save_with_format(path, image::ImageFormat::Png)?,
         "jpg" | "jpeg" => rgb_image.save_with_format(path, image::ImageFormat::Jpeg)?,
         _ => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Unsupported image format",
+            return Err(Error::msg(format!(
+                "Unsupported image format: {}",
+                extension
             )))
         }
     }

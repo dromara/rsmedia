@@ -9,6 +9,7 @@ pub enum MediaError {
     WriteRetryLimitReached,
     InvalidFrameFormat,
     InvalidExtraData,
+    InvalidPixelFormat,
     MissingCodecParameters,
     UnsupportedCodecParameterSets,
     InvalidResizeParameters,
@@ -24,6 +25,7 @@ impl std::error::Error for MediaError {
             MediaError::DecodeExhausted => None,
             MediaError::WriteRetryLimitReached => None,
             MediaError::InvalidFrameFormat => None,
+            MediaError::InvalidPixelFormat => None,
             MediaError::InvalidExtraData => None,
             MediaError::MissingCodecParameters => None,
             MediaError::UnsupportedCodecParameterSets => None,
@@ -47,6 +49,7 @@ impl std::fmt::Display for MediaError {
                 f,
                 "provided frame does not match expected dimensions and/or pixel format"
             ),
+            MediaError::InvalidPixelFormat => write!(f, "invalid pixel format"),
             MediaError::InvalidExtraData => write!(f, "codec parameters extradata is corrupted"),
             MediaError::MissingCodecParameters => write!(f, "codec parameters missing"),
             MediaError::UnsupportedCodecParameterSets => write!(

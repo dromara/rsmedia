@@ -5,7 +5,7 @@ use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avutil::{opt_set, ra, AVFrame},
     error::RsmpegError,
-    ffi::{self},
+    ffi,
 };
 use std::{
     ffi::CStr,

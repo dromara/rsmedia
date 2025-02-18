@@ -1,5 +1,5 @@
 use crate::error::MediaError;
-use crate::{PIXEL_FORMAT_RGB24, PIXEL_FORMAT_YUV420P};
+use crate::pixel::PixelFormat;
 use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 use rsmpeg::swscale::SwsContext;
@@ -98,7 +98,7 @@ pub fn ndarray_to_avframe_rgb(array: &FrameArray) -> Result<AVFrame, Box<dyn std
     let width = array.shape()[1];
 
     let mut frame = AVFrame::new();
-    frame.set_format(PIXEL_FORMAT_RGB24);
+    frame.set_format(PixelFormat::RGB24.into_raw());
     frame.set_width(width as i32);
     frame.set_height(height as i32);
     frame.alloc_buffer().unwrap();
@@ -134,7 +134,7 @@ pub fn ndarray_to_avframe_yuv(array: &FrameArray) -> Result<AVFrame, Box<dyn std
     }
 
     let mut frame = AVFrame::new();
-    frame.set_format(PIXEL_FORMAT_YUV420P);
+    frame.set_format(PixelFormat::YUV420P.into_raw());
     frame.set_width(width as i32);
     frame.set_height(height as i32);
     frame.alloc_buffer().unwrap();
@@ -297,7 +297,7 @@ pub fn convert_avframe(
     src_frame: &AVFrame,
     dst_width: i32,
     dst_height: i32,
-    dst_pix_fmt: ffi::AVPixelFormat,
+    dst_pix_fmt: PixelFormat,
 ) -> Result<AVFrame, MediaError> {
     /*
      * Scaler selection options. Only one may be active at a time.
@@ -373,7 +373,7 @@ pub fn convert_avframe(
         src_frame.format,
         dst_width,
         dst_height,
-        dst_pix_fmt,
+        dst_pix_fmt.into_raw(),
         flags,
         None,
         None,
@@ -385,7 +385,7 @@ pub fn convert_avframe(
     let mut dst_frame = AVFrame::new();
     dst_frame.set_width(dst_width);
     dst_frame.set_height(dst_height);
-    dst_frame.set_format(dst_pix_fmt);
+    dst_frame.set_format(dst_pix_fmt.into_raw());
     dst_frame.set_pts(src_frame.pts);
     dst_frame.set_time_base(src_frame.time_base);
     dst_frame.set_pict_type(src_frame.pict_type);
@@ -406,7 +406,7 @@ mod tests {
     // 辅助函数：创建测试用的 RGB AVFrame
     fn create_test_rgb_frame(width: i32, height: i32) -> AVFrame {
         let mut frame = AVFrame::new();
-        frame.set_format(PIXEL_FORMAT_RGB24);
+        frame.set_format(PixelFormat::RGB24.into_raw());
         frame.set_width(width);
         frame.set_height(height);
         frame.alloc_buffer().unwrap();
@@ -431,7 +431,7 @@ mod tests {
     // 辅助函数：创建测试用的 YUV420P AVFrame
     fn create_test_yuv_frame(width: i32, height: i32) -> AVFrame {
         let mut frame = AVFrame::new();
-        frame.set_format(PIXEL_FORMAT_YUV420P);
+        frame.set_format(PixelFormat::YUV420P.into_raw());
         frame.set_width(width);
         frame.set_height(height);
         frame.alloc_buffer().unwrap();
@@ -499,7 +499,7 @@ mod tests {
     #[test]
     fn test_avframe_rgb_to_ndarray_null_data() {
         let mut frame = AVFrame::new();
-        frame.set_format(PIXEL_FORMAT_RGB24);
+        frame.set_format(PixelFormat::RGB24.into_raw());
         frame.set_width(64);
         frame.set_height(48);
         let result = avframe_rgb_to_ndarray(&frame);
@@ -570,7 +570,7 @@ mod tests {
         // 验证帧属性
         assert_eq!(frame.width, 64);
         assert_eq!(frame.height, 48);
-        assert_eq!(frame.format, PIXEL_FORMAT_RGB24);
+        assert_eq!(frame.format, PixelFormat::RGB24.into_raw());
 
         // 验证数据
         unsafe {
@@ -622,7 +622,11 @@ mod tests {
         // 验证帧属性
         assert_eq!(frame.width, 64, "Frame width mismatch");
         assert_eq!(frame.height, 48, "Frame height mismatch");
-        assert_eq!(frame.format, PIXEL_FORMAT_YUV420P, "Frame format mismatch");
+        assert_eq!(
+            frame.format,
+            PixelFormat::YUV420P.into_raw(),
+            "Frame format mismatch"
+        );
 
         // 验证数据
         unsafe {
@@ -776,7 +780,7 @@ mod tests {
     fn test_yuv_alignment() {
         // 测试非标准对齐的 YUV 帧
         let mut frame = AVFrame::new();
-        frame.set_format(PIXEL_FORMAT_YUV420P);
+        frame.set_format(PixelFormat::YUV420P.into_raw());
         frame.set_width(65); // 非标准宽度
         frame.set_height(49); // 非标准高度
         frame.alloc_buffer().unwrap();

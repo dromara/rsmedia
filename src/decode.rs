@@ -6,6 +6,7 @@ use crate::io::{Reader, ReaderBuilder};
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
+use crate::pixel::PixelFormat;
 use crate::resize::Resize;
 use crate::time::Time;
 use crate::{ffi_hwaccel, frame};
@@ -554,7 +555,7 @@ impl DecoderSplit {
     /// Download frame from foreign hardware acceleration device.
     fn download_frame(frame: &RawFrame) -> Result<RawFrame> {
         let mut frame_downloaded = RawFrame::new();
-        frame_downloaded.set_format(crate::PIXEL_FORMAT_NV12);
+        frame_downloaded.set_format(PixelFormat::NV12.into_raw());
         ffi_hwaccel::hwdevice_transfer_frame(&mut frame_downloaded, frame)?;
         unsafe {
             // Copy frame properties

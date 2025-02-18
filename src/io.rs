@@ -769,7 +769,8 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            self.output.write_header(&mut None)?;
+            self.output
+                .write_header(&mut Some(self.options.to_dict().av_dict()))?;
             Ok(self.end_write())
         }
 
@@ -799,7 +800,8 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            self.output.write_header(&mut None)?;
+            self.output
+                .write_header(&mut Some(self.options.to_dict().av_dict()))?;
             self.end_write();
             Ok(self.take_buffers())
         }

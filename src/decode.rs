@@ -70,6 +70,13 @@ impl<'a> DecoderBuilder<'a> {
         }
         let reader = reader_builder.build()?;
         let reader_stream_index = reader.best_video_stream_index()?;
+        let stream_info = reader.stream_info(reader_stream_index)?;
+        tracing::info!(
+            "decoder stream index: {} stream_info: {}",
+            reader_stream_index,
+            stream_info
+        );
+
         Ok(Decoder {
             decoder: DecoderSplit::new(
                 &reader,

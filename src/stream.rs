@@ -1,5 +1,5 @@
 use ffi::{AVDiscard, AVPacketSideDataType};
-use rsmpeg::avcodec::AVCodecParameters;
+use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -72,8 +72,29 @@ impl StreamInfo {
     /// * The stream index.
     /// * Codec parameters.
     /// * Original stream time base.
+    #[allow(unused)]
     pub(crate) fn into_parts(self) -> (usize, AVCodecParameters, Rational) {
         (self.index, self.codec_parameters, self.time_base)
+    }
+}
+
+impl std::fmt::Display for StreamInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let codec = {
+            let mut c = AVCodec::find_encoder(self.codec_parameters.codec_id);
+            if c.is_none() {
+                c = AVCodec::find_decoder(self.codec_parameters.codec_id);
+            }
+            c.unwrap()
+        };
+        write!(
+            f,
+            "StreamInfo {{ index: {}, codec: {}:{}, time_base: {} }}",
+            self.index,
+            codec.name().to_str().unwrap(),
+            codec.long_name().to_str().unwrap(),
+            self.time_base
+        )
     }
 }
 

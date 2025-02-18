@@ -1,4 +1,3 @@
-
 #[cfg(feature = "opencv")]
 pub mod misc;
 

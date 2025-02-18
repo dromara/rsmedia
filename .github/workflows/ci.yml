@@ -12,6 +12,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
 
 jobs:
 
@@ -37,14 +39,40 @@ jobs:
             build-essential \
             ca-certificates \
             clang \
+            lld \
             curl \
+            wget \
+            gnupg \
+            libc6 \
             libc6-dev \
-            pkg-config
-          # Verify GLIBC version
-          ldd --version
+            binutils \
+            pkg-config \
+            libx264-dev \
+            libx265-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libavdevice-dev \
+            libavfilter-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure Rust linker settings
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml << EOF
+          [target.x86_64-unknown-linux-gnu]
+          linker = "clang"
+          rustflags = [
+            "-C", "link-arg=-fuse-ld=lld",
+            "-C", "link-arg=-Wl,--verbose",
+            "-C", "link-arg=-ldl",
+            "-C", "link-arg=-pthread"
+          ]
+          EOF
     
       - name: Build
         run: cargo build --verbose
@@ -128,14 +156,40 @@ jobs:
             build-essential \
             ca-certificates \
             clang \
+            lld \
             curl \
+            wget \
+            gnupg \
+            libc6 \
             libc6-dev \
-            pkg-config
-          # Verify GLIBC version
-          ldd --version
+            binutils \
+            pkg-config \
+            libx264-dev \
+            libx265-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libavdevice-dev \
+            libavfilter-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure Rust linker settings
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml << EOF
+          [target.x86_64-unknown-linux-gnu]
+          linker = "clang"
+          rustflags = [
+            "-C", "link-arg=-fuse-ld=lld",
+            "-C", "link-arg=-Wl,--verbose",
+            "-C", "link-arg=-ldl",
+            "-C", "link-arg=-pthread"
+          ]
+          EOF
 
       - name: Test
         run: cargo test --verbose -- --nocapture
@@ -155,11 +209,23 @@ jobs:
             build-essential \
             ca-certificates \
             clang \
+            lld \
             curl \
+            wget \
+            gnupg \
+            libc6 \
             libc6-dev \
-            pkg-config
-          # Verify GLIBC version
-          ldd --version
+            binutils \
+            pkg-config \
+            libx264-dev \
+            libx265-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libavdevice-dev \
+            libavfilter-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

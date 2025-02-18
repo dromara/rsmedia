@@ -569,6 +569,8 @@ impl DecoderSplit {
         // We use the packet DTS here (which is `frame->pkt_dts`) because that is what the
         // encoder will use when encoding for the `PTS` field.
         let timestamp = Time::new(Some(frame.pkt_dts), self.decoder_time_base);
+        // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
+        // after I convert it, If you want RGB24, always remember to convert it yourself!
         let frame = frame::avframe_yuv_to_ndarray(frame).unwrap();
 
         Ok((timestamp, frame))

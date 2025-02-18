@@ -2,6 +2,8 @@
   <code>rsmedia</code>
 </h1>
 
+This is a fork of the [video-rs](https://github.com/oddity-ai/video-rs) crate by [gerwin3](https://github.com/gerwin3).
+
 Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rsmpeg).
 
 ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)

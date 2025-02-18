@@ -376,7 +376,7 @@ impl Drop for Encoder {
 pub struct Settings {
     width: i32,
     height: i32,
-    pixel_format: i32,
+    pixel_format: PixelFormat,
     keyframe_interval: u64,
     options: Options,
 }
@@ -412,7 +412,7 @@ impl Settings {
         Self {
             width: width as i32,
             height: height as i32,
-            pixel_format: ffi::AV_PIX_FMT_YUV420P,
+            pixel_format: PixelFormat::YUV420P,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             options,
         }
@@ -435,7 +435,7 @@ impl Settings {
     pub fn preset_h264_custom(
         width: usize,
         height: usize,
-        pixel_format: i32,
+        pixel_format: PixelFormat,
         options: Options,
     ) -> Settings {
         Self {
@@ -470,7 +470,7 @@ impl Settings {
     fn apply_to(&self, encoder: &mut AVCodecContext) {
         encoder.set_width(self.width);
         encoder.set_height(self.height);
-        encoder.set_pix_fmt(self.pixel_format);
+        encoder.set_pix_fmt(self.pixel_format.into_raw());
         encoder.set_bit_rate(Self::BIT_RATE);
         // 30
         encoder.set_framerate(Rational::new(Self::FRAME_RATE, 1).into());

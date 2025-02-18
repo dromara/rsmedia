@@ -33,7 +33,6 @@ opencv = { version = "0.94", optional = true, features = [
 [dev-dependencies]
 cstr = "0.2"
 image = "0.25"
-imgproc = "0.3"
 anyhow = "1.0"
 camino = "1.1"
 tokio = { version = "1", features = ["full"] }

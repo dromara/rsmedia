@@ -14,7 +14,8 @@ env:
   CARGO_TERM_COLOR: always
   RUST_LOG: debug
   RUST_BACKTRACE: 1
-  RUSTFLAGS: "-D warnings"
+  RUSTFLAGS: "-D warnings -C link-args=-Wl,--copy-dt-needed-entries -C link-arg=-Wl,--no-as-needed"
+  LD_LIBRARY_PATH: "/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 
 jobs:
 
@@ -75,6 +76,7 @@ jobs:
             "-C", "link-arg=-pthread",
             "-C", "link-arg=-lc",
             "-C", "link-arg=-Wl,--copy-dt-needed-entries"
+            "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
           ]
           EOF
     
@@ -195,6 +197,7 @@ jobs:
             "-C", "link-arg=-pthread",
             "-C", "link-arg=-lc",
             "-C", "link-arg=-Wl,--copy-dt-needed-entries"
+            "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
           ]
           EOF
 

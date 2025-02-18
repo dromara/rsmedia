@@ -18,7 +18,7 @@ jobs:
   build-linux:
     name: build / linux / ffmpeg ${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
+    container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-nvidia2404
 
     strategy:
       matrix:
@@ -66,7 +66,7 @@ jobs:
         run: cargo build --verbose
 
       - name: Run Test
-        run: cargo test --verbose
+        run: cargo test --verbose -- --nocapture
 
   build-windows:
     name: build / windows / latest ffmpeg
@@ -107,7 +107,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:7.1-ubuntu
+    container: jrottenberg/ffmpeg:7.1-nvidia2404
 
     steps:
       - name: Checkout
@@ -122,11 +122,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Test
-        run: cargo test --verbose
+        run: cargo test --verbose -- --nocapture
 
   lints:
     runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:7.1-ubuntu
+    container: jrottenberg/ffmpeg:7.1-nvidia2404
 
     steps:
       - name: Checkout

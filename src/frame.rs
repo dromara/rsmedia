@@ -91,7 +91,7 @@ pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std
 }
 
 /// Array3 转换为 RGB24 格式的 AVFrame
-pub fn ndarray_to_avframe_rgb(array: &FrameArray) -> Result<AVFrame, Box<dyn std::error::Error>> {
+pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std::error::Error>> {
     assert!(array.is_standard_layout());
 
     let height = array.shape()[0];
@@ -122,7 +122,7 @@ pub fn ndarray_to_avframe_rgb(array: &FrameArray) -> Result<AVFrame, Box<dyn std
 }
 
 /// Array3 转换为 YUV420P 格式的 AVFrame
-pub fn ndarray_to_avframe_yuv(array: &FrameArray) -> Result<AVFrame, Box<dyn std::error::Error>> {
+pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std::error::Error>> {
     assert!(array.is_standard_layout());
 
     let height = array.shape()[0];
@@ -593,7 +593,7 @@ mod tests {
             }
         }
 
-        let result = ndarray_to_avframe_rgb(&array);
+        let result = ndarray_rgb_to_avframe(&array);
         assert!(result.is_ok());
         let frame = result.unwrap();
 
@@ -645,7 +645,7 @@ mod tests {
             }
         }
 
-        let result = ndarray_to_avframe_yuv(&array);
+        let result = ndarray_yuv_to_avframe(&array);
         assert!(result.is_ok());
         let frame = result.unwrap();
 
@@ -711,7 +711,7 @@ mod tests {
     fn test_ndarray_to_avframe_yuv_wrong_dimensions() {
         // 测试非偶数维度
         let array = FrameArray::zeros((47, 63, 3));
-        let result = ndarray_to_avframe_yuv(&array);
+        let result = ndarray_yuv_to_avframe(&array);
         assert!(result.is_err());
     }
 
@@ -720,7 +720,7 @@ mod tests {
         // 测试 RGB 格式的往返转换
         let original_frame = create_test_rgb_frame(64, 48);
         let array = avframe_rgb_to_ndarray(&original_frame).unwrap();
-        let converted_frame = ndarray_to_avframe_rgb(&array).unwrap();
+        let converted_frame = ndarray_rgb_to_avframe(&array).unwrap();
 
         // 验证数据一致性
         unsafe {
@@ -744,7 +744,7 @@ mod tests {
         // 测试 YUV 格式的往返转换
         let original_frame = create_test_yuv_frame(64, 48);
         let array = avframe_yuv_to_ndarray(&original_frame).unwrap();
-        let converted_frame = ndarray_to_avframe_yuv(&array).unwrap();
+        let converted_frame = ndarray_yuv_to_avframe(&array).unwrap();
 
         // 验证 Y 平面数据一致性
         unsafe {
@@ -829,7 +829,7 @@ mod tests {
         let start = Instant::now();
         for _ in 0..10 {
             let array = avframe_rgb_to_ndarray(&frame).unwrap();
-            let _ = ndarray_to_avframe_rgb(&array).unwrap();
+            let _ = ndarray_rgb_to_avframe(&array).unwrap();
         }
         let duration = start.elapsed();
 
@@ -863,7 +863,7 @@ mod tests {
         for _ in 0..4 {
             let array_clone = array.clone();
             let handle = thread::spawn(move || {
-                let result = ndarray_to_avframe_rgb(&array_clone);
+                let result = ndarray_rgb_to_avframe(&array_clone);
                 assert!(result.is_ok());
             });
             handles.push(handle);
@@ -880,7 +880,7 @@ mod tests {
         // 测试元数据保留
         let frame = create_test_rgb_frame(64, 48);
         let array = avframe_rgb_to_ndarray(&frame).unwrap();
-        let new_frame = ndarray_to_avframe_rgb(&array).unwrap();
+        let new_frame = ndarray_rgb_to_avframe(&array).unwrap();
 
         assert_eq!(frame.width, new_frame.width);
         assert_eq!(frame.height, new_frame.height);
@@ -904,7 +904,7 @@ mod tests {
     #[test]
     fn test_gradient_pattern() {
         let pattern = create_gradient_pattern(256, 256);
-        let frame = ndarray_to_avframe_rgb(&pattern).unwrap();
+        let frame = ndarray_rgb_to_avframe(&pattern).unwrap();
         let recovered_pattern = avframe_rgb_to_ndarray(&frame).unwrap();
 
         // 验证渐变模式
@@ -930,7 +930,7 @@ mod tests {
         }
 
         let array = avframe_rgb_to_ndarray(&frame).unwrap();
-        let new_frame = ndarray_to_avframe_rgb(&array).unwrap();
+        let new_frame = ndarray_rgb_to_avframe(&array).unwrap();
 
         // 验证时间戳是否正确保留
         unsafe {
@@ -946,7 +946,7 @@ mod tests {
     fn test_ndarray_to_avframe_yuv_invalid_dimensions() {
         // 测试奇数维度
         let array = FrameArray::zeros((47, 63, 3));
-        let result = ndarray_to_avframe_yuv(&array);
+        let result = ndarray_yuv_to_avframe(&array);
         assert!(result.is_err(), "Should fail with odd dimensions");
     }
 
@@ -954,7 +954,7 @@ mod tests {
     fn test_ndarray_to_avframe_yuv_invalid_channels() {
         // 测试错误的通道数
         let array = FrameArray::zeros((48, 64, 4));
-        let result = ndarray_to_avframe_yuv(&array);
+        let result = ndarray_yuv_to_avframe(&array);
         assert!(result.is_ok(), "Should fail with wrong number of channels");
     }
 

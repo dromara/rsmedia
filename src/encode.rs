@@ -157,7 +157,7 @@ impl Encoder {
             return Err(MediaError::InvalidFrameFormat);
         }
 
-        let mut frame = frame::ndarray_to_avframe_yuv(frame).unwrap();
+        let mut frame = frame::ndarray_yuv_to_avframe(frame).unwrap();
 
         frame.set_pts(
             source_timestamp

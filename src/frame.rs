@@ -181,11 +181,7 @@ pub fn ndarray_to_avframe_yuv(array: &FrameArray) -> Result<AVFrame, Box<dyn std
     Ok(frame)
 }
 
-/// RGB => YUV420P
-/// RGB to YUV conversion formulas (BT.601):
-/// Y = 0.299 * R + 0.587 * G + 0.114 * B
-/// U = -0.169 * R - 0.331 * G + 0.500 * B + 128
-/// V = 0.500 * R - 0.419 * G - 0.081 * B + 128
+/// ndarray RGB24 => ndarray YUV420P
 pub fn convert_ndarray_rgb_to_yuv(
     rgb: &FrameArray,
 ) -> Result<FrameArray, Box<dyn std::error::Error>> {
@@ -202,48 +198,74 @@ pub fn convert_ndarray_rgb_to_yuv(
     // 创建 YUV 数组：Y 平面全尺寸，U/V 平面各1/4
     let mut yuv = FrameArray::zeros((height, width, 3));
 
-    // 转换每个像素
+    // 1. Y分量计算 - 单独优化处理
+    #[inline(always)]
+    fn compute_y(r: f64, g: f64, b: f64) -> u8 {
+        // BT.601 标准:
+        // Y = 0.299 * R + 0.587 * G + 0.114 * B
+        (0.299 * r + 0.587 * g + 0.114 * b)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    }
+
+    // 1.2. UV分量计算 - 精确2x2块处理
+    #[inline(always)]
+    fn compute_uv(r: f64, g: f64, b: f64) -> (u8, u8) {
+        // BT.601 标准:
+        // U = -0.169 * R - 0.331 * G + 0.500 * B + 128
+        // V = 0.500 * R - 0.419 * G - 0.081 * B + 128
+        let u = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0)
+            .round()
+            .clamp(0.0, 255.0) as u8;
+        let v = (0.500 * r - 0.419 * g - 0.081 * b + 128.0)
+            .round()
+            .clamp(0.0, 255.0) as u8;
+        (u, v)
+    }
+
+    // 2.1 计算亮度分量
     for y in 0..height {
         for x in 0..width {
-            let r = rgb[[y, x, 0]] as f32;
-            let g = rgb[[y, x, 1]] as f32;
-            let b = rgb[[y, x, 2]] as f32;
+            let r = rgb[[y, x, 0]] as f64;
+            let g = rgb[[y, x, 1]] as f64;
+            let b = rgb[[y, x, 2]] as f64;
+            yuv[[y, x, 0]] = compute_y(r, g, b);
+        }
+    }
 
-            // RGB => YUV:
-            let y_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
-            yuv[[y, x, 0]] = y_val;
+    // 2.1 色度分量处理: 4:2:0 采样
+    for y in (0..height).step_by(2) {
+        for x in (0..width).step_by(2) {
+            let mut sum_r = 0.0f64;
+            let mut sum_g = 0.0f64;
+            let mut sum_b = 0.0f64;
+            let mut count = 0u32;
 
-            // 对于 U 和 V，只在每个 2x2 块的左上角计算
-            if y % 2 == 0 && x % 2 == 0 {
-                let mut avg_r = 0f32;
-                let mut avg_g = 0f32;
-                let mut avg_b = 0f32;
-
-                // 计算 2x2 块的平均值
-                for dy in 0..2 {
-                    for dx in 0..2 {
-                        if y + dy < height && x + dx < width {
-                            avg_r += rgb[[y + dy, x + dx, 0]] as f32;
-                            avg_g += rgb[[y + dy, x + dx, 1]] as f32;
-                            avg_b += rgb[[y + dy, x + dx, 2]] as f32;
-                        }
+            // 2x2 块平均值计算
+            for dy in 0..2 {
+                for dx in 0..2 {
+                    if y + dy < height && x + dx < width {
+                        sum_r += rgb[[y + dy, x + dx, 0]] as f64;
+                        sum_g += rgb[[y + dy, x + dx, 1]] as f64;
+                        sum_b += rgb[[y + dy, x + dx, 2]] as f64;
+                        count += 1;
                     }
                 }
+            }
 
-                avg_r /= 4.0;
-                avg_g /= 4.0;
-                avg_b /= 4.0;
+            let avg_r = sum_r / count as f64;
+            let avg_g = sum_g / count as f64;
+            let avg_b = sum_b / count as f64;
 
-                let u_val = (-0.169 * avg_r - 0.331 * avg_g + 0.500 * avg_b + 128.0) as u8;
-                let v_val = (0.500 * avg_r - 0.419 * avg_g - 0.081 * avg_b + 128.0) as u8;
+            // UV计算
+            let (u_val, v_val) = compute_uv(avg_r, avg_g, avg_b);
 
-                // 为 2x2 块设置相同的 U、V 值
-                for dy in 0..2 {
-                    for dx in 0..2 {
-                        if y + dy < height && x + dx < width {
-                            yuv[[y + dy, x + dx, 1]] = u_val;
-                            yuv[[y + dy, x + dx, 2]] = v_val;
-                        }
+            // 填充UV值
+            for dy in 0..2 {
+                for dx in 0..2 {
+                    if y + dy < height && x + dx < width {
+                        yuv[[y + dy, x + dx, 1]] = u_val;
+                        yuv[[y + dy, x + dx, 2]] = v_val;
                     }
                 }
             }
@@ -253,11 +275,7 @@ pub fn convert_ndarray_rgb_to_yuv(
     Ok(yuv)
 }
 
-/// YUV => RGB
-/// YUV to RGB conversion formulas (BT.601):
-/// R = Y + 1.402 * (V - 128)
-/// G = Y - 0.344136 * (U - 128) - 0.714136 * (V - 128)
-/// B = Y + 1.772 * (U - 128)
+/// ndarray YUV420P => ndarray RGB24
 pub fn convert_ndarray_yuv_to_rgb(
     yuv: &FrameArray,
 ) -> Result<FrameArray, Box<dyn std::error::Error>> {
@@ -272,17 +290,27 @@ pub fn convert_ndarray_yuv_to_rgb(
 
     let mut rgb = FrameArray::zeros((height, width, 3));
 
+    #[inline(always)]
+    fn compute_rgb(y: f64, u: f64, v: f64) -> (u8, u8, u8) {
+        let u = u - 128.0;
+        let v = v - 128.0;
+        // BT.601 标准: YUV => RGB
+        // R = Y + 1.402 * V
+        // G = Y - 0.344136 * (U - 128) - 0.714136 * (V - 128)
+        // B = Y + 1.772 * (U - 128)
+        let r = (y + 1.402 * v).round().clamp(0.0, 255.0) as u8;
+        let g = (y - 0.344136 * u - 0.714136 * v).round().clamp(0.0, 255.0) as u8;
+        let b = (y + 1.772 * u).round().clamp(0.0, 255.0) as u8;
+        (r, g, b)
+    }
+
     for y in 0..height {
         for x in 0..width {
-            let y_val = yuv[[y, x, 0]] as f32;
-            let u_val = yuv[[y, x, 1]] as f32 - 128.0;
-            let v_val = yuv[[y, x, 2]] as f32 - 128.0;
+            let y_val = yuv[[y, x, 0]] as f64;
+            let u_val = yuv[[y, x, 1]] as f64;
+            let v_val = yuv[[y, x, 2]] as f64;
 
-            // YUV => RGB:
-            let r = (y_val + 1.403 * v_val).clamp(0.0, 255.0) as u8;
-            let g = (y_val - 0.344 * u_val - 0.714 * v_val).clamp(0.0, 255.0) as u8;
-            let b = (y_val + 1.773 * u_val).clamp(0.0, 255.0) as u8;
-
+            let (r, g, b) = compute_rgb(y_val, u_val, v_val);
             rgb[[y, x, 0]] = r;
             rgb[[y, x, 1]] = g;
             rgb[[y, x, 2]] = b;
@@ -401,7 +429,9 @@ pub fn convert_avframe(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use std::ptr;
+    use std::time::Instant;
 
     // 辅助函数：创建测试用的 RGB AVFrame
     fn create_test_rgb_frame(width: i32, height: i32) -> AVFrame {
@@ -1284,6 +1314,269 @@ mod tests {
                     assert_eq!(rgb[[y, x, c]], 0);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_color_accuracy() {
+        // 测试基准色值
+        let test_colors = [
+            (255, 0, 0),     // 纯红
+            (0, 255, 0),     // 纯绿
+            (0, 0, 255),     // 纯蓝
+            (255, 255, 255), // 白色
+        ];
+
+        for &(r, g, b) in &test_colors {
+            let mut rgb = FrameArray::zeros((2, 2, 3));
+            for y in 0..2 {
+                for x in 0..2 {
+                    rgb[[y, x, 0]] = r;
+                    rgb[[y, x, 1]] = g;
+                    rgb[[y, x, 2]] = b;
+                }
+            }
+
+            let yuv = convert_ndarray_rgb_to_yuv(&rgb).unwrap();
+            let rgb2 = convert_ndarray_yuv_to_rgb(&yuv).unwrap();
+
+            // 验证转换精度
+            for y in 0..2 {
+                for x in 0..2 {
+                    assert!((rgb[[y, x, 0]] as i32 - rgb2[[y, x, 0]] as i32).abs() <= 1);
+                    assert!((rgb[[y, x, 1]] as i32 - rgb2[[y, x, 1]] as i32).abs() <= 1);
+                    assert!((rgb[[y, x, 2]] as i32 - rgb2[[y, x, 2]] as i32).abs() <= 1);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_yuv420p_compliance() {
+        let height = 1080;
+        let width = 1920;
+        let original = FrameArray::zeros((height, width, 3));
+
+        // 测试 YUV420P 格式要求
+        let yuv = convert_ndarray_rgb_to_yuv(&original).unwrap();
+        let (h, w, c) = yuv.dim();
+
+        // 验证基本维度
+        assert_eq!(h, height);
+        assert_eq!(w, width);
+        assert_eq!(c, 3);
+
+        // 验证 U/V 分量在 2x2 块内是否相同
+        for y in (0..height - 1).step_by(2) {
+            for x in (0..width - 1).step_by(2) {
+                let u00 = yuv[[y, x, 1]];
+                let u01 = yuv[[y, x + 1, 1]];
+                let u10 = yuv[[y + 1, x, 1]];
+                let u11 = yuv[[y + 1, x + 1, 1]];
+
+                let v00 = yuv[[y, x, 2]];
+                let v01 = yuv[[y, x + 1, 2]];
+                let v10 = yuv[[y + 1, x, 2]];
+                let v11 = yuv[[y + 1, x + 1, 2]];
+
+                // 验证 2x2 块内 U 分量相同
+                assert_eq!(u00, u01);
+                assert_eq!(u00, u10);
+                assert_eq!(u00, u11);
+
+                // 验证 2x2 块内 V 分量相同
+                assert_eq!(v00, v01);
+                assert_eq!(v00, v10);
+                assert_eq!(v00, v11);
+            }
+        }
+    }
+
+    /// 图像质量评估指标
+    struct ImageQualityMetrics {
+        psnr: f64,
+        mae: [f64; 3],
+        diff_distribution: Vec<(u8, u32)>,
+        changed_pixels: usize,
+        total_pixels: usize,
+    }
+
+    impl ImageQualityMetrics {
+        /// 计算两个图像之间的所有质量指标
+        fn calculate(original: &FrameArray, converted: &FrameArray) -> Self {
+            let (height, width, channels) = original.dim();
+            let total_pixels = height * width * channels;
+
+            // 初始化统计变量
+            let mut mae = [0.0f64; 3];
+            let mut mse = 0.0f64;
+            let mut diff_hist = vec![(0u8, 0u32); 256];
+            let mut changed_pixels = 0;
+
+            // 单次遍历计算所有指标
+            for c in 0..channels {
+                let mut channel_diff_sum = 0.0;
+                for y in 0..height {
+                    for x in 0..width {
+                        let orig = original[[y, x, c]] as i32;
+                        let conv = converted[[y, x, c]] as i32;
+                        let diff = (orig - conv).abs() as u8;
+
+                        if diff > 0 {
+                            changed_pixels += 1;
+                        }
+
+                        diff_hist[diff as usize].1 += 1;
+                        channel_diff_sum += diff as f64;
+                        mse += (diff as f64).powi(2);
+                    }
+                }
+                mae[c] = channel_diff_sum / (height * width) as f64;
+            }
+
+            // 计算 PSNR
+            mse /= total_pixels as f64;
+            let psnr = if mse == 0.0 {
+                f64::INFINITY
+            } else {
+                20.0 * (255.0f64).log10() - 10.0 * mse.log10()
+            };
+
+            // 过滤有效的差异分布数据
+            let diff_distribution = diff_hist
+                .into_iter()
+                .filter(|&(_, count)| count > 0)
+                .collect();
+
+            Self {
+                psnr,
+                mae,
+                diff_distribution,
+                changed_pixels,
+                total_pixels,
+            }
+        }
+
+        /// 验证质量指标是否满足要求
+        fn validate(&self) -> Result<(), String> {
+            if self.psnr < 45.0 {
+                return Err(format!("PSNR too low: {}", self.psnr));
+            }
+            if !self.mae.iter().all(|&x| x < 2.0) {
+                return Err(format!("MAE too high: {:?}", self.mae));
+            }
+            if !self.diff_distribution.iter().all(|(diff, _)| *diff <= 3) {
+                return Err("Too large pixel differences found".to_string());
+            }
+            Ok(())
+        }
+    }
+
+    /// 图像质量报告
+    struct QualityReport {
+        timestamp: String,
+        user: String,
+        dimensions: (usize, usize),
+        conversion_time: std::time::Duration,
+        metrics: ImageQualityMetrics,
+    }
+
+    impl QualityReport {
+        fn new(
+            dimensions: (usize, usize),
+            conversion_time: std::time::Duration,
+            metrics: ImageQualityMetrics,
+        ) -> Self {
+            Self {
+                timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                user: std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                dimensions,
+                conversion_time,
+                metrics,
+            }
+        }
+
+        fn generate_report(&self) -> String {
+            let mut report = String::new();
+
+            report.push_str(&format!(
+                "Current Date and Time (UTC): {}\n",
+                self.timestamp
+            ));
+            report.push_str(&format!("Current User's Login: {}\n\n", self.user));
+
+            report.push_str("=== 图像转换质量报告 ===\n");
+            report.push_str(&format!(
+                "图像大小: {}x{}\n",
+                self.dimensions.0, self.dimensions.1
+            ));
+            report.push_str(&format!(
+                "转换耗时: {:.6}s\n\n",
+                self.conversion_time.as_secs_f64()
+            ));
+
+            report.push_str("--- 质量指标 ---\n");
+            report.push_str(&format!("PSNR: {:.2} dB\n", self.metrics.psnr));
+            report.push_str("平均绝对误差 (MAE):\n");
+            report.push_str(&format!("  R 通道: {:.4}\n", self.metrics.mae[0]));
+            report.push_str(&format!("  G 通道: {:.4}\n", self.metrics.mae[1]));
+            report.push_str(&format!("  B 通道: {:.4}\n\n", self.metrics.mae[2]));
+
+            report.push_str("--- 像素差异分布 ---\n");
+            for (diff, count) in &self.metrics.diff_distribution {
+                report.push_str(&format!("差异 {}: {} 像素\n", diff, count));
+            }
+
+            report.push_str("\n总体统计:\n");
+            report.push_str(&format!("总像素数: {}\n", self.metrics.total_pixels));
+            report.push_str(&format!("有差异像素数: {}\n", self.metrics.changed_pixels));
+            report.push_str(&format!(
+                "差异率: {:.4}%\n",
+                (self.metrics.changed_pixels as f64 / self.metrics.total_pixels as f64) * 100.0
+            ));
+
+            report
+        }
+    }
+
+    #[test]
+    fn test_rgb_yuv_conversion_quality() {
+        // 生成测试图像
+        let (width, height) = (1920, 1080);
+        let mut original = FrameArray::zeros((height, width, 3));
+
+        // 生成测试图案
+        for y in 0..height {
+            for x in 0..width {
+                // 渐变
+                original[[y, x, 0]] = ((x as f32 / width as f32) * 255.0) as u8;
+                original[[y, x, 1]] = ((y as f32 / height as f32) * 255.0) as u8;
+                original[[y, x, 2]] = (((x + y) as f32 / (width + height) as f32) * 255.0) as u8;
+
+                // 添加锐利边缘
+                if x % 100 < 2 || y % 100 < 2 {
+                    original[[y, x, 0]] = 255;
+                    original[[y, x, 1]] = 255;
+                    original[[y, x, 2]] = 255;
+                }
+            }
+        }
+
+        // 执行转换测试
+        let start_time = Instant::now();
+        let yuv = convert_ndarray_rgb_to_yuv(&original).unwrap();
+        let converted = convert_ndarray_yuv_to_rgb(&yuv).unwrap();
+        let conversion_time = start_time.elapsed();
+
+        // 计算质量指标并生成报告
+        let metrics = ImageQualityMetrics::calculate(&original, &converted);
+        let report = QualityReport::new((width, height), conversion_time, metrics);
+
+        println!("{}", report.generate_report());
+
+        // 验证质量要求
+        if let Err(msg) = report.metrics.validate() {
+            panic!("{}", msg);
         }
     }
 }

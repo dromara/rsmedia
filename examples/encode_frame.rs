@@ -7,10 +7,9 @@ use std::path::Path;
 fn main() {
     rsmedia::init().unwrap();
 
-    let settings =
-        Settings::preset_h264_yuv420p(1280, 720, false)
-            // libx264, h264_nvenc, h264_vaapi
-            .with_codec_name("libx264".to_string());
+    let settings = Settings::preset_h264_yuv420p(1280, 720, false)
+        // libx264, h264_nvenc, h264_vaapi
+        .with_codec_name("libx264".to_string());
 
     let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), settings)
         .with_format("mp4")

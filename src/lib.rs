@@ -5,7 +5,6 @@ pub mod error;
 pub mod frame;
 #[cfg(feature = "ndarray")]
 pub use frame::FrameArray;
-mod ffi_hwaccel;
 mod flags;
 pub mod hwaccel;
 pub mod init;

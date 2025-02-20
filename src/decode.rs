@@ -1,15 +1,13 @@
 use crate::error::MediaError;
 #[cfg(feature = "ndarray")]
-use crate::frame::FrameArray;
-use crate::hwaccel::{HWContext, HWDeviceType};
+use crate::frame::{self, FrameArray};
+use crate::hwaccel::{HWContext, HWDeviceConfig, HWDeviceType};
 use crate::io::{Reader, ReaderBuilder};
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
-use crate::pixel::PixelFormat;
 use crate::resize::Resize;
 use crate::time::Time;
-use crate::{ffi_hwaccel, frame};
 use crate::{Rational, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
@@ -343,7 +341,7 @@ impl Decoder {
 pub struct DecoderSplit {
     decoder: AVCodecContext,
     decoder_time_base: Rational,
-    hwaccel_context: Option<HWContext>,
+    hw_context: Option<HWContext>,
     size: (u32, u32),
     size_out: (u32, u32),
     draining: bool,
@@ -372,29 +370,38 @@ impl DecoderSplit {
         let mut decode_ctx = AVCodecContext::new(&decoder);
         decode_ctx.set_time_base(reader_stream.time_base);
         decode_ctx.apply_codecpar(&reader_stream.codecpar())?;
+        let (width, height) = (decode_ctx.width, decode_ctx.height);
+
+        let hw_context = match hw_device_type {
+            Some(_device_type) => {
+                // TODO: device_type to config
+                let hw_ctx = HWContext::new(HWDeviceConfig::cuda()).unwrap();
+                hw_ctx
+                    .setup_hw_frames(&mut decode_ctx, width, height)
+                    .unwrap();
+                Some(hw_ctx)
+            }
+            None => None,
+        };
+
         decode_ctx
             .open(None)
             .expect("Failed to open decoder for stream");
 
-        let hwaccel_context = match hw_device_type {
-            Some(device_type) => Some(HWContext::new(&mut decode_ctx, device_type)?),
-            None => None,
-        };
-
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize
-                .compute_for((decode_ctx.width as u32, decode_ctx.height as u32))
+                .compute_for((width as u32, height as u32))
                 .ok_or(MediaError::InvalidResizeParameters)?,
-            None => (decode_ctx.width as u32, decode_ctx.height as u32),
+            None => (width as u32, height as u32),
         };
 
-        let size = (decode_ctx.width as u32, decode_ctx.height as u32);
+        let size = (width as u32, height as u32);
         let size_out = (resize_width, resize_height);
 
         Ok(Self {
             decoder: decode_ctx,
             decoder_time_base: reader_stream.time_base.into(),
-            hwaccel_context,
+            hw_context,
             size,
             size_out,
             draining: false,
@@ -525,18 +532,19 @@ impl DecoderSplit {
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
     fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
         match self.decoder_receive_frame().unwrap() {
-            Some(frame) => {
-                let frame = match self.hwaccel_context.as_ref() {
-                    Some(hw_ctx) if hw_ctx.format() == frame.format => {
-                        Self::download_frame(&frame)?
-                    }
-                    _ => frame,
-                };
-
-                // TODO: rescale_frame at hwaccel_context
-
-                Ok(Some(frame))
-            }
+            Some(frame) => match self.hw_context.as_ref() {
+                Some(hw_ctx) => {
+                    let f = match hw_ctx.download_frame(&frame) {
+                        Ok(f) => Some(f),
+                        Err(e) => {
+                            tracing::error!("Failed to download frame from hw_device: {}", e);
+                            None
+                        }
+                    };
+                    Ok(f)
+                }
+                _ => Ok(Some(frame)),
+            },
             None => Ok(None),
         }
     }
@@ -550,18 +558,6 @@ impl DecoderSplit {
             Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => Ok(None),
             Err(e) => panic!("{1}: {:?}", e, "Error during decoding"),
         }
-    }
-
-    /// Download frame from foreign hardware acceleration device.
-    fn download_frame(frame: &RawFrame) -> Result<RawFrame> {
-        let mut frame_downloaded = RawFrame::new();
-        frame_downloaded.set_format(PixelFormat::NV12.into_raw());
-        ffi_hwaccel::hwdevice_transfer_frame(&mut frame_downloaded, frame)?;
-        unsafe {
-            // Copy frame properties
-            ffi::av_frame_copy_props(frame_downloaded.as_mut_ptr(), frame.as_ptr());
-        }
-        Ok(frame_downloaded)
     }
 
     #[cfg(feature = "ndarray")]

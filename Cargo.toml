@@ -19,6 +19,7 @@ ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
 [dependencies]
 url = "2"
 libc = "0.2"
+anyhow = "1.0"
 tracing = "0.1"
 bitflags = "2.8"
 ndarray = { version = "0.16", optional = true }
@@ -34,7 +35,6 @@ opencv = { version = "0.94", optional = true, features = [
 [dev-dependencies]
 cstr = "0.2"
 image = "0.25"
-anyhow = "1.0"
 camino = "1.1"
 chrono = "0.4"
 tokio = { version = "1", features = ["full"] }

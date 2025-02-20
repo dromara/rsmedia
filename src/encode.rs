@@ -174,9 +174,11 @@ impl Encoder {
             AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
                 .contains(AvFormatFlags::GLOBAL_HEADER);
 
-        let mut encode_ctx = AVCodecContext::new(
-            &settings.codec().ok_or(MediaError::InvalidCodecParameters)?
-        );
+        let codec = match settings.codec() {
+            None => return Err(MediaError::InvalidCodecParameters),
+            Some(c) => c,
+        };
+        let mut encode_ctx = AVCodecContext::new(&codec);
 
         // Some formats require this flag to be set or the output will
         // not be playable by dumb players.

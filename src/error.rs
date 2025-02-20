@@ -10,24 +10,26 @@ pub enum MediaError {
     InvalidFrameFormat,
     InvalidExtraData,
     InvalidPixelFormat,
-    MissingCodecParameters,
-    UnsupportedCodecParameterSets,
-    InvalidResizeParameters,
     UninitializedCodec,
+    InvalidCodecParameters,
+    InvalidResizeParameters,
+    UnsupportedCodecParameterSets,
     UnsupportedCodecHWDeviceType,
+    TranscodeError(String),
     BackendError(RsmpegError),
 }
 
 impl std::error::Error for MediaError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match *self {
+            MediaError::TranscodeError(_) => None,
             MediaError::ReadExhausted => None,
             MediaError::DecodeExhausted => None,
             MediaError::WriteRetryLimitReached => None,
             MediaError::InvalidFrameFormat => None,
             MediaError::InvalidPixelFormat => None,
             MediaError::InvalidExtraData => None,
-            MediaError::MissingCodecParameters => None,
+            MediaError::InvalidCodecParameters => None,
             MediaError::UnsupportedCodecParameterSets => None,
             MediaError::InvalidResizeParameters => None,
             MediaError::UninitializedCodec => None,
@@ -40,6 +42,7 @@ impl std::error::Error for MediaError {
 impl std::fmt::Display for MediaError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
+            MediaError::TranscodeError(ref msg) => write!(f, "transcode error: {}", msg),
             MediaError::ReadExhausted => write!(f, "stream exhausted"),
             MediaError::DecodeExhausted => write!(f, "stream exhausted"),
             MediaError::WriteRetryLimitReached => {
@@ -51,7 +54,7 @@ impl std::fmt::Display for MediaError {
             ),
             MediaError::InvalidPixelFormat => write!(f, "invalid pixel format"),
             MediaError::InvalidExtraData => write!(f, "codec parameters extradata is corrupted"),
-            MediaError::MissingCodecParameters => write!(f, "codec parameters missing"),
+            MediaError::InvalidCodecParameters => write!(f, "invalid codec parameters"),
             MediaError::UnsupportedCodecParameterSets => write!(
                 f,
                 "extracting parameter sets for this codec is not suppored"

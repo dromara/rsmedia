@@ -504,14 +504,13 @@ impl DecoderSplit {
         }
     }
 
-    /// Get the decoders input size (resolution dimensions): width and height.
+    /// Get the decoders input size (resolution dimensions): width * height.
     #[inline(always)]
     pub fn size(&self) -> (u32, u32) {
         self.size
     }
 
-    /// Get the decoders output size after resizing is applied (resolution dimensions): width and
-    /// height.
+    /// Get the decoders output size after resizing is applied (resolution dimensions): width * height.
     #[inline(always)]
     pub fn size_out(&self) -> (u32, u32) {
         self.size_out

@@ -102,6 +102,7 @@ impl HWContext {
 
         hw_frames_ref.init().unwrap();
 
+        codec_ctx.set_pix_fmt(self.config.hw_pixel_format.into_raw());
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
 
         Ok(())
@@ -262,13 +263,13 @@ pub enum HWDeviceType {
 impl HWDeviceType {
     /// Whether or not the device type is available on this system.
     pub fn is_available(self) -> bool {
-        Self::list_available_device_types().contains(&self)
+        self.list_available().contains(&self)
     }
 
     /// List available hardware acceleration device types on this system.
     ///
     /// Uses `av_hwdevice_iterate_types` internally.
-    pub fn list_available_device_types() -> Vec<HWDeviceType> {
+    pub fn list_available(self) -> Vec<HWDeviceType> {
         let mut hw_device_types = Vec::new();
         unsafe {
             let mut hwdevice_type = ffi::av_hwdevice_iterate_types(ffi::AV_HWDEVICE_TYPE_NONE);
@@ -281,6 +282,7 @@ impl HWDeviceType {
     }
 
     pub fn codec_find_hwaccel_pixfmt(
+        self,
         codec: &AVCodec,
         hwaccel_type: HWDeviceType,
     ) -> Option<AVPixelFormat> {

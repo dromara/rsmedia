@@ -480,7 +480,7 @@ impl DecoderSplit {
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
     pub fn drain_raw(&mut self) -> Result<Option<RawFrame>> {
         if !self.draining {
-            self.send_eof().unwrap();
+            self.send_eof()?;
             self.draining = true;
         }
         self.receive_frame_from_decoder()

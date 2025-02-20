@@ -118,7 +118,9 @@ impl HWContext {
         frames_data.height = height;
         frames_data.initial_pool_size = 20;
 
-        hw_frames_ref.init().unwrap();
+        hw_frames_ref
+            .init()
+            .context("Failed to initialize hardware frame context")?;
 
         codec_ctx.set_pix_fmt(self.get_frame_format(true));
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
@@ -209,9 +211,9 @@ impl HWContext {
             .alloc_buffer()
             .context("AVFrame alloc buffer error")?;
 
-        let mut frame_ctx = self.device_ctx.hwframe_ctx_alloc();
-        frame_ctx.make_writable();
-        frame_ctx
+        let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
+        hw_frames_ref.make_writable();
+        hw_frames_ref
             .get_buffer(&mut hw_frame)
             .context("Failed to allocate hardware frame buffer")?;
 

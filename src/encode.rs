@@ -92,7 +92,7 @@ impl<'a> EncoderBuilder<'a> {
     /// Enable hardware acceleration with the specified device type.
     ///
     /// * `device_type` - Device to use for hardware acceleration.
-    pub fn with_hardware_acceleration(mut self, device_type: HWDeviceType) -> Self {
+    pub fn with_hardware_device(mut self, device_type: HWDeviceType) -> Self {
         self.hw_device_type = Some(device_type);
         self
     }
@@ -188,6 +188,7 @@ impl Encoder {
 
         settings.apply_to(&mut encode_ctx);
         let (width, height) = (encode_ctx.width, encode_ctx.height);
+
         let hw_context = match hw_device_type {
             Some(_device_type) => {
                 // TODO: device_type to config
@@ -297,9 +298,15 @@ impl Encoder {
         match self.hw_context.as_ref() {
             Some(hw_ctx) => {
                 // 上传到硬件内存并获取硬件帧
-                let hw_frame = hw_ctx.upload_frame(&frame).map_err(|e| {
-                    MediaError::TranscodeError(format!("Failed to upload frame: {}", e))
-                })?;
+                let hw_frame = {
+                    if hw_ctx.is_hw_frame(&frame) {
+                        frame
+                    } else {
+                        hw_ctx.upload_frame(&frame).map_err(|e| {
+                            MediaError::TranscodeError(format!("Failed to upload frame: {}", e))
+                        })?
+                    }
+                };
 
                 // 发送硬件帧到编码器
                 self.encoder.send_frame(Some(&hw_frame)).map_err(|e| {
@@ -437,15 +444,24 @@ impl Drop for Encoder {
     }
 }
 
+unsafe impl Send for Encoder {}
+unsafe impl Sync for Encoder {}
+
 /// Holds a logical combination of encoder settings.
 #[derive(Debug, Clone)]
 pub struct Settings {
     width: i32,
     height: i32,
+    bit_rate: i64,
+    gop_size: i32,
+    frame_rate: Rational,
+    time_base: Rational,
+    max_b_frames: i32,
+    keyframe_interval: u64,
+    thread_count: i32,
+    options: Options,
     codec_name: Option<String>,
     pixel_format: PixelFormat,
-    keyframe_interval: u64,
-    options: Options,
 }
 
 impl Settings {
@@ -472,7 +488,7 @@ impl Settings {
     /// Create encoder settings for an H264 stream with YUV420p pixel format. This will encode to
     /// arguably the most widely compatible video file since H264 is a common codec and YUV420p is
     /// the most commonly used pixel format.
-    pub fn preset_h264_yuv420p(width: usize, height: usize, realtime: bool) -> Settings {
+    pub fn preset_h264_yuv420p(width: i32, height: i32, realtime: bool) -> Settings {
         let options = if realtime {
             Options::preset_h264_realtime()
         } else {
@@ -480,11 +496,17 @@ impl Settings {
         };
 
         Self {
-            width: width as i32,
-            height: height as i32,
+            width,
+            height,
+            gop_size: 10,
+            max_b_frames: 1,
+            thread_count: 0,
             codec_name: None,
-            pixel_format: PixelFormat::YUV420P,
+            bit_rate: Self::BIT_RATE,
+            frame_rate: Rational::new(1, Self::FRAME_RATE),
+            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
+            pixel_format: PixelFormat::YUV420P,
             options,
         }
     }
@@ -504,15 +526,21 @@ impl Settings {
     ///
     /// A `Settings` instance with the specified configuration.+
     pub fn preset_h264_custom(
-        width: usize,
-        height: usize,
+        width: i32,
+        height: i32,
         pixel_format: PixelFormat,
         options: Options,
     ) -> Settings {
         Self {
-            width: width as i32,
-            height: height as i32,
+            width,
+            height,
+            gop_size: 10,
+            max_b_frames: 1,
+            thread_count: 0,
             codec_name: None,
+            bit_rate: Self::BIT_RATE,
+            frame_rate: Rational::new(1, Self::FRAME_RATE),
+            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
             pixel_format,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             options,
@@ -531,6 +559,63 @@ impl Settings {
         self
     }
 
+    /// set the thread count.
+    pub fn with_thread_count(mut self, thread_count: i32) -> Self {
+        self.thread_count = thread_count;
+        self
+    }
+
+    /// Set the bit rate.
+    pub fn with_bit_rate(mut self, bit_rate: i64) -> Self {
+        self.bit_rate = bit_rate;
+        self
+    }
+
+    /// Set the frame rate.
+    pub fn with_frame_rate(mut self, frame_rate: Rational) -> Self {
+        self.frame_rate = frame_rate;
+        self.time_base = Rational::new(1, frame_rate.numerator() * 1000);
+        self
+    }
+
+    /// Set the GOP size.
+    pub fn with_gop_size(mut self, gop_size: i32) -> Self {
+        self.gop_size = gop_size;
+        self
+    }
+
+    /// Set the maximum number of B-frames.
+    pub fn with_max_b_frames(mut self, max_b_frames: i32) -> Self {
+        self.max_b_frames = max_b_frames;
+        self
+    }
+
+    /// Set the pixel format.
+    pub fn with_pixel_format(mut self, pixel_format: PixelFormat) -> Self {
+        self.pixel_format = pixel_format;
+        self
+    }
+
+    /// Set the options.
+    pub fn with_options(mut self, options: Options) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Get encoder options.
+    pub fn options(&self) -> &Options {
+        &self.options
+    }
+
+    /// Get codec.
+    pub fn codec(&self) -> Option<AVCodecRef> {
+        // Try to use the default libx264 encoder
+        match &self.codec_name {
+            Some(codec) => AVCodec::find_encoder_by_name(&CString::new(codec.to_string()).unwrap()),
+            None => AVCodec::find_encoder_by_name(&CString::new(Self::CODEC_NAME).unwrap()),
+        }
+    }
+
     /// Apply the settings to an encoder.
     ///
     /// # Arguments
@@ -543,28 +628,14 @@ impl Settings {
     fn apply_to(&self, encoder: &mut AVCodecContext) {
         encoder.set_width(self.width);
         encoder.set_height(self.height);
+        encoder.set_bit_rate(self.bit_rate);
+        encoder.set_gop_size(self.gop_size);
+        encoder.set_max_b_frames(self.max_b_frames);
+        encoder.set_framerate(self.frame_rate.into());
+        encoder.set_time_base(self.time_base.into());
         encoder.set_pix_fmt(self.pixel_format.into_raw());
-        encoder.set_bit_rate(Self::BIT_RATE);
-        // 30
-        encoder.set_framerate(Rational::new(Self::FRAME_RATE, 1).into());
-        // 30 * 1000
-        encoder.set_time_base(Rational::new(1, Self::FRAME_RATE * 1000).into());
-    }
-
-    /// Get codec.
-    fn codec(&self) -> Option<AVCodecRef> {
-        // Try to use the default libx264 encoder
-        match &self.codec_name {
-            Some(codec) => AVCodec::find_encoder_by_name(&CString::new(codec.to_string()).unwrap()),
-            None => AVCodec::find_encoder_by_name(&CString::new(Self::CODEC_NAME).unwrap()),
+        unsafe {
+            (*encoder.as_mut_ptr()).thread_count = self.thread_count;
         }
     }
-
-    /// Get encoder options.
-    fn options(&self) -> &Options {
-        &self.options
-    }
 }
-
-unsafe impl Send for Encoder {}
-unsafe impl Sync for Encoder {}

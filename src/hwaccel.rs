@@ -5,11 +5,12 @@ use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVPixelFormat};
 use rsmpeg::ffi;
 
 /// 硬件加速设备配置
+/// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
 #[derive(Debug, Clone)]
 pub struct HWDeviceConfig {
-    device_type: HWDeviceType,
-    hw_pixel_format: PixelFormat,
-    sw_pixel_format: PixelFormat,
+    device_type: HWDeviceType,    // 硬件加速设备的具体路径或标识符
+    hw_pixel_format: PixelFormat, // GPU 硬件设备在内存中的像素格式, eg: CUDA,VAAPI,VDPAU
+    sw_pixel_format: PixelFormat, // CPU 内存中使用的像素格式, eg: NV12,YUV420P,RGB24
     device_path: Option<String>,
 }
 
@@ -57,6 +58,25 @@ impl HWDeviceConfig {
             None,
         )
     }
+
+    /// 自动选择最佳设备
+    pub fn auto_best_device(&self) -> Result<Self> {
+        if self.device_type.is_available() {
+            Ok(self.clone())
+        } else {
+            let devices = self.device_type.list_available();
+            if devices.is_empty() {
+                return Err(Error::msg("No suitable hardware acceleration device found"));
+            }
+            let device = devices[0];
+            Ok(Self::new(
+                device,
+                device.default_hw_pixel_format(),
+                device.default_sw_pixel_format(),
+                None,
+            ))
+        }
+    }
 }
 
 pub struct HWContext {
@@ -67,7 +87,7 @@ pub struct HWContext {
 impl HWContext {
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
         let device_path = config.device_path.as_deref();
-        let mut device_ctx = AVHWDeviceContext::create(
+        let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
             device_path
                 .map(std::ffi::CString::new)
@@ -78,8 +98,6 @@ impl HWContext {
             0,
         )
         .context("Failed to create hardware device context")?;
-
-        device_ctx.init()?;
 
         Ok(Self { device_ctx, config })
     }
@@ -102,7 +120,7 @@ impl HWContext {
 
         hw_frames_ref.init().unwrap();
 
-        codec_ctx.set_pix_fmt(self.config.hw_pixel_format.into_raw());
+        codec_ctx.set_pix_fmt(self.get_frame_format(true));
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
 
         Ok(())
@@ -127,7 +145,7 @@ impl HWContext {
     /// ```
     pub fn download_frame(&self, hw_frame: &AVFrame) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
-        if hw_frame.buf[0].is_null() && hw_frame.format == self.config.hw_pixel_format as i32 {
+        if !hw_frame.buf[0].is_null() && hw_frame.format != self.config.hw_pixel_format.into_raw() {
             return Err(Error::msg("Input frame is not a hardware frame"));
         }
 
@@ -218,7 +236,7 @@ impl HWContext {
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
     pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
-        !frame.buf[0].is_null() && frame.format == self.config.hw_pixel_format as i32
+        !frame.buf[0].is_null() && frame.format == self.config.hw_pixel_format.into_raw()
     }
 
     /// Helper function to get the appropriate pixel format for a frame
@@ -281,8 +299,36 @@ impl HWDeviceType {
         }
     }
 
+    /// 获取硬件设备对应的像素格式
+    pub fn default_hw_pixel_format(&self) -> PixelFormat {
+        match self {
+            HWDeviceType::VDPAU => PixelFormat::VDPAU,
+            HWDeviceType::CUDA => PixelFormat::CUDA,
+            HWDeviceType::VAAPI => PixelFormat::VAAPI,
+            HWDeviceType::DXVA2 => PixelFormat::DXVA2_VLD,
+            HWDeviceType::QSV => PixelFormat::QSV,
+            HWDeviceType::VIDEOTOOLBOX => PixelFormat::VIDEOTOOLBOX,
+            HWDeviceType::D3D11VA => PixelFormat::D3D11,
+            HWDeviceType::DRM => PixelFormat::DRM_PRIME,
+            HWDeviceType::OPENCL => PixelFormat::OPENCL,
+            HWDeviceType::MEDIACODEC => PixelFormat::MEDIACODEC,
+            HWDeviceType::VULKAN => PixelFormat::VULKAN,
+            #[cfg(feature = "ffmpeg7")]
+            HWDeviceType::D3D12VA => PixelFormat::D3D12,
+        }
+    }
+
+    /// 获取硬件设备默认支持的软件像素格式
+    pub fn default_sw_pixel_format(&self) -> PixelFormat {
+        match self {
+            // OpenCL/Vulkan 默认使用 RGBA
+            HWDeviceType::OPENCL | HWDeviceType::VULKAN => PixelFormat::RGBA,
+            // 其他设备默认使用 NV12
+            _ => PixelFormat::NV12,
+        }
+    }
+
     pub fn codec_find_hwaccel_pixfmt(
-        self,
         codec: &AVCodec,
         hwaccel_type: HWDeviceType,
     ) -> Option<AVPixelFormat> {

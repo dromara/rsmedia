@@ -56,7 +56,7 @@ impl<'a> DecoderBuilder<'a> {
     /// Enable hardware acceleration with the specified device type.
     ///
     /// * `device_type` - Device to use for hardware acceleration.
-    pub fn with_hardware_acceleration(mut self, device_type: HWDeviceType) -> Self {
+    pub fn with_hardware_device(mut self, device_type: HWDeviceType) -> Self {
         self.hw_device_type = Some(device_type);
         self
     }
@@ -533,14 +533,18 @@ impl DecoderSplit {
         match self.decoder_receive_frame().unwrap() {
             Some(frame) => match self.hw_context.as_ref() {
                 Some(hw_ctx) => {
-                    let f = match hw_ctx.download_frame(&frame) {
-                        Ok(f) => Some(f),
-                        Err(e) => {
-                            tracing::error!("Failed to download frame from hw_device: {}", e);
-                            None
-                        }
-                    };
-                    Ok(f)
+                    if hw_ctx.is_hw_frame(&frame) {
+                        let f = match hw_ctx.download_frame(&frame) {
+                            Ok(f) => Some(f),
+                            Err(e) => {
+                                tracing::error!("Failed to download frame from hw_device: {}", e);
+                                None
+                            }
+                        };
+                        Ok(f)
+                    } else {
+                        Ok(Some(frame))
+                    }
                 }
                 _ => Ok(Some(frame)),
             },

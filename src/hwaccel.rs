@@ -1,5 +1,7 @@
 use crate::pixel::PixelFormat;
+
 use anyhow::{Context, Error, Result};
+
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVPixelFormat};
 use rsmpeg::ffi;
@@ -48,35 +50,6 @@ impl HWDeviceConfig {
             device_path,
         )
     }
-
-    /// VDPAU设 备配置
-    pub fn vdpau() -> Self {
-        Self::new(
-            HWDeviceType::VDPAU,
-            PixelFormat::VDPAU,
-            PixelFormat::NV12,
-            None,
-        )
-    }
-
-    /// 自动选择最佳设备
-    pub fn auto_best_device(&self) -> Result<Self> {
-        if self.device_type.is_available() {
-            Ok(self.clone())
-        } else {
-            let devices = self.device_type.list_available();
-            if devices.is_empty() {
-                return Err(Error::msg("No suitable hardware acceleration device found"));
-            }
-            let device = devices[0];
-            Ok(Self::new(
-                device,
-                device.default_hw_pixel_format(),
-                device.default_sw_pixel_format(),
-                None,
-            ))
-        }
-    }
 }
 
 pub struct HWContext {
@@ -104,7 +77,7 @@ impl HWContext {
 
     /// 设置编解码器的硬件帧上下文
     pub fn setup_hw_frames(
-        &self,
+        &mut self,
         codec_ctx: &mut AVCodecContext,
         width: i32,
         height: i32,
@@ -122,8 +95,12 @@ impl HWContext {
             .init()
             .context("Failed to initialize hardware frame context")?;
 
-        codec_ctx.set_pix_fmt(self.get_frame_format(true));
+        codec_ctx.set_pix_fmt(self.get_format(true));
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
+        // (*codec_ctx).hw_device_ctx
+        // (*codec_ctx).hwaccel
+        // (*codec_ctx).hwaccel_context
+        // (*codec_ctx).hwaccel_flags
 
         Ok(())
     }
@@ -145,26 +122,25 @@ impl HWContext {
     /// let sw_frame = hw_context.download_frame(&hw_frame)?;
     /// // Now sw_frame contains the data in CPU memory
     /// ```
-    pub fn download_frame(&self, hw_frame: &AVFrame) -> Result<AVFrame> {
+    pub fn download_frame(
+        &self,
+        decoder: &mut AVCodecContext,
+        hw_frame: &AVFrame,
+    ) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
-        if !hw_frame.buf[0].is_null() && hw_frame.format != self.config.hw_pixel_format.into_raw() {
+        if hw_frame.format != self.config.hw_pixel_format.into_raw() {
             return Err(Error::msg("Input frame is not a hardware frame"));
         }
 
         let mut sw_frame = AVFrame::new();
-
-        // Set properties for the software frame
-        sw_frame.set_width(hw_frame.width);
-        sw_frame.set_height(hw_frame.height);
-        sw_frame.set_format(self.config.sw_pixel_format.into_raw());
-        sw_frame
-            .alloc_buffer()
-            .context("Failed to  Allocate buffer for software frame")?;
-
-        // Transfer data from hardware to software frame
+        decoder
+            .hw_frames_ctx_mut()
+            .unwrap()
+            .get_buffer(&mut sw_frame)
+            .context("Failed to allocate hardware frame buffer")?;
         sw_frame
             .hwframe_transfer_data(hw_frame)
-            .context("Failed to transfer frame data from hardware to system memory")?;
+            .context("Failed while transferring frame data to hardware memory")?;
 
         // Copy frame properties
         unsafe {
@@ -191,7 +167,11 @@ impl HWContext {
     /// let hw_frame = hw_context.upload_frame(&sw_frame)?;
     /// // Now hw_frame contains the data in GPU memory
     /// ```
-    pub fn upload_frame(&self, sw_frame: &AVFrame) -> Result<AVFrame> {
+    pub fn upload_frame(
+        &self,
+        encoder: &mut AVCodecContext,
+        sw_frame: &AVFrame,
+    ) -> Result<AVFrame> {
         // Check if input frame format matches our software format
         if sw_frame.format != self.config.sw_pixel_format.into_raw() {
             return Err(Error::msg(format!(
@@ -202,25 +182,14 @@ impl HWContext {
 
         // Create new frame for hardware format
         let mut hw_frame = AVFrame::new();
-
-        // Set basic properties
-        hw_frame.set_width(sw_frame.width);
-        hw_frame.set_height(sw_frame.height);
-        hw_frame.set_format(self.config.hw_pixel_format.into_raw());
-        hw_frame
-            .alloc_buffer()
-            .context("AVFrame alloc buffer error")?;
-
-        let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
-        hw_frames_ref.make_writable();
-        hw_frames_ref
+        encoder
+            .hw_frames_ctx_mut()
+            .unwrap()
             .get_buffer(&mut hw_frame)
             .context("Failed to allocate hardware frame buffer")?;
-
-        // Transfer data from software to hardware frame
         hw_frame
             .hwframe_transfer_data(sw_frame)
-            .context("Failed to transfer frame data to hardware memory")?;
+            .context("Failed while transferring frame data to hardware memory")?;
 
         // Copy frame properties
         unsafe {
@@ -238,11 +207,38 @@ impl HWContext {
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
     pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
-        !frame.buf[0].is_null() && frame.format == self.config.hw_pixel_format.into_raw()
+        // 1. 检查基本属性
+        if frame.format != self.config.hw_pixel_format.into_raw() {
+            tracing::error!(
+                "Frame format ({:?}) doesn't match expected hardware format ({:?})",
+                frame.format,
+                self.config.hw_pixel_format
+            );
+            return false;
+        }
+
+        // 2. 检查硬件帧上下文
+        if frame.hw_frames_ctx.is_null() {
+            tracing::error!("Frame doesn't have a hardware frame context");
+            return false;
+        }
+
+        // 3. 验证硬件帧上下文类型
+        let hw_frames_ctx = unsafe { (*frame.hw_frames_ctx).data as *const ffi::AVHWFramesContext };
+        if hw_frames_ctx.is_null() {
+            tracing::error!("Frame hardware frame context is null");
+            return false;
+        }
+
+        // 4. 检查设备类型匹配
+        unsafe {
+            let device_ctx = (*hw_frames_ctx).device_ctx;
+            (*device_ctx).type_ == self.config.device_type.into()
+        }
     }
 
     /// Helper function to get the appropriate pixel format for a frame
-    pub fn get_frame_format(&self, is_hw: bool) -> AVPixelFormat {
+    pub fn get_format(&self, is_hw: bool) -> AVPixelFormat {
         if is_hw {
             self.config.hw_pixel_format.into_raw()
         } else {
@@ -301,6 +297,30 @@ impl HWDeviceType {
         }
     }
 
+    /// 自动选择最佳设备
+    pub fn auto_best_device(self) -> Result<HWDeviceConfig> {
+        if self.is_available() {
+            Ok(HWDeviceConfig::new(
+                self,
+                self.default_hw_pixel_format(),
+                self.default_sw_pixel_format(),
+                None,
+            ))
+        } else {
+            let devices = self.list_available();
+            if devices.is_empty() {
+                return Err(Error::msg("No suitable hardware acceleration device found"));
+            }
+            let device = devices[0];
+            Ok(HWDeviceConfig::new(
+                device,
+                device.default_hw_pixel_format(),
+                device.default_sw_pixel_format(),
+                None,
+            ))
+        }
+    }
+
     /// 获取硬件设备对应的像素格式
     pub fn default_hw_pixel_format(&self) -> PixelFormat {
         match self {
@@ -325,6 +345,8 @@ impl HWDeviceType {
         match self {
             // OpenCL/Vulkan 默认使用 RGBA
             HWDeviceType::OPENCL | HWDeviceType::VULKAN => PixelFormat::RGBA,
+            // VideoToolbox 支持的 HDR 格式
+            HWDeviceType::VIDEOTOOLBOX => PixelFormat::P010LE,
             // 其他设备默认使用 NV12
             _ => PixelFormat::NV12,
         }

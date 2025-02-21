@@ -1,4 +1,3 @@
-use crate::error::MediaError;
 use crate::location::Location;
 use crate::options::{Dictionary, Options};
 use crate::packet::PacketIter;
@@ -10,13 +9,12 @@ use rsmpeg::avformat::AVFormatContextOutput;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
+use anyhow::{Context, Error, Result};
 use libc::c_int;
 use std::ffi::CString;
 use std::ops::Bound;
 use std::path::Path;
 use std::ptr;
-
-type Result<T> = std::result::Result<T, MediaError>;
 
 /// use to_cstring when stable
 pub(crate) fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
@@ -93,11 +91,11 @@ impl<'a> ReaderBuilder<'a> {
                     )),
                     e => {
                         ffi::avformat_close_input(&mut ps);
-                        Err(MediaError::BackendError(RsmpegError::from(e)))
+                        Err(Error::new(RsmpegError::from(e)))
                     }
                 },
 
-                e => Err(MediaError::from(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -122,11 +120,11 @@ impl<'a> ReaderBuilder<'a> {
                     )),
                     e => {
                         ffi::avformat_close_input(&mut ps);
-                        Err(MediaError::from(RsmpegError::from(e)))
+                        Err(Error::new(RsmpegError::from(e)))
                     }
                 },
 
-                e => Err(MediaError::from(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -165,7 +163,6 @@ impl Reader {
     /// let mut packet = reader.read(stream).unwrap();
     /// ```
     pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
-        let mut error_count = 0;
         loop {
             match self.packets().next().unwrap() {
                 Ok((stream, packet)) => {
@@ -173,11 +170,9 @@ impl Reader {
                         return Ok(Packet::new(packet, stream.time_base()));
                     }
                 }
-                Err(_) => {
-                    error_count += 1;
-                    if error_count > 3 {
-                        return Err(MediaError::ReadExhausted);
-                    }
+                Err(e) => {
+                    tracing::error!("Error reading packet: {}", e);
+                    return Err(Error::new(e));
                 }
             }
         }
@@ -213,7 +208,8 @@ impl Reader {
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
 
         self._seek(timestamp, range)
-            .expect("Failed to seek in reader");
+            .context("Failed to seek in reader")?;
+
         Ok(())
     }
 
@@ -226,7 +222,7 @@ impl Reader {
         unsafe {
             match ffi::av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
                 0 => Ok(()),
-                e => Err(MediaError::BackendError(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -235,7 +231,7 @@ impl Reader {
     /// file.
     pub fn seek_to_start(&mut self) -> Result<()> {
         self._seek(i64::MIN, ..)
-            .expect("Failed to seek to start of reader");
+            .context("Failed to seek to start of reader")?;
         Ok(())
     }
 
@@ -255,7 +251,7 @@ impl Reader {
         unsafe {
             match ffi::avformat_seek_file(self.input.as_mut_ptr(), -1, start, ts, end, 0) {
                 s if s >= 0 => Ok(()),
-                e => Err(MediaError::from(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -364,9 +360,9 @@ impl<'a> WriterBuilder<'a> {
                     0 => Ok(AVFormatContextOutput::from_raw(
                         std::ptr::NonNull::new(ps).unwrap(),
                     )),
-                    e => Err(MediaError::BackendError(RsmpegError::from(e))),
+                    e => Err(Error::new(RsmpegError::from(e))),
                 },
-                e => Err(MediaError::BackendError(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -401,11 +397,11 @@ impl<'a> WriterBuilder<'a> {
                         0 => Ok(AVFormatContextOutput::from_raw(
                             ptr::NonNull::new(ps).unwrap(),
                         )),
-                        e => Err(MediaError::from(RsmpegError::from(e))),
+                        e => Err(Error::new(RsmpegError::from(e))),
                     }
                 }
 
-                e => Err(MediaError::from(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -433,10 +429,10 @@ impl<'a> WriterBuilder<'a> {
                     0 => Ok(AVFormatContextOutput::from_raw(
                         ptr::NonNull::new(ps).unwrap(),
                     )),
-                    e => Err(MediaError::from(RsmpegError::from(e))),
+                    e => Err(Error::new(RsmpegError::from(e))),
                 },
 
-                e => Err(MediaError::from(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -473,11 +469,11 @@ impl<'a> WriterBuilder<'a> {
                         0 => Ok(AVFormatContextOutput::from_raw(
                             ptr::NonNull::new(ps).unwrap(),
                         )),
-                        e => Err(MediaError::from(RsmpegError::from(e))),
+                        e => Err(Error::new(RsmpegError::from(e))),
                     }
                 }
 
-                e => Err(MediaError::from(RsmpegError::from(e))),
+                e => Err(Error::new(RsmpegError::from(e))),
             }
         }
     }
@@ -712,8 +708,6 @@ unsafe impl Sync for PacketizedBufWriter {}
 pub(crate) mod private {
     use super::*;
 
-    type Result<T> = std::result::Result<T, RsmpegError>;
-
     pub trait Write {
         type Out;
 
@@ -742,24 +736,32 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            self.output.write_header(&mut None)?;
+            self.output
+                .write_header(&mut None)
+                .context("Failed to write header")?;
             Ok(())
         }
 
         fn write_frame(&mut self, packet: &mut Packet) -> Result<()> {
             // packet.write(&mut self.output)?;
-            self.output.write_frame(packet.as_inner())?;
+            self.output
+                .write_frame(packet.as_inner())
+                .context("Failed to write frame")?;
             Ok(())
         }
 
         fn write_interleaved(&mut self, packet: &mut Packet) -> Result<()> {
             // packet.write_interleaved(&mut self.output)?;
-            self.output.interleaved_write_frame(packet.as_inner())?;
+            self.output
+                .interleaved_write_frame(packet.as_inner())
+                .context("Failed to write interleaved frame")?;
             Ok(())
         }
 
         fn write_trailer(&mut self) -> Result<()> {
-            self.output.write_trailer()?;
+            self.output
+                .write_trailer()
+                .context("Failed to write trailer")?;
             Ok(())
         }
     }
@@ -906,7 +908,7 @@ pub(crate) fn output_raw(format: &str) -> Result<AVFormatContextOutput> {
             0 => Ok(AVFormatContextOutput::from_raw(
                 std::ptr::NonNull::new(output_ptr).unwrap(),
             )),
-            e => Err(MediaError::BackendError(RsmpegError::from(e))),
+            e => Err(Error::new(RsmpegError::from(e))),
         }
     }
 }
@@ -1061,7 +1063,7 @@ pub(crate) fn flush_output(output: &mut AVFormatContextOutput) -> Result<()> {
         match ffi::av_write_frame(output.as_mut_ptr(), std::ptr::null_mut()) {
             0 => Ok(()),
             1 => Ok(()),
-            e => Err(MediaError::BackendError(RsmpegError::from(e))),
+            e => Err(Error::new(RsmpegError::from(e))),
         }
     }
 }

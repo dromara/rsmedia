@@ -1,7 +1,6 @@
-use crate::error::MediaError;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
-use crate::hwaccel::{HWContext, HWDeviceConfig, HWDeviceType};
+use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::io::{Reader, ReaderBuilder};
 use crate::location::Location;
 use crate::options::Options;
@@ -10,11 +9,10 @@ use crate::resize::Resize;
 use crate::time::Time;
 use crate::{Rational, RawFrame};
 
+use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
-
-type Result<T> = std::result::Result<T, MediaError>;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
@@ -67,9 +65,9 @@ impl<'a> DecoderBuilder<'a> {
         if let Some(options) = self.options {
             reader_builder = reader_builder.with_options(options);
         }
-        let reader = reader_builder.build()?;
-        let reader_stream_index = reader.best_video_stream_index()?;
-        let stream_info = reader.stream_info(reader_stream_index)?;
+        let reader = reader_builder.build().unwrap();
+        let reader_stream_index = reader.best_video_stream_index().unwrap();
+        let stream_info = reader.stream_info(reader_stream_index).unwrap();
         tracing::info!(
             "decoder stream index: {} stream_info: {}",
             reader_stream_index,
@@ -195,22 +193,31 @@ impl Decoder {
     pub fn decode(&mut self) -> Result<(Time, FrameArray)> {
         Ok(loop {
             if !self.draining {
-                let packet_result = self.reader.read(self.reader_stream_index);
-                if matches!(packet_result, Err(MediaError::ReadExhausted)) {
-                    self.draining = true;
-                    continue;
+                match self.reader.read(self.reader_stream_index) {
+                    Ok(packet) => match self.decoder.decode(packet) {
+                        Ok(Some(frame)) => break frame,
+                        Ok(None) => {}
+                        Err(err) => return Err(err),
+                    },
+                    Err(err) => return Err(err),
                 }
-                let packet = packet_result?;
-                if let Some(frame) = self.decoder.decode(packet)? {
-                    break frame;
-                }
+                // FIXME: ReadExhausted
+                // if matches!(packet_result, Err(MediaError::ReadExhausted)) {
+                //     self.draining = true;
+                //     continue;
+                // }
             } else {
                 match self.decoder.drain() {
                     Ok(Some(frame)) => break frame,
-                    Ok(None) | Err(MediaError::ReadExhausted) => {
+                    // FIXME: ReadExhausted
+                    // Ok(None) | Err(MediaError::ReadExhausted) => {
+                    //     self.decoder.reset();
+                    //     self.draining = false;
+                    //     return Err(MediaError::DecodeExhausted);
+                    // }
+                    Ok(None) => {
                         self.decoder.reset();
                         self.draining = false;
-                        return Err(MediaError::DecodeExhausted);
                     }
                     Err(err) => return Err(err),
                 }
@@ -232,24 +239,31 @@ impl Decoder {
     pub fn decode_raw(&mut self) -> Result<RawFrame> {
         Ok(loop {
             if !self.draining {
-                let packet_result = self.reader.read(self.reader_stream_index);
-                if matches!(packet_result, Err(MediaError::ReadExhausted)) {
-                    self.draining = true;
-                    continue;
+                match self.reader.read(self.reader_stream_index) {
+                    Ok(packet) => match self.decoder.decode_raw(packet) {
+                        Ok(Some(frame)) => break frame,
+                        Ok(None) => {}
+                        Err(err) => return Err(err),
+                    },
+                    Err(err) => return Err(err),
                 }
-                let packet = packet_result?;
-                if let Some(frame) = self.decoder.decode_raw(packet)? {
-                    break frame;
-                }
-            } else if let Some(frame) = self.decoder.drain_raw()? {
-                break frame;
+                // FIXME: ReadExhausted
+                // if matches!(packet_result, Err(MediaError::ReadExhausted)) {
+                //     self.draining = true;
+                //     continue;
+                // }
             } else {
                 match self.decoder.drain_raw() {
                     Ok(Some(frame)) => break frame,
-                    Ok(None) | Err(MediaError::ReadExhausted) => {
+                    // FIXME: ReadExhausted
+                    // Ok(None) | Err(MediaError::ReadExhausted) => {
+                    //     self.decoder.reset();
+                    //     self.draining = false;
+                    //     return Err(MediaError::DecodeExhausted);
+                    // }
+                    Ok(None) => {
                         self.decoder.reset();
                         self.draining = false;
-                        return Err(MediaError::DecodeExhausted);
                     }
                     Err(err) => return Err(err),
                 }
@@ -365,7 +379,7 @@ impl DecoderSplit {
         )?;
 
         let decoder = AVCodec::find_decoder(reader_stream.codecpar().codec_id)
-            .expect("Failed to find decoder for stream");
+            .context("Failed to find decoder for stream")?;
 
         let mut decode_ctx = AVCodecContext::new(&decoder);
         decode_ctx.set_time_base(reader_stream.time_base);
@@ -373,9 +387,8 @@ impl DecoderSplit {
         let (width, height) = (decode_ctx.width, decode_ctx.height);
 
         let hw_context = match hw_device_type {
-            Some(_device_type) => {
-                // TODO: device_type to config
-                let hw_ctx = HWContext::new(HWDeviceConfig::cuda()).unwrap();
+            Some(device_type) => {
+                let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap()).unwrap();
                 hw_ctx
                     .setup_hw_frames(&mut decode_ctx, width, height)
                     .unwrap();
@@ -386,12 +399,12 @@ impl DecoderSplit {
 
         decode_ctx
             .open(None)
-            .expect("Failed to open decoder for stream");
+            .context("Failed to open decoder for stream")?;
 
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize
                 .compute_for((width as u32, height as u32))
-                .ok_or(MediaError::InvalidResizeParameters)?,
+                .ok_or(Error::msg("Invalid resize parameters"))?,
             None => (width as u32, height as u32),
         };
 
@@ -521,9 +534,7 @@ impl DecoderSplit {
         let (mut packet, packet_time_base) = packet.into_inner_parts();
         packet.rescale_ts(packet_time_base.into(), self.decoder_time_base.into());
 
-        self.decoder
-            .send_packet(Some(&packet))
-            .map_err(MediaError::BackendError)?;
+        self.decoder.send_packet(Some(&packet))?;
 
         Ok(())
     }
@@ -534,7 +545,7 @@ impl DecoderSplit {
             Some(frame) => match self.hw_context.as_ref() {
                 Some(hw_ctx) => {
                     if hw_ctx.is_hw_frame(&frame) {
-                        let f = match hw_ctx.download_frame(&frame) {
+                        let f = match hw_ctx.download_frame(&mut self.decoder, &frame) {
                             Ok(f) => Some(f),
                             Err(e) => {
                                 tracing::error!("Failed to download frame from hw_device: {}", e);
@@ -559,7 +570,7 @@ impl DecoderSplit {
         match decode_result {
             Ok(frame) => Ok(Some(frame)),
             Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => Ok(None),
-            Err(e) => panic!("{1}: {:?}", e, "Error during decoding"),
+            Err(e) => Err(Error::new(e).context("Failed to receive frame from decoder")),
         }
     }
 

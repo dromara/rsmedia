@@ -3,11 +3,12 @@ use crate::stream::Stream;
 use crate::time::{Time, TIME_BASE};
 use crate::Rational;
 
-use libc::{c_int, c_uint};
 use rsmpeg::avcodec::AVPacket;
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
+
+use libc::{c_int, c_uint};
 
 /// Represents a stream packet.
 #[derive(Debug)]

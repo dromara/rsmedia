@@ -1,5 +1,7 @@
-use crate::error::MediaError;
 use crate::pixel::PixelFormat;
+
+use anyhow::{Context, Error, Result};
+
 use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 use rsmpeg::swscale::SwsContext;
@@ -9,7 +11,7 @@ use rsmpeg::swscale::SwsContext;
 pub type FrameArray = ndarray::Array3<u8>;
 
 /// RGB24 格式的 AVFrame 转换为 Array3
-pub fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std::error::Error>> {
+pub fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
     let width = frame.width as usize;
     let height = frame.height as usize;
 
@@ -17,7 +19,7 @@ pub fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std
         let linesize = frame.linesize[0] as usize;
         let data = frame.data[0];
         if data.is_null() {
-            return Err("Frame data is null".into());
+            return Err(Error::msg("AVFrame data is null"));
         }
 
         // 创建一个新的 Array3
@@ -39,7 +41,7 @@ pub fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std
 }
 
 /// YUV420P 格式的 AVFrame 转换为 Array3
-pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std::error::Error>> {
+pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
     let width = frame.width as usize;
     let height = frame.height as usize;
 
@@ -49,7 +51,7 @@ pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std
         let v_data = frame.data[2];
 
         if y_data.is_null() || u_data.is_null() || v_data.is_null() {
-            return Err("Frame data is null".into());
+            return Err(Error::msg("AVFrame data is null"));
         }
 
         let y_linesize = frame.linesize[0] as usize;
@@ -91,7 +93,7 @@ pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray, Box<dyn std
 }
 
 /// Array3 转换为 RGB24 格式的 AVFrame
-pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std::error::Error>> {
+pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     assert!(array.is_standard_layout());
 
     let height = array.shape()[0];
@@ -122,7 +124,7 @@ pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std
 }
 
 /// Array3 转换为 YUV420P 格式的 AVFrame
-pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std::error::Error>> {
+pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     assert!(array.is_standard_layout());
 
     let height = array.shape()[0];
@@ -130,7 +132,7 @@ pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std
 
     // 确保尺寸是偶数（YUV420P 要求）
     if width % 2 != 0 || height % 2 != 0 {
-        return Err("Dimensions must be even for YUV420P".into());
+        return Err(Error::msg("Dimensions must be even for YUV420P"));
     }
 
     let mut frame = AVFrame::new();
@@ -182,17 +184,15 @@ pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame, Box<dyn std
 }
 
 /// ndarray RGB24 => ndarray YUV420P
-pub fn convert_ndarray_rgb_to_yuv(
-    rgb: &FrameArray,
-) -> Result<FrameArray, Box<dyn std::error::Error>> {
+pub fn convert_ndarray_rgb_to_yuv(rgb: &FrameArray) -> Result<FrameArray> {
     let (height, width, channels) = rgb.dim();
     if channels != 3 {
-        return Err("RGB array must have 3 channels".into());
+        return Err(Error::msg("RGB array must have 3 channels"));
     }
 
     // YUV420P 需要宽高都是偶数
     if width % 2 != 0 || height % 2 != 0 {
-        return Err("Width and height must be even for YUV420P".into());
+        return Err(Error::msg("Width and height must be even for YUV420P"));
     }
 
     // 创建 YUV 数组：Y 平面全尺寸，U/V 平面各1/4
@@ -276,16 +276,14 @@ pub fn convert_ndarray_rgb_to_yuv(
 }
 
 /// ndarray YUV420P => ndarray RGB24
-pub fn convert_ndarray_yuv_to_rgb(
-    yuv: &FrameArray,
-) -> Result<FrameArray, Box<dyn std::error::Error>> {
+pub fn convert_ndarray_yuv_to_rgb(yuv: &FrameArray) -> Result<FrameArray> {
     let (height, width, channels) = yuv.dim();
     if channels != 3 {
-        return Err("YUV array must have 3 channels".into());
+        return Err(Error::msg("YUV array must have 3 channels"));
     }
 
     if width % 2 != 0 || height % 2 != 0 {
-        return Err("Width and height must be even for YUV420P".into());
+        return Err(Error::msg("Width and height must be even for YUV420P"));
     }
 
     let mut rgb = FrameArray::zeros((height, width, 3));
@@ -326,7 +324,7 @@ pub fn convert_avframe(
     dst_width: i32,
     dst_height: i32,
     dst_pix_fmt: PixelFormat,
-) -> Result<AVFrame, MediaError> {
+) -> Result<AVFrame> {
     /*
      * Scaler selection options. Only one may be active at a time.
      */
@@ -407,7 +405,7 @@ pub fn convert_avframe(
         None,
         None,
     )
-    .expect("Failed to create a swscale context.");
+    .context("Failed to create a swscale context.")?;
 
     // 创建目标缓冲区
     let mut dst_frame = AVFrame::new();
@@ -959,11 +957,11 @@ mod tests {
     }
 
     /// 检查图像格式
-    fn check_format(image: &FrameArray) -> Result<&str, Box<dyn std::error::Error>> {
+    fn check_format(image: &FrameArray) -> Result<&str> {
         let (_, _, channels) = image.dim();
 
         if channels != 3 {
-            return Err("Image must have 3 channels".into());
+            return Err(Error::msg("Image must have 3 channels"));
         }
 
         // 使用迭代器和 fold 来安全地计算平均值
@@ -978,7 +976,7 @@ mod tests {
             .fold((0.0, 0), |(sum, count), &x| (sum + x as f64, count + 1));
 
         if u_count == 0 || v_count == 0 {
-            return Err("Invalid pixel count".into());
+            return Err(Error::msg("Invalid pixel count"));
         }
 
         let mean_u = u_sum / u_count as f64;
@@ -1458,15 +1456,15 @@ mod tests {
         }
 
         /// 验证质量指标是否满足要求
-        fn validate(&self) -> Result<(), String> {
+        fn validate(&self) -> Result<()> {
             if self.psnr < 45.0 {
-                return Err(format!("PSNR too low: {}", self.psnr));
+                return Err(Error::msg(format!("PSNR too low: {}", self.psnr)));
             }
             if !self.mae.iter().all(|&x| x < 2.0) {
-                return Err(format!("MAE too high: {:?}", self.mae));
+                return Err(Error::msg(format!("MAE too high: {:?}", self.mae)));
             }
             if !self.diff_distribution.iter().all(|(diff, _)| *diff <= 3) {
-                return Err("Too large pixel differences found".to_string());
+                return Err(Error::msg("Too large pixel differences found"));
             }
             Ok(())
         }

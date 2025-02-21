@@ -1,5 +1,6 @@
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::ffi;
+
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fmt;

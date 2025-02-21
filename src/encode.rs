@@ -1,7 +1,8 @@
-use crate::error::MediaError;
 use crate::flags::{AvCodecFlags, AvFormatFlags};
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
+use crate::hwaccel::{HWContext, HWDeviceType};
+use crate::io::private::Write;
 use crate::io::{Writer, WriterBuilder};
 use crate::location::Location;
 use crate::options::Options;
@@ -9,17 +10,15 @@ use crate::packet::Packet;
 use crate::pixel::PixelFormat;
 use crate::time::Time;
 use crate::{Rational, RawFrame};
+
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::avutil::AVPixelFormat;
 use rsmpeg::error::RsmpegError;
-
-use crate::hwaccel::{HWContext, HWDeviceConfig, HWDeviceType};
-use crate::io::private::Write;
-use libc::c_uint;
 use rsmpeg::ffi;
-use std::ffi::CString;
 
-type Result<T> = std::result::Result<T, MediaError>;
+use anyhow::{Context, Error, Result};
+use libc::c_uint;
+use std::ffi::CString;
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
@@ -175,7 +174,7 @@ impl Encoder {
                 .contains(AvFormatFlags::GLOBAL_HEADER);
 
         let codec = match settings.codec() {
-            None => return Err(MediaError::InvalidCodecParameters),
+            None => return Err(Error::msg("Invalid codec parameters.")),
             Some(c) => c,
         };
         let mut encode_ctx = AVCodecContext::new(&codec);
@@ -190,9 +189,9 @@ impl Encoder {
         let (width, height) = (encode_ctx.width, encode_ctx.height);
 
         let hw_context = match hw_device_type {
-            Some(_device_type) => {
-                // TODO: device_type to config
-                let hw_ctx = HWContext::new(HWDeviceConfig::cuda()).unwrap();
+            Some(device_type) => {
+                let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
+                    .context("Hardware acceleration context initialization failed.")?;
                 hw_ctx
                     .setup_hw_frames(&mut encode_ctx, width, height)
                     .unwrap();
@@ -203,7 +202,7 @@ impl Encoder {
 
         encode_ctx
             .open(Some(settings.options().to_dict().av_dict()))
-            .expect("Could not open encode context");
+            .context("Could not open encode context")?;
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();
@@ -239,7 +238,7 @@ impl Encoder {
             || width != self.encoder.width as usize
             || channels != 3
         {
-            return Err(MediaError::InvalidFrameFormat);
+            return Err(Error::msg("Invalid frame format."));
         }
 
         let mut frame = frame::ndarray_yuv_to_avframe(frame).unwrap();
@@ -261,7 +260,7 @@ impl Encoder {
     /// * `frame` - Frame to encode.
     pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
         if raw_frame.width != self.encoder.width || raw_frame.height != self.encoder.height {
-            return Err(MediaError::InvalidFrameFormat);
+            return Err(Error::msg("Invalid frame format."));
         }
 
         // Write file header if we hadn't done that yet.
@@ -302,22 +301,22 @@ impl Encoder {
                     if hw_ctx.is_hw_frame(&frame) {
                         frame
                     } else {
-                        hw_ctx.upload_frame(&frame).map_err(|e| {
-                            MediaError::TranscodeError(format!("Failed to upload frame: {}", e))
-                        })?
+                        hw_ctx
+                            .upload_frame(&mut self.encoder, &frame)
+                            .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?
                     }
                 };
 
                 // 发送硬件帧到编码器
-                self.encoder.send_frame(Some(&hw_frame)).map_err(|e| {
-                    MediaError::TranscodeError(format!("Failed to send hardware frame: {}", e))
-                })?;
+                self.encoder
+                    .send_frame(Some(&hw_frame))
+                    .map_err(|e| Error::msg(format!("Failed to send hardware frame: {}", e)))?;
             }
             None => {
                 // 软件编码
-                self.encoder.send_frame(Some(&frame)).map_err(|e| {
-                    MediaError::TranscodeError(format!("Failed to send frame: {}", e))
-                })?;
+                self.encoder
+                    .send_frame(Some(&frame))
+                    .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
             }
         }
 
@@ -377,7 +376,7 @@ impl Encoder {
             Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
                 return Ok(None);
             }
-            Err(err) => return Err(MediaError::BackendError(err)),
+            Err(err) => return Err(Error::new(err)),
         };
         Ok(Some(packet))
     }
@@ -403,9 +402,9 @@ impl Encoder {
         packet.set_position(-1);
         packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {
-            self.writer.write_interleaved(&mut packet)?;
+            self.writer.write_interleaved(&mut packet).unwrap();
         } else {
-            self.writer.write_frame(&mut packet)?;
+            self.writer.write_frame(&mut packet).unwrap();
         };
 
         Ok(())
@@ -423,7 +422,7 @@ impl Encoder {
         // We need to drain the items still in the encoders queue.
         for _ in 0..MAX_DRAIN_ITERATIONS {
             match self.encoder_receive_packet() {
-                Ok(Some(packet)) => self.write(packet)?,
+                Ok(Some(packet)) => self.write(packet).unwrap(),
                 Ok(None) => continue,
                 Err(_) => break,
             }

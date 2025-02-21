@@ -1,7 +1,5 @@
-use crate::error::MediaError;
+use anyhow::{Error, Result};
 use rsmpeg::ffi;
-
-type Result<T> = std::result::Result<T, MediaError>;
 
 /// Number of pixel formats
 /// DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
@@ -994,7 +992,7 @@ impl PixelFormat {
             ffi::AV_PIX_FMT_D3D12 => Ok(Self::D3D12),
 
             // unsupported pixel formats not included in ffmpeg
-            _ => Err(MediaError::InvalidPixelFormat),
+            _ => Err(Error::msg(format!("Invalid pixel format: {}", raw))),
         }
     }
 

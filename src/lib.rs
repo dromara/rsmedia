@@ -1,6 +1,5 @@
 pub mod decode;
 pub mod encode;
-pub mod error;
 #[cfg(feature = "ndarray")]
 pub mod frame;
 #[cfg(feature = "ndarray")]

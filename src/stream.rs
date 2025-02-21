@@ -1,21 +1,18 @@
-use ffi::{AVDiscard, AVPacketSideDataType};
-use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
-use rsmpeg::avformat::AVFormatContextInput;
-use rsmpeg::error::RsmpegError;
-use rsmpeg::ffi;
-
-use libc::{c_int, c_uint};
-use std::marker::PhantomData;
-use std::ops::Deref;
-
-use crate::error::MediaError;
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
 use crate::Rational;
 
-type Result<T> = std::result::Result<T, MediaError>;
+use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
+use rsmpeg::avformat::AVFormatContextInput;
+use rsmpeg::error::RsmpegError;
+use rsmpeg::ffi;
+
+use anyhow::Result;
+use libc::{c_int, c_uint};
+use std::marker::PhantomData;
+use std::ops::Deref;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
@@ -123,8 +120,8 @@ impl SideData<'_> {
 }
 
 impl SideData<'_> {
-    pub fn kind(&self) -> AVPacketSideDataType {
-        unsafe { AVPacketSideDataType::from((*self.as_ptr()).type_) }
+    pub fn kind(&self) -> ffi::AVPacketSideDataType {
+        unsafe { ffi::AVPacketSideDataType::from((*self.as_ptr()).type_) }
     }
 
     pub fn data(&self) -> &[u8] {
@@ -187,7 +184,7 @@ impl Stream<'_> {
         unsafe { AvDispositionFlags::from_bits_truncate((*self.as_ptr()).disposition as c_uint) }
     }
 
-    pub fn discard(&self) -> AVDiscard {
+    pub fn discard(&self) -> ffi::AVDiscard {
         unsafe { ffi::AVDiscard::from((*self.as_ptr()).discard) }
     }
 

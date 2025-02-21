@@ -1,7 +1,8 @@
-use std::time::Duration;
-
 use crate::Rational as AvRational;
+
 use rsmpeg::ffi;
+
+use std::time::Duration;
 
 /// Represents a time or duration.
 ///

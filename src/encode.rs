@@ -576,7 +576,7 @@ impl Settings {
             thread_count: 0,
             codec_name: None,
             bit_rate: Self::BIT_RATE,
-            time_base: Rational::new(1, Self::FRAME_RATE),
+            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             pixel_format: PixelFormat::YUV420P,
@@ -612,7 +612,7 @@ impl Settings {
             thread_count: 0,
             codec_name: None,
             bit_rate: Self::BIT_RATE,
-            time_base: Rational::new(1, Self::FRAME_RATE),
+            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             pixel_format,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
@@ -646,7 +646,7 @@ impl Settings {
 
     /// Set the frame rate.
     pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
-        self.time_base = Rational::new(1, frame_rate);
+        self.time_base = Rational::new(1, frame_rate * 1000);
         self.frame_rate = Rational::new(frame_rate, 1);
         self
     }

@@ -1,6 +1,6 @@
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
-use crate::time::{Time, TIME_BASE};
+use crate::time::Time;
 use crate::Rational;
 
 use rsmpeg::avcodec::AVPacket;
@@ -245,7 +245,7 @@ impl Packet {
     pub fn new_with_avpacket(pkt: AVPacket) -> Self {
         Packet {
             inner: pkt,
-            time_base: TIME_BASE,
+            time_base: Rational::new(1, 25),
         }
     }
 

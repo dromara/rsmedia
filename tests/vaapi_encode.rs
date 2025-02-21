@@ -7,7 +7,8 @@ use rsmpeg::{
     error::RsmpegError,
     ffi::{
         AVHWDeviceType, AVPixelFormat, AV_HWDEVICE_TYPE_CUDA, AV_HWDEVICE_TYPE_VAAPI,
-        AV_PIX_FMT_CUDA, AV_PIX_FMT_NV12, AV_PIX_FMT_VAAPI,
+        AV_HWDEVICE_TYPE_VIDEOTOOLBOX, AV_PIX_FMT_CUDA, AV_PIX_FMT_NV12, AV_PIX_FMT_VAAPI,
+        AV_PIX_FMT_VIDEOTOOLBOX,
     },
 };
 use std::{
@@ -173,17 +174,35 @@ fn vaapi_encode_test_vaapi() {
 /// - hw_format:    AV_PIX_FMT_CUDA for nvenc,          AV_PIX_FMT_VAAPI for vaapi
 #[test]
 #[ignore = "Github actions doesn't have nvdia graphics card"]
-fn vaapi_encode_test_nvenc() {
-    std::fs::create_dir_all("tests/output/vaapi_encode/").unwrap();
+fn nvenc_encode_test_nvenc() {
+    std::fs::create_dir_all("tests/output/nvenc_encode/").unwrap();
     // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv
     hw_encode(
         Path::new("tests/assets/vids/bear.yuv"),
-        Path::new("tests/output/vaapi_encode/vaapi_encode_test_nvenc.h264"),
+        Path::new("tests/output/nvenc_encode/nvenc_encode_test_nvenc.h264"),
         320,
         180,
         cstr!("h264_nvenc"),
         AV_HWDEVICE_TYPE_CUDA,
         AV_PIX_FMT_CUDA,
+        AV_PIX_FMT_NV12,
+    )
+    .unwrap();
+}
+
+#[test]
+// #[ignore = "Github actions doesn't have nvdia graphics card"]
+fn toolbox_encode_test_videotoolbox() {
+    std::fs::create_dir_all("tests/output/toolbox_encode/").unwrap();
+    // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv
+    hw_encode(
+        Path::new("tests/assets/vids/bear.yuv"),
+        Path::new("/tmp/toolbox_encode_test_h264.h264"),
+        320,
+        180,
+        cstr!("h264_videotoolbox"),
+        AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+        AV_PIX_FMT_VIDEOTOOLBOX,
         AV_PIX_FMT_NV12,
     )
     .unwrap();

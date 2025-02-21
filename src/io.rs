@@ -342,7 +342,7 @@ impl<'a> WriterBuilder<'a> {
     }
 
     pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
-        //Ok(AVFormatContextOutput::create(&Self::from_path(path), None)?)
+        // Ok(AVFormatContextOutput::create(&from_path(path), None)?)
         unsafe {
             let mut ps = ptr::null_mut();
             let path = from_path(path);

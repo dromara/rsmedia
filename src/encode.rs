@@ -12,7 +12,7 @@ use crate::time::Time;
 use crate::{Rational, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
-use rsmpeg::avutil::AVPixelFormat;
+use rsmpeg::avutil::{self, AVPixelFormat};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
@@ -190,11 +190,9 @@ impl Encoder {
 
         let hw_context = match hw_device_type {
             Some(device_type) => {
-                let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
+                let hw_ctx = HWContext::new(device_type.auto_best_device()?)
                     .context("Hardware acceleration context initialization failed.")?;
-                hw_ctx
-                    .setup_hw_frames(&mut encode_ctx, width, height)
-                    .unwrap();
+                hw_ctx.setup_hw_frames(&mut encode_ctx, width, height)?;
                 Some(hw_ctx)
             }
             None => None,
@@ -402,9 +400,9 @@ impl Encoder {
         packet.set_position(-1);
         packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {
-            self.writer.write_interleaved(&mut packet).unwrap();
+            self.writer.write_interleaved(&mut packet)?;
         } else {
-            self.writer.write_frame(&mut packet).unwrap();
+            self.writer.write_frame(&mut packet)?;
         };
 
         Ok(())
@@ -502,8 +500,8 @@ impl Settings {
             thread_count: 0,
             codec_name: None,
             bit_rate: Self::BIT_RATE,
-            frame_rate: Rational::new(1, Self::FRAME_RATE),
-            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
+            time_base: Rational::new(1, Self::FRAME_RATE),
+            frame_rate: Rational::new(Self::FRAME_RATE, 1),
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             pixel_format: PixelFormat::YUV420P,
             options,
@@ -538,8 +536,8 @@ impl Settings {
             thread_count: 0,
             codec_name: None,
             bit_rate: Self::BIT_RATE,
-            frame_rate: Rational::new(1, Self::FRAME_RATE),
-            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
+            time_base: Rational::new(1, Self::FRAME_RATE),
+            frame_rate: Rational::new(Self::FRAME_RATE, 1),
             pixel_format,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             options,
@@ -571,9 +569,9 @@ impl Settings {
     }
 
     /// Set the frame rate.
-    pub fn with_frame_rate(mut self, frame_rate: Rational) -> Self {
-        self.frame_rate = frame_rate;
-        self.time_base = Rational::new(1, frame_rate.numerator() * 1000);
+    pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
+        self.time_base = Rational::new(1, frame_rate);
+        self.frame_rate = Rational::new(frame_rate, 1);
         self
     }
 
@@ -633,6 +631,7 @@ impl Settings {
         encoder.set_framerate(self.frame_rate.into());
         encoder.set_time_base(self.time_base.into());
         encoder.set_pix_fmt(self.pixel_format.into_raw());
+        encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         unsafe {
             (*encoder.as_mut_ptr()).thread_count = self.thread_count;
         }

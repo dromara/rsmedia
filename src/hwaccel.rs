@@ -77,7 +77,7 @@ impl HWContext {
 
     /// 设置编解码器的硬件帧上下文
     pub fn setup_hw_frames(
-        &mut self,
+        &self,
         codec_ctx: &mut AVCodecContext,
         width: i32,
         height: i32,
@@ -207,34 +207,15 @@ impl HWContext {
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
     pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
-        // 1. 检查基本属性
-        if frame.format != self.config.hw_pixel_format.into_raw() {
+        if frame.hw_frames_ctx.is_null() || frame.format != self.config.hw_pixel_format.into_raw() {
             tracing::error!(
-                "Frame format ({:?}) doesn't match expected hardware format ({:?})",
+                "Frame hw_ctx is null or format ({:?}) doesn't match expected hardware format ({:?})",
                 frame.format,
                 self.config.hw_pixel_format
             );
             return false;
         }
-
-        // 2. 检查硬件帧上下文
-        if frame.hw_frames_ctx.is_null() {
-            tracing::error!("Frame doesn't have a hardware frame context");
-            return false;
-        }
-
-        // 3. 验证硬件帧上下文类型
-        let hw_frames_ctx = unsafe { (*frame.hw_frames_ctx).data as *const ffi::AVHWFramesContext };
-        if hw_frames_ctx.is_null() {
-            tracing::error!("Frame hardware frame context is null");
-            return false;
-        }
-
-        // 4. 检查设备类型匹配
-        unsafe {
-            let device_ctx = (*hw_frames_ctx).device_ctx;
-            (*device_ctx).type_ == self.config.device_type.into()
-        }
+        true
     }
 
     /// Helper function to get the appropriate pixel format for a frame
@@ -352,9 +333,9 @@ impl HWDeviceType {
         }
     }
 
-    pub fn codec_find_hwaccel_pixfmt(
+    pub fn codec_find_hw_pix_fmt(
         codec: &AVCodec,
-        hwaccel_type: HWDeviceType,
+        hw_device_type: HWDeviceType,
     ) -> Option<AVPixelFormat> {
         let mut i = 0;
         loop {
@@ -364,7 +345,8 @@ impl HWDeviceType {
                     let hw_config_supports_codec = (((*hw_config).methods) as i32
                         & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
                         != 0;
-                    if hw_config_supports_codec && (*hw_config).device_type == hwaccel_type.into() {
+                    if hw_config_supports_codec && (*hw_config).device_type == hw_device_type.into()
+                    {
                         break Some((*hw_config).pix_fmt);
                     }
                 } else {

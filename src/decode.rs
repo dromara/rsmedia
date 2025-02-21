@@ -388,10 +388,8 @@ impl DecoderSplit {
 
         let hw_context = match hw_device_type {
             Some(device_type) => {
-                let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap()).unwrap();
-                hw_ctx
-                    .setup_hw_frames(&mut decode_ctx, width, height)
-                    .unwrap();
+                let hw_ctx = HWContext::new(device_type.auto_best_device().unwrap())?;
+                hw_ctx.setup_hw_frames(&mut decode_ctx, width, height)?;
                 Some(hw_ctx)
             }
             None => None,
@@ -544,7 +542,7 @@ impl DecoderSplit {
         match self.decoder_receive_frame().unwrap() {
             Some(frame) => match self.hw_context.as_ref() {
                 Some(hw_ctx) => {
-                    if hw_ctx.is_hw_frame(&frame) {
+                    if self.decoder.is_hwaccel() && hw_ctx.is_hw_frame(&frame) {
                         let f = match hw_ctx.download_frame(&mut self.decoder, &frame) {
                             Ok(f) => Some(f),
                             Err(e) => {
@@ -554,6 +552,7 @@ impl DecoderSplit {
                         };
                         Ok(f)
                     } else {
+                        tracing::debug!("Hardware decoding not available or not applicable");
                         Ok(Some(frame))
                     }
                 }

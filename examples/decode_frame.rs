@@ -8,10 +8,10 @@ use tokio::task;
 async fn main() -> Result<(), Box<dyn Error>> {
     rsmedia::init()?;
 
-    let _source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
+    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
         .parse::<url::Url>()
         .unwrap();
-    let source = std::path::Path::new("rainbow.mp4");
+    // let source = std::path::Path::new("rainbow.mp4");
     let mut decoder = DecoderBuilder::new(source)
         // .with_hardware_device(HWDeviceType::VAAPI)
         .build()

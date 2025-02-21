@@ -258,7 +258,14 @@ impl Encoder {
     /// * `frame` - Frame to encode.
     pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
         if raw_frame.width != self.encoder.width || raw_frame.height != self.encoder.height {
-            return Err(Error::msg("Invalid frame format."));
+            return Err(anyhow::anyhow!(
+                "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
+                PixelFormat::from_raw(raw_frame.format)?,
+                self.encoder.width,
+                self.encoder.height,
+                raw_frame.width,
+                raw_frame.height
+            ));
         }
 
         // Write file header if we hadn't done that yet.
@@ -269,7 +276,6 @@ impl Encoder {
 
         // 根据编码器类型选择目标像素格式
         let target_format = if self.hw_context.is_some() {
-            // 使用硬件编码器支持的输入格式
             self.encoder
                 .hw_frames_ctx_mut()
                 .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
@@ -280,8 +286,7 @@ impl Encoder {
 
         // Reformat frame to target pixel format if need
         let mut frame = if raw_frame.format != target_format.into_raw() {
-            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, target_format)
-                .unwrap()
+            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, target_format)?
         } else {
             raw_frame.clone()
         };
@@ -290,6 +295,11 @@ impl Encoder {
         if self.frame_count % self.keyframe_interval == 0 {
             frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
+
+        // debug frame
+        println!("rawFrame: {}", Self::debug_frame_info(raw_frame));
+        println!("----------------------------------------------");
+        println!("dstFrame: {}", Self::debug_frame_info(&frame));
 
         // 发送帧到编码器
         match self.hw_context.as_ref() {
@@ -432,6 +442,72 @@ impl Encoder {
     /// 发送一个空帧来刷新编码器 EOF
     fn send_eof(&mut self) -> Result<()> {
         Ok(self.encoder.send_frame(None)?)
+    }
+
+    fn debug_frame_info(frame: &RawFrame) -> String {
+        let time_base = frame.time_base;
+        let time_base_str = format!("{}/{}", time_base.num, time_base.den);
+
+        // channel layout
+        let ch_layout_str = unsafe {
+            let mut buf = [0i8; 64];
+            ffi::av_channel_layout_describe(&frame.ch_layout, buf.as_mut_ptr(), buf.len() as _);
+            std::ffi::CStr::from_ptr(buf.as_ptr())
+                .to_string_lossy()
+                .into_owned()
+        };
+
+        format!(
+            "Frame Info:\n\
+         - Dimensions: {}x{}\n\
+         - Format: {}\n\
+         - PTS: {}\n\
+         - Packet Duration: {}\n\
+         - Time Base: {}\n\
+         - Linesize: [{}, {}, {}, {}]\n\
+         - Key Frame: {}\n\
+         - Pict Type: {}\n\
+         - Sample Rate: {}\n\
+         - Samples per Channel (nb_samples): {}\n\
+         - Channel Layout: {}\n\
+         - Best Effort PTS: {}\n\
+         - Flags: {}\n\
+         - Color Range: {}\n\
+         - Color Primaries: {}\n\
+         - Color Transfer: {}\n\
+         - Color Space: {}\n\
+         - Crop Rectangle: {}x{} at ({},{})\n\
+         - Quality: {}\n\
+         - Repeat Picture: {}\n\
+         ",
+            frame.width,
+            frame.height,
+            frame.format,
+            frame.pts,
+            frame.pkt_pos,
+            time_base_str,
+            frame.linesize[0],
+            frame.linesize[1],
+            frame.linesize[2],
+            frame.linesize[3],
+            frame.key_frame,
+            frame.pict_type,
+            frame.sample_rate,
+            frame.nb_samples,
+            ch_layout_str,
+            frame.best_effort_timestamp,
+            frame.flags,
+            frame.color_range,
+            frame.color_primaries,
+            frame.color_trc,
+            frame.colorspace,
+            frame.width - frame.crop_right as i32 - frame.crop_left as i32,
+            frame.height - frame.crop_bottom as i32 - frame.crop_top as i32,
+            frame.crop_left,
+            frame.crop_top,
+            frame.quality,
+            frame.repeat_pict
+        )
     }
 }
 

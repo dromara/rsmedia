@@ -142,10 +142,22 @@ impl HWContext {
             .hwframe_transfer_data(hw_frame)
             .context("Failed while transferring frame data to hardware memory")?;
 
-        // Copy frame properties
-        unsafe {
-            ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
-        }
+        // copy props
+        sw_frame.set_width(hw_frame.width);
+        sw_frame.set_height(hw_frame.height);
+        sw_frame.set_format(self.get_format(false));
+        // extra
+        // sw_frame.set_pts(hw_frame.pts);
+        // sw_frame.set_time_base(hw_frame.time_base);
+        // sw_frame.set_sample_rate(hw_frame.sample_rate);
+        // sw_frame.set_pict_type(hw_frame.pict_type);
+        // sw_frame.set_ch_layout(hw_frame.ch_layout);
+        // sw_frame.set_nb_samples(hw_frame.nb_samples);
+
+        // runtime error:
+        // unsafe {
+        //     ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
+        // }
 
         Ok(sw_frame)
     }
@@ -191,10 +203,22 @@ impl HWContext {
             .hwframe_transfer_data(sw_frame)
             .context("Failed while transferring frame data to hardware memory")?;
 
-        // Copy frame properties
-        unsafe {
-            ffi::av_frame_copy_props(hw_frame.as_mut_ptr(), sw_frame.as_ptr());
-        }
+        // copy props
+        hw_frame.set_width(sw_frame.width);
+        hw_frame.set_height(sw_frame.height);
+        hw_frame.set_format(self.get_format(true));
+        // extra
+        // hw_frame.set_pts(sw_frame.pts);
+        // hw_frame.set_time_base(sw_frame.time_base);
+        // hw_frame.set_sample_rate(sw_frame.sample_rate);
+        // hw_frame.set_pict_type(sw_frame.pict_type);
+        // hw_frame.set_ch_layout(sw_frame.ch_layout);
+        // hw_frame.set_nb_samples(sw_frame.nb_samples);
+
+        // runtime error:
+        // unsafe {
+        //     ffi::av_frame_copy_props(hw_frame.as_mut_ptr(), sw_frame.as_ptr());
+        // }
 
         Ok(hw_frame)
     }
@@ -224,6 +248,28 @@ impl HWContext {
             self.config.hw_pixel_format.into_raw()
         } else {
             self.config.sw_pixel_format.into_raw()
+        }
+    }
+
+    pub fn find_hw_pix_fmt_with_codec(&self, codec: &AVCodec) -> Option<AVPixelFormat> {
+        let mut i = 0;
+        loop {
+            unsafe {
+                let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
+                if !hw_config.is_null() {
+                    let hw_config_supports_codec = (((*hw_config).methods) as i32
+                        & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
+                        != 0;
+                    if hw_config_supports_codec
+                        && (*hw_config).device_type == self.config.device_type.into()
+                    {
+                        break Some((*hw_config).pix_fmt);
+                    }
+                } else {
+                    break None;
+                }
+            }
+            i += 1;
         }
     }
 }
@@ -326,34 +372,8 @@ impl HWDeviceType {
         match self {
             // OpenCL/Vulkan 默认使用 RGBA
             HWDeviceType::OPENCL | HWDeviceType::VULKAN => PixelFormat::RGBA,
-            // VideoToolbox 支持的 HDR 格式
-            HWDeviceType::VIDEOTOOLBOX => PixelFormat::P010LE,
             // 其他设备默认使用 NV12
             _ => PixelFormat::NV12,
-        }
-    }
-
-    pub fn codec_find_hw_pix_fmt(
-        codec: &AVCodec,
-        hw_device_type: HWDeviceType,
-    ) -> Option<AVPixelFormat> {
-        let mut i = 0;
-        loop {
-            unsafe {
-                let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
-                if !hw_config.is_null() {
-                    let hw_config_supports_codec = (((*hw_config).methods) as i32
-                        & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
-                        != 0;
-                    if hw_config_supports_codec && (*hw_config).device_type == hw_device_type.into()
-                    {
-                        break Some((*hw_config).pix_fmt);
-                    }
-                } else {
-                    break None;
-                }
-            }
-            i += 1;
         }
     }
 }

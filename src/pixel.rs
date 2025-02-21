@@ -10,7 +10,7 @@ pub const AV_PIX_FMT_NB: i32 = 228;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelFormat {
     /// Invalid pixel format value
-    None,
+    NONE,
 
     /// planar YUV 4:2:0, 12bpp, (1 Cr & Cb sample per 2x2 Y samples)
     YUV420P,
@@ -756,7 +756,7 @@ impl PixelFormat {
     /// Convert from FFmpeg's AV_PIX_FMT_* constants
     pub fn from_raw(raw: i32) -> Result<Self> {
         match raw {
-            ffi::AV_PIX_FMT_NONE => Ok(Self::None),
+            ffi::AV_PIX_FMT_NONE => Ok(Self::NONE),
             ffi::AV_PIX_FMT_YUV420P => Ok(Self::YUV420P),
             ffi::AV_PIX_FMT_YUYV422 => Ok(Self::YUYV422),
             ffi::AV_PIX_FMT_RGB24 => Ok(Self::RGB24),
@@ -999,7 +999,7 @@ impl PixelFormat {
     /// Convert to FFmpeg's AV_PIX_FMT_* constants
     pub fn into_raw(self) -> i32 {
         match self {
-            Self::None => ffi::AV_PIX_FMT_NONE,
+            Self::NONE => ffi::AV_PIX_FMT_NONE,
             Self::YUV420P => ffi::AV_PIX_FMT_YUV420P,
             Self::YUYV422 => ffi::AV_PIX_FMT_YUYV422,
             Self::RGB24 => ffi::AV_PIX_FMT_RGB24,

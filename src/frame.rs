@@ -412,16 +412,130 @@ pub fn convert_avframe(
     dst_frame.set_width(dst_width);
     dst_frame.set_height(dst_height);
     dst_frame.set_format(dst_pix_fmt.into_raw());
+    // extra
     dst_frame.set_pts(src_frame.pts);
     dst_frame.set_time_base(src_frame.time_base);
+    dst_frame.set_sample_rate(src_frame.sample_rate);
     dst_frame.set_pict_type(src_frame.pict_type);
-    dst_frame.alloc_buffer()?;
+    dst_frame.set_ch_layout(src_frame.ch_layout);
+    dst_frame.set_nb_samples(src_frame.nb_samples);
+    unsafe {
+        (*dst_frame.as_mut_ptr()).sample_aspect_ratio = src_frame.sample_aspect_ratio;
+    }
+    dst_frame
+        .alloc_buffer()
+        .context("Failed to allocate destination frame buffer")?;
 
     sws_ctx
         .scale_frame(src_frame, 0, src_frame.height, &mut dst_frame)
-        .unwrap();
+        .context("Failed to scale frame")?;
 
     Ok(dst_frame)
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
+/// Converts an `ndarray` to an RGB24 video `AVFrame` for ffmpeg.
+///
+/// # Arguments
+///
+/// * `frame_array` - Video frame to convert. The frame format must be `(H, W, C)`.
+///
+/// # Return value
+///
+/// An ffmpeg-native `AvFrame`.
+pub fn convert_ndarray_to_frame_rgb24(frame_array: &FrameArray) -> Result<AVFrame> {
+    unsafe {
+        assert!(frame_array.is_standard_layout());
+
+        let (frame_height, frame_width, _) = frame_array.dim();
+
+        // Temporary frame structure to place correctly formatted data and linesize stuff in,
+        // which we'll copy later.
+        let mut frame_tmp = AVFrame::new();
+        let frame_tmp_ptr = frame_tmp.as_mut_ptr();
+
+        // This does not copy the data, but it sets the `frame_tmp` data and linesize pointers
+        // correctly.
+        let bytes_copied = ffi::av_image_fill_arrays(
+            (*frame_tmp_ptr).data.as_ptr() as *mut *mut u8,
+            (*frame_tmp_ptr).linesize.as_ptr() as *mut i32,
+            frame_array.as_ptr(),
+            PixelFormat::RGB24.into_raw(),
+            frame_width as i32,
+            frame_height as i32,
+            1,
+        );
+
+        if bytes_copied != frame_array.len() as i32 {
+            return Err(Error::msg(format!(
+                "Failed to copy ndarray data to AVFrame: {}",
+                bytes_copied
+            )));
+        }
+
+        let mut frame = AVFrame::new();
+        frame.set_width(frame_width as i32);
+        frame.set_height(frame_height as i32);
+        frame.set_format(PixelFormat::RGB24.into_raw());
+        let frame_ptr = frame.as_mut_ptr();
+
+        // Do the actual copying.
+        ffi::av_image_copy(
+            (*frame_ptr).data.as_ptr() as *mut *mut u8,
+            (*frame_ptr).linesize.as_ptr() as *mut i32,
+            (*frame_tmp_ptr).data.as_ptr() as *mut *const u8,
+            (*frame_tmp_ptr).linesize.as_ptr(),
+            PixelFormat::RGB24.into_raw(),
+            frame_width as i32,
+            frame_height as i32,
+        );
+
+        Ok(frame)
+    }
+}
+
+/// Converts an RGB24 video `AVFrame` produced by ffmpeg to an `ndarray`.
+///
+/// # Arguments
+///
+/// * `frame` - Video frame to convert.
+///
+/// # Return value
+///
+/// A three-dimensional `ndarray` with dimensions `(H, W, C)` and type byte.
+pub fn convert_frame_to_ndarray_rgb24(frame: &mut AVFrame) -> Result<FrameArray> {
+    unsafe {
+        let frame_ptr = frame.as_mut_ptr();
+        let frame_width: i32 = (*frame_ptr).width;
+        let frame_height: i32 = (*frame_ptr).height;
+        let frame_format = frame.format;
+        assert_eq!(frame_format, PixelFormat::RGB24.into_raw());
+
+        let mut frame_array =
+            FrameArray::default((frame_height as usize, frame_width as usize, 3_usize));
+
+        let bytes_copied = ffi::av_image_copy_to_buffer(
+            frame_array.as_mut_ptr(),
+            frame_array.len() as i32,
+            (*frame_ptr).data.as_ptr() as *const *const u8,
+            (*frame_ptr).linesize.as_ptr(),
+            frame_format,
+            frame_width,
+            frame_height,
+            1,
+        );
+
+        if bytes_copied == frame_array.len() as i32 {
+            Ok(frame_array)
+        } else {
+            Err(Error::msg(format!(
+                "Failed to copy AVFrame data to ndarray: {}",
+                bytes_copied
+            )))
+        }
+    }
 }
 
 #[cfg(test)]

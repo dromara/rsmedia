@@ -4,11 +4,11 @@ use rsmedia::EncoderBuilder;
 use std::path::Path;
 
 fn main() {
-    let source = Path::new("/tmp/copied_video.mp4");
+    let source = Path::new("/tmp/person.mp4");
     let mut decoder = Decoder::new(source).expect("failed to create decoder");
 
     let settings = Settings::preset_h264_yuv420p(1280, 720, false);
-    let mut encoder = EncoderBuilder::new(Path::new("person.mp4"), settings)
+    let mut encoder = EncoderBuilder::new(Path::new("output.mp4"), settings)
         .with_format("mp4")
         .build()
         .expect("failed to create encoder");

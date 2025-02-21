@@ -191,7 +191,7 @@ fn nvenc_encode_test_nvenc() {
 }
 
 #[test]
-// #[ignore = "Github actions doesn't have nvdia graphics card"]
+#[ignore = "Github actions doesn't have macOS videotoolbox graphics card"]
 fn toolbox_encode_test_videotoolbox() {
     std::fs::create_dir_all("tests/output/toolbox_encode/").unwrap();
     // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv

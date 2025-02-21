@@ -157,8 +157,6 @@ impl Time {
 
     /// Convert to underlying time to `i64` (the number of time units).
     ///
-    /// # Safety
-    ///
     /// Assumes that the caller knows the time base and applies it correctly when doing arithmetic
     /// operations on the time value.
     pub fn into_value(self) -> Option<i64> {
@@ -285,8 +283,6 @@ impl Aligned {
     }
 
     /// Apply operation `f` on aligned timestamps.
-    ///
-    /// # Safety
     ///
     /// The closure operates on the numerator of two aligned times.
     ///

@@ -407,7 +407,7 @@ impl Encoder {
     /// * `packet` - Encoded packet.
     fn write(&mut self, mut packet: Packet) -> Result<()> {
         packet.set_stream_index(self.writer_stream_index);
-        packet.set_position(-1);
+        packet.set_pos(-1);
         packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {
             self.writer.write_interleaved(&mut packet)?;

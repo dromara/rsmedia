@@ -99,27 +99,25 @@ unsafe impl Send for StreamInfo {}
 unsafe impl Sync for StreamInfo {}
 
 /////////////////////////////////////////
-pub struct SideData<'a> {
+pub struct StreamSideData<'a> {
     ptr: *mut ffi::AVPacketSideData,
     _marker: PhantomData<&'a Packet>,
 }
 
-impl SideData<'_> {
-    /// # Safety
-    pub unsafe fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
-        SideData {
+impl StreamSideData<'_> {
+    pub fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
+        StreamSideData {
             ptr,
             _marker: PhantomData,
         }
     }
 
-    /// # Safety
-    pub unsafe fn as_ptr(&self) -> *const ffi::AVPacketSideData {
+    pub fn as_ptr(&self) -> *const ffi::AVPacketSideData {
         self.ptr as *const _
     }
 }
 
-impl SideData<'_> {
+impl StreamSideData<'_> {
     pub fn kind(&self) -> ffi::AVPacketSideDataType {
         unsafe { ffi::AVPacketSideDataType::from((*self.as_ptr()).type_) }
     }
@@ -188,8 +186,8 @@ impl Stream<'_> {
         unsafe { ffi::AVDiscard::from((*self.as_ptr()).discard) }
     }
 
-    pub fn side_data(&self) -> SideDataIter {
-        SideDataIter::new(self)
+    pub fn side_data(&self) -> StreamSideDataIter {
+        StreamSideDataIter::new(self)
     }
 
     pub fn rate(&self) -> Rational {
@@ -213,19 +211,19 @@ impl PartialEq for Stream<'_> {
 
 impl Eq for Stream<'_> {}
 
-pub struct SideDataIter<'a> {
+pub struct StreamSideDataIter<'a> {
     stream: &'a Stream<'a>,
     current: c_int,
 }
 
-impl SideDataIter<'_> {
-    pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> SideDataIter<'sd> {
-        SideDataIter { stream, current: 0 }
+impl StreamSideDataIter<'_> {
+    pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> StreamSideDataIter<'sd> {
+        StreamSideDataIter { stream, current: 0 }
     }
 }
 
-impl<'a> Iterator for SideDataIter<'a> {
-    type Item = SideData<'a>;
+impl<'a> Iterator for StreamSideDataIter<'a> {
+    type Item = StreamSideData<'a>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
@@ -235,7 +233,7 @@ impl<'a> Iterator for SideDataIter<'a> {
 
             self.current += 1;
 
-            Some(SideData::wrap(
+            Some(StreamSideData::wrap(
                 (*self.stream.as_ptr())
                     .side_data
                     .offset((self.current - 1) as isize),
@@ -255,7 +253,7 @@ impl<'a> Iterator for SideDataIter<'a> {
     }
 }
 
-impl ExactSizeIterator for SideDataIter<'_> {}
+impl ExactSizeIterator for StreamSideDataIter<'_> {}
 
 /////////////////////////////////////////
 pub struct StreamMut<'a> {
@@ -266,9 +264,7 @@ pub struct StreamMut<'a> {
 
 impl StreamMut<'_> {
     /// Wraps a mutable reference to `AVFormatContextInput` and an index into a `StreamMut`.
-    ///
-    /// # Safety
-    pub unsafe fn wrap(context: &mut AVFormatContextInput, index: usize) -> StreamMut {
+    pub fn wrap(context: &mut AVFormatContextInput, index: usize) -> StreamMut {
         unsafe {
             StreamMut {
                 context: std::mem::transmute_copy(&context),

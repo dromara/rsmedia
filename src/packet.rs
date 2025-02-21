@@ -8,6 +8,8 @@ use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
+use std::marker::PhantomData;
+
 use libc::{c_int, c_uint};
 
 /// Represents a stream packet.
@@ -24,18 +26,6 @@ impl Packet {
         Time::new(Some(self.inner.pts), self.time_base)
     }
 
-    /// Get packet DTS (decoder timestamp).
-    #[inline]
-    pub fn dts(&self) -> Time {
-        Time::new(Some(self.inner.dts), self.time_base)
-    }
-
-    /// Get packet duration.
-    #[inline]
-    pub fn duration(&self) -> Time {
-        Time::new(Some(self.inner.duration), self.time_base)
-    }
-
     /// Set packet PTS (presentation timestamp).
     #[inline]
     pub fn set_pts(&mut self, timestamp: Time) {
@@ -45,6 +35,12 @@ impl Packet {
                 .into_value()
                 .unwrap(),
         );
+    }
+
+    /// Get packet DTS (decoder timestamp).
+    #[inline]
+    pub fn dts(&self) -> Time {
+        Time::new(Some(self.inner.dts), self.time_base)
     }
 
     /// Set packet DTS (decoder timestamp).
@@ -58,33 +54,18 @@ impl Packet {
         );
     }
 
+    /// Get packet duration.
+    #[inline]
+    pub fn duration(&self) -> Time {
+        Time::new(Some(self.inner.duration), self.time_base)
+    }
+
     /// Set duration.
     #[inline]
     pub fn set_duration(&mut self, timestamp: Time) {
         if let Some(duration) = timestamp.aligned_with_rational(self.time_base).into_value() {
             self.inner.set_duration(duration);
         }
-    }
-
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.inner.size == 0
-    }
-
-    #[inline]
-    pub fn flags(&self) -> AvPacketFlags {
-        AvPacketFlags::from_bits_truncate(self.inner.flags as c_uint)
-    }
-
-    // Check whether packet is key.
-    #[inline]
-    pub fn is_key(&self) -> bool {
-        self.flags().contains(AvPacketFlags::KEY)
-    }
-
-    #[inline]
-    pub fn is_corrupt(&self) -> bool {
-        self.flags().contains(AvPacketFlags::CORRUPT)
     }
 
     #[inline]
@@ -98,8 +79,58 @@ impl Packet {
     }
 
     #[inline]
-    pub fn set_position(&mut self, value: isize) {
-        self.inner.set_pos(value as i64)
+    pub fn pos(&self) -> isize {
+        self.inner.pos as isize
+    }
+
+    #[inline]
+    pub fn set_pos(&mut self, value: i64) {
+        self.inner.set_pos(value)
+    }
+
+    #[inline]
+    pub fn flags(&self) -> AvPacketFlags {
+        AvPacketFlags::from_bits_truncate(self.inner.flags as c_uint)
+    }
+
+    #[inline]
+    pub fn set_flags(&mut self, flag: i32) {
+        self.inner.set_flags(flag);
+    }
+
+    #[inline]
+    pub fn set_shrink(&mut self, size: usize) {
+        unsafe {
+            ffi::av_shrink_packet(self.inner.as_mut_ptr(), size as c_int);
+        }
+    }
+
+    #[inline]
+    pub fn set_grow(&mut self, size: usize) {
+        unsafe {
+            ffi::av_grow_packet(self.inner.as_mut_ptr(), size as c_int);
+        }
+    }
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.inner.size as usize
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.inner.size == 0
+    }
+
+    // Check whether packet is key.
+    #[inline]
+    pub fn is_key(&self) -> bool {
+        self.flags().contains(AvPacketFlags::KEY)
+    }
+
+    #[inline]
+    pub fn is_corrupt(&self) -> bool {
+        self.flags().contains(AvPacketFlags::CORRUPT)
     }
 
     #[inline]
@@ -115,6 +146,11 @@ impl Packet {
                 destination.into().into(),
             );
         }
+    }
+
+    #[inline]
+    pub fn side_data(&self) -> PacketSideDataIter {
+        PacketSideDataIter::new(&self.inner)
     }
 
     #[inline]
@@ -245,7 +281,7 @@ impl Packet {
     pub fn new_with_avpacket(pkt: AVPacket) -> Self {
         Packet {
             inner: pkt,
-            time_base: Rational::new(1, 25),
+            time_base: Rational::new(1, 30 * 1000),
         }
     }
 
@@ -267,7 +303,104 @@ impl Packet {
 unsafe impl Send for Packet {}
 unsafe impl Sync for Packet {}
 
-//////////////////////////////
+impl Clone for Packet {
+    #[inline]
+    fn clone(&self) -> Self {
+        let mut pkt = Packet::empty();
+        pkt.clone_from(self);
+
+        pkt
+    }
+
+    #[inline]
+    fn clone_from(&mut self, source: &Self) {
+        unsafe {
+            let pkt = ffi::av_packet_clone(source.inner.as_ptr());
+            self.inner.set_ptr(std::ptr::NonNull::new(pkt).unwrap())
+        }
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+
+pub struct PacketSideDataIter<'a> {
+    ptr: *const AVPacket,
+    cur: c_int,
+    _marker: PhantomData<&'a Packet>,
+}
+
+impl PacketSideDataIter<'_> {
+    pub fn new(ptr: *const AVPacket) -> Self {
+        PacketSideDataIter {
+            ptr,
+            cur: 0,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a> Iterator for PacketSideDataIter<'a> {
+    type Item = PacketSideData<'a>;
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        unsafe {
+            if self.cur >= (*self.ptr).side_data_elems {
+                None
+            } else {
+                self.cur += 1;
+                Some(PacketSideData::wrap(
+                    (*self.ptr).side_data.offset((self.cur - 1) as isize),
+                ))
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        unsafe {
+            let length = (*self.ptr).side_data_elems as usize;
+
+            (length - self.cur as usize, Some(length - self.cur as usize))
+        }
+    }
+}
+
+impl ExactSizeIterator for PacketSideDataIter<'_> {}
+
+pub struct PacketSideData<'a> {
+    ptr: *mut ffi::AVPacketSideData,
+    _marker: PhantomData<&'a Packet>,
+}
+
+impl PacketSideData<'_> {
+    pub fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
+        PacketSideData {
+            ptr,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn as_ptr(&self) -> *const ffi::AVPacketSideData {
+        self.ptr as *const _
+    }
+}
+
+impl PacketSideData<'_> {
+    pub fn kind(&self) -> ffi::AVPacketSideDataType {
+        unsafe { (*self.as_ptr()).type_ }
+    }
+
+    pub fn size(&self) -> usize {
+        unsafe { (*self.as_ptr()).size }
+    }
+
+    pub fn data(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts((*self.as_ptr()).data, (*self.as_ptr()).size) }
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 
 pub struct PacketIter<'a> {
     context: &'a mut AVFormatContextInput,

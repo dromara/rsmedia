@@ -4,7 +4,7 @@ use std::path::Path;
 
 /// 从任意实现了 AsRef<Path> 的类型转换为 CString
 pub fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
-    CString::new(path.as_ref().as_os_str().as_bytes()).unwrap()
+    CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
 }
 
 /// 从任意实现了 AsRef<str> 的类型转换为 CString

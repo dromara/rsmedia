@@ -35,7 +35,7 @@ pub fn from_os_str(path_or_url: impl AsRef<OsStr>) -> CString {
 
 #[cfg(not(unix))]
 pub fn from_os_str(path_or_url: impl AsRef<OsStr>) -> CString {
-    CString::new(path_or_url.as_ref().to_str().unwrap()).unwrap()
+    CString::new(path_or_url.as_ref().to_string_lossy().as_bytes()).unwrap()
 }
 
 /// `ptr` must be non-null and valid.

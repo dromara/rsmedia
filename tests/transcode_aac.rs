@@ -1,10 +1,10 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/transcode_aac.c
-use anyhow::{bail, Context as AnyhowContext, Result};
+use anyhow::{Context as AnyhowContext, Result, bail};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avformat::{AVFormatContextInput, AVFormatContextOutput},
-    avutil::{ra, AVAudioFifo, AVChannelLayout, AVFrame, AVSamples},
+    avutil::{AVAudioFifo, AVChannelLayout, AVFrame, AVSamples, ra},
     error::RsmpegError,
     ffi,
     swresample::SwrContext,

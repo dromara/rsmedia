@@ -1,7 +1,7 @@
+use crate::Rational;
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
 use crate::time::Time;
-use crate::Rational;
 
 use rsmpeg::avcodec::AVPacket;
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};

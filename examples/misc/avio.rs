@@ -5,7 +5,7 @@ use std::io::{SeekFrom, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{Context, Error, Result, anyhow};
 use image::DynamicImage;
 
 use rsmpeg::{
@@ -378,7 +378,7 @@ pub fn save_image_avframe_rgb24(rgb_frame: &AVFrame, output_file_name: &str) -> 
             return Err(Error::msg(format!(
                 "Unsupported image format: {}",
                 extension
-            )))
+            )));
         }
     }
 

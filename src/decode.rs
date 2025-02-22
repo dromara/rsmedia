@@ -66,8 +66,8 @@ impl<'a> DecoderBuilder<'a> {
             reader_builder = reader_builder.with_options(options);
         }
         let reader = reader_builder.build().unwrap();
-        let reader_stream_index = reader.best_video_stream_index().unwrap();
-        let stream_info = reader.stream_info(reader_stream_index).unwrap();
+        let reader_stream_index = reader.best_video_stream_index()?;
+        let stream_info = reader.stream_info(reader_stream_index)?;
         tracing::info!(
             "decoder stream index: {} stream_info: {}",
             reader_stream_index,
@@ -552,6 +552,7 @@ impl DecoderSplit {
                         };
                         Ok(f)
                     } else {
+                        println!("Not hardware decoding, or not applicable");
                         tracing::debug!("Hardware decoding not available or not applicable");
                         Ok(Some(frame))
                     }

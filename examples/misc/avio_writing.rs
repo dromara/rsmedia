@@ -1,7 +1,7 @@
 use super::avio;
 /// Simplified transcoding test, select the first video stream in given video file
 /// and transcode it. Store the output in memory.
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rsmpeg::{
     self, avcodec::AVCodecContext, avformat::AVFormatContextOutput, avutil::AVFrame,
     error::RsmpegError, ffi,
@@ -97,7 +97,7 @@ pub fn transcoding(input_file: &CStr, output_file: &CStr) -> Result<()> {
             let mut frame = match decode_context.receive_frame() {
                 Ok(frame) => frame,
                 Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => {
-                    break
+                    break;
                 }
                 Err(e) => bail!(e),
             };

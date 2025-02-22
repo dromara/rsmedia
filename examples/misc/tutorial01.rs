@@ -70,7 +70,7 @@ fn _main(file: &CStr, out_dir: &str) -> Result<()> {
             let frame = match decode_context.receive_frame() {
                 Ok(frame) => frame,
                 Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => {
-                    break
+                    break;
                 }
                 Err(e) => return Err(e.into()),
             };

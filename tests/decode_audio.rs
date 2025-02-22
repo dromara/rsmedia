@@ -1,11 +1,11 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/decode_audio.c
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rsmpeg::{
     avcodec::{AVCodecContext, AVCodecParserContext, AVPacket},
     avformat::AVFormatContextInput,
     avutil::{
-        get_bytes_per_sample, get_packed_sample_fmt, get_sample_fmt_name, sample_fmt_is_planar,
-        AVFrame, AVSampleFormat,
+        AVFrame, AVSampleFormat, get_bytes_per_sample, get_packed_sample_fmt, get_sample_fmt_name,
+        sample_fmt_is_planar,
     },
     error::RsmpegError,
     ffi,

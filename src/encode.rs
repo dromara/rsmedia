@@ -239,7 +239,7 @@ impl Encoder {
             return Err(Error::msg("Invalid frame format."));
         }
 
-        let mut frame = frame::ndarray_yuv_to_avframe(frame).unwrap();
+        let mut frame = frame::ndarray_yuv_to_avframe(frame)?;
 
         frame.set_pts(
             source_timestamp
@@ -275,18 +275,23 @@ impl Encoder {
         }
 
         // 根据编码器类型选择目标像素格式
-        let target_format = if self.hw_context.is_some() {
-            self.encoder
-                .hw_frames_ctx_mut()
-                .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
-                .unwrap_or(PixelFormat::YUV420P)
-        } else {
-            PixelFormat::YUV420P
-        };
+        // let target_format = if self.hw_context.is_some() {
+        //     self.encoder
+        //         .hw_frames_ctx_mut()
+        //         .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
+        //         .unwrap_or(PixelFormat::YUV420P)
+        // } else {
+        //     PixelFormat::YUV420P
+        // };
 
         // Reformat frame to target pixel format if need
-        let mut frame = if raw_frame.format != target_format.into_raw() {
-            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, target_format)?
+        let mut frame = if raw_frame.format != PixelFormat::YUV420P.into_raw() {
+            frame::convert_avframe(
+                raw_frame,
+                raw_frame.width,
+                raw_frame.height,
+                PixelFormat::YUV420P,
+            )?
         } else {
             raw_frame.clone()
         };
@@ -295,6 +300,7 @@ impl Encoder {
         if self.frame_count % self.keyframe_interval == 0 {
             frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
+        frame.set_time_base(self.time_base().into());
 
         // debug frame
         println!("rawFrame: {}", Self::debug_frame_info(raw_frame));
@@ -309,6 +315,7 @@ impl Encoder {
                     if hw_ctx.is_hw_frame(&frame) {
                         frame
                     } else {
+                        println!("Uploading frame to hardware memory...");
                         hw_ctx
                             .upload_frame(&mut self.encoder, &frame)
                             .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?

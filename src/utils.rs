@@ -1,5 +1,4 @@
 use std::ffi::{CStr, CString, OsStr};
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 /// 从任意实现了 AsRef<Path> 的类型转换为 CString

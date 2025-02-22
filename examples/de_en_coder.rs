@@ -17,16 +17,10 @@ fn main() {
         if let Ok(raw_frame) = frame {
             println!(
                 "frame width: {}, height: {}, pix_format: {}, pts:{}, time_base:{:?}",
-                raw_frame.width,
-                raw_frame.height,
-                raw_frame.format,
-                raw_frame.pts,
-                raw_frame.time_base
+                raw_frame.width, raw_frame.height, raw_frame.format, raw_frame.pts, raw_frame.time_base
             );
 
-            encoder
-                .encode_raw(&raw_frame)
-                .expect("failed to encode frame");
+            encoder.encode_raw(&raw_frame).expect("failed to encode frame");
         } else {
             break;
         }

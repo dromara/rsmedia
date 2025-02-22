@@ -58,10 +58,7 @@ fn decode(
         println!("saving frame {}", decode_context.frame_num);
         pgm_save(
             &frame,
-            &format!(
-                "{}/{}-{}.pgm",
-                out_dir, out_filename, decode_context.frame_num
-            ),
+            &format!("{}/{}-{}.pgm", out_dir, out_filename, decode_context.frame_num),
         )?;
     }
     Ok(())
@@ -81,8 +78,7 @@ fn decode_video(video_path: &str, out_dir: &str) -> Result<()> {
     let mut decode_context = AVCodecContext::new(&decoder);
     decode_context.open(None).context("Could not open codec")?;
 
-    let mut video_file =
-        File::open(video_path).with_context(|| anyhow!("Could not open {}", video_path))?;
+    let mut video_file = File::open(video_path).with_context(|| anyhow!("Could not open {}", video_path))?;
 
     let mut parser_context = AVCodecParserContext::init(decoder.id).context("Parser not found")?;
     let mut packet = AVPacket::new();

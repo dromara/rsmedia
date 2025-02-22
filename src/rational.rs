@@ -179,11 +179,7 @@ impl fmt::Display for Rational {
 
 impl fmt::Debug for Rational {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str(&format!(
-            "Rational({}/{})",
-            self.numerator(),
-            self.denominator()
-        ))
+        f.write_str(&format!("Rational({}/{})", self.numerator(), self.denominator()))
     }
 }
 

@@ -33,22 +33,12 @@ impl HWDeviceConfig {
 
     /// 创建NVIDIA配置
     pub fn cuda() -> Self {
-        Self::new(
-            HWDeviceType::CUDA,
-            PixelFormat::CUDA,
-            PixelFormat::NV12,
-            None,
-        )
+        Self::new(HWDeviceType::CUDA, PixelFormat::CUDA, PixelFormat::NV12, None)
     }
 
     /// 创建VAAPI配置
     pub fn vaapi(device_path: Option<String>) -> Self {
-        Self::new(
-            HWDeviceType::VAAPI,
-            PixelFormat::VAAPI,
-            PixelFormat::NV12,
-            device_path,
-        )
+        Self::new(HWDeviceType::VAAPI, PixelFormat::VAAPI, PixelFormat::NV12, device_path)
     }
 }
 
@@ -62,11 +52,7 @@ impl HWContext {
         let device_path = config.device_path.as_deref();
         let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
-            device_path
-                .map(std::ffi::CString::new)
-                .transpose()
-                .unwrap()
-                .as_deref(),
+            device_path.map(std::ffi::CString::new).transpose().unwrap().as_deref(),
             None,
             0,
         )
@@ -76,12 +62,7 @@ impl HWContext {
     }
 
     /// 设置编解码器的硬件帧上下文
-    pub fn setup_hw_frames(
-        &self,
-        codec_ctx: &mut AVCodecContext,
-        width: i32,
-        height: i32,
-    ) -> Result<()> {
+    pub fn setup_hw_frames(&self, codec_ctx: &mut AVCodecContext, width: i32, height: i32) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
         let frames_data = hw_frames_ref.data();
@@ -122,11 +103,7 @@ impl HWContext {
     /// let sw_frame = hw_context.download_frame(&hw_frame)?;
     /// // Now sw_frame contains the data in CPU memory
     /// ```
-    pub fn download_frame(
-        &self,
-        decoder: &mut AVCodecContext,
-        hw_frame: &AVFrame,
-    ) -> Result<AVFrame> {
+    pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
         if hw_frame.format != self.config.hw_pixel_format.into_raw() {
             return Err(Error::msg("Input frame is not a hardware frame"));
@@ -138,9 +115,9 @@ impl HWContext {
             .unwrap()
             .get_buffer(&mut sw_frame)
             .context("download_frame Failed to allocate hardware frame buffer")?;
-        sw_frame.hwframe_transfer_data(hw_frame).context(
-            "download_frame Failed while transfer hw_frame data to sw_frame hardware memory",
-        )?;
+        sw_frame
+            .hwframe_transfer_data(hw_frame)
+            .context("download_frame Failed while transfer hw_frame data to sw_frame hardware memory")?;
 
         // copy props
         sw_frame.set_width(hw_frame.width);
@@ -179,11 +156,7 @@ impl HWContext {
     /// let hw_frame = hw_context.upload_frame(&sw_frame)?;
     /// // Now hw_frame contains the data in GPU memory
     /// ```
-    pub fn upload_frame(
-        &self,
-        encoder: &mut AVCodecContext,
-        sw_frame: &AVFrame,
-    ) -> Result<AVFrame> {
+    pub fn upload_frame(&self, encoder: &mut AVCodecContext, sw_frame: &AVFrame) -> Result<AVFrame> {
         // Check if input frame format matches our software format
         if sw_frame.format != self.config.sw_pixel_format.into_raw() {
             return Err(Error::msg(format!(
@@ -199,9 +172,9 @@ impl HWContext {
             .unwrap()
             .get_buffer(&mut hw_frame)
             .context("upload_frame Failed to allocate hardware frame buffer")?;
-        hw_frame.hwframe_transfer_data(sw_frame).context(
-            "upload_frame Failed while transfer sw_frame data to hw_frame hardware memory",
-        )?;
+        hw_frame
+            .hwframe_transfer_data(sw_frame)
+            .context("upload_frame Failed while transfer sw_frame data to hw_frame hardware memory")?;
 
         // copy props
         hw_frame.set_width(sw_frame.width);
@@ -257,12 +230,9 @@ impl HWContext {
             unsafe {
                 let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
                 if !hw_config.is_null() {
-                    let hw_config_supports_codec = (((*hw_config).methods) as i32
-                        & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
-                        != 0;
-                    if hw_config_supports_codec
-                        && (*hw_config).device_type == self.config.device_type.into()
-                    {
+                    let hw_config_supports_codec =
+                        (((*hw_config).methods) as i32 & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32) != 0;
+                    if hw_config_supports_codec && (*hw_config).device_type == self.config.device_type.into() {
                         break Some((*hw_config).pix_fmt);
                     }
                 } else {

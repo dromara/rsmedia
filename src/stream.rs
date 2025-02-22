@@ -31,27 +31,16 @@ impl StreamInfo {
     /// * `reader` - Reader to find stream information from.
     /// * `stream_index` - Index of stream in reader.
     pub(crate) fn from_reader(reader: &Reader, stream_index: usize) -> Result<Self> {
-        let stream =
-            reader
-                .input
-                .streams()
-                .get(stream_index)
-                .ok_or(RsmpegError::FindStreamInfoError(
-                    ffi::AVERROR_STREAM_NOT_FOUND,
-                ))?;
+        let stream = reader
+            .input
+            .streams()
+            .get(stream_index)
+            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
 
-        Self::from_params(
-            stream.codecpar().to_owned(),
-            stream.time_base.into(),
-            stream_index,
-        )
+        Self::from_params(stream.codecpar().to_owned(), stream.time_base.into(), stream_index)
     }
 
-    pub fn from_params(
-        codecpar: AVCodecParameters,
-        timebase: Rational,
-        stream_index: usize,
-    ) -> Result<Self> {
+    pub fn from_params(codecpar: AVCodecParameters, timebase: Rational, stream_index: usize) -> Result<Self> {
         Ok(Self {
             index: stream_index,
             codec_parameters: codecpar,
@@ -234,9 +223,7 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
             self.current += 1;
 
             Some(StreamSideData::wrap(
-                (*self.stream.as_ptr())
-                    .side_data
-                    .offset((self.current - 1) as isize),
+                (*self.stream.as_ptr()).side_data.offset((self.current - 1) as isize),
             ))
         }
     }
@@ -245,10 +232,7 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
         unsafe {
             let length = (*self.stream.as_ptr()).nb_side_data as usize;
 
-            (
-                length - self.current as usize,
-                Some(length - self.current as usize),
-            )
+            (length - self.current as usize, Some(length - self.current as usize))
         }
     }
 }

@@ -169,9 +169,8 @@ impl Encoder {
         settings: Settings,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
-        let global_header =
-            AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
-                .contains(AvFormatFlags::GLOBAL_HEADER);
+        let global_header = AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
+            .contains(AvFormatFlags::GLOBAL_HEADER);
 
         let codec = match settings.codec() {
             None => return Err(Error::msg("Invalid codec parameters.")),
@@ -232,10 +231,7 @@ impl Encoder {
     #[cfg(feature = "ndarray")]
     pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<()> {
         let (height, width, channels) = frame.dim();
-        if height != self.encoder.height as usize
-            || width != self.encoder.width as usize
-            || channels != 3
-        {
+        if height != self.encoder.height as usize || width != self.encoder.width as usize || channels != 3 {
             return Err(Error::msg("Invalid frame format."));
         }
 
@@ -275,23 +271,18 @@ impl Encoder {
         }
 
         // 根据编码器类型选择目标像素格式
-        // let target_format = if self.hw_context.is_some() {
-        //     self.encoder
-        //         .hw_frames_ctx_mut()
-        //         .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
-        //         .unwrap_or(PixelFormat::YUV420P)
-        // } else {
-        //     PixelFormat::YUV420P
-        // };
+        let target_format = if self.hw_context.is_some() {
+            self.encoder
+                .hw_frames_ctx_mut()
+                .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
+                .unwrap_or(PixelFormat::YUV420P)
+        } else {
+            PixelFormat::YUV420P
+        };
 
         // Reformat frame to target pixel format if need
-        let mut frame = if raw_frame.format != PixelFormat::YUV420P.into_raw() {
-            frame::convert_avframe(
-                raw_frame,
-                raw_frame.width,
-                raw_frame.height,
-                PixelFormat::YUV420P,
-            )?
+        let mut frame = if raw_frame.format != target_format.into_raw() {
+            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, target_format)?
         } else {
             raw_frame.clone()
         };
@@ -459,9 +450,7 @@ impl Encoder {
         let ch_layout_str = unsafe {
             let mut buf = [0i8; 64];
             ffi::av_channel_layout_describe(&frame.ch_layout, buf.as_mut_ptr(), buf.len() as _);
-            std::ffi::CStr::from_ptr(buf.as_ptr())
-                .to_string_lossy()
-                .into_owned()
+            std::ffi::CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
         };
 
         format!(
@@ -605,12 +594,7 @@ impl Settings {
     /// # Return value
     ///
     /// A `Settings` instance with the specified configuration.+
-    pub fn preset_h264_custom(
-        width: i32,
-        height: i32,
-        pixel_format: PixelFormat,
-        options: Options,
-    ) -> Settings {
+    pub fn preset_h264_custom(width: i32, height: i32, pixel_format: PixelFormat, options: Options) -> Settings {
         Self {
             width,
             height,

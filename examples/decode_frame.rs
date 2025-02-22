@@ -69,9 +69,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task.await.expect("task failed");
     }
 
-    println!(
-        "Saved {} frames in the '{}' directory",
-        frame_count, output_folder
-    );
+    println!("Saved {} frames in the '{}' directory", frame_count, output_folder);
     Ok(())
 }

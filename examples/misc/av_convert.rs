@@ -31,12 +31,7 @@ pub fn image_rgb_to_avframe_rgb24(image: &RgbImage, frame_pts: i64) -> Result<AV
 /// 将 RgbImage 转换为 AVFrame
 pub fn image_rgb_to_avframe_yuv420p(image: &RgbImage, frame_pts: i64) -> Result<AVFrame> {
     let rgb_frame = image_rgb_to_avframe_rgb24(image, frame_pts)?;
-    avframe_convert(
-        &rgb_frame,
-        rgb_frame.width,
-        rgb_frame.height,
-        ffi::AV_PIX_FMT_YUV420P,
-    )
+    avframe_convert(&rgb_frame, rgb_frame.width, rgb_frame.height, ffi::AV_PIX_FMT_YUV420P)
 }
 
 /// 将 AVFrame RGB24 转换为 RgbImage
@@ -83,18 +78,12 @@ pub fn avframe_rgb24_to_image_rgb(rgb_frame: &AVFrame) -> Result<RgbImage> {
 
 /// 将 AVFrame YUV420P 转换为 RgbImage
 pub fn avframe_yuv420p_to_image_rgb(frame: &AVFrame) -> Result<RgbImage> {
-    let rgb_frame =
-        avframe_convert(&frame, frame.width, frame.height, ffi::AV_PIX_FMT_RGB24).unwrap();
+    let rgb_frame = avframe_convert(&frame, frame.width, frame.height, ffi::AV_PIX_FMT_RGB24).unwrap();
     avframe_rgb24_to_image_rgb(&rgb_frame)
 }
 
 /// 将 AVFrame RGB24 转换为 YUV420P 格式
-pub fn avframe_convert(
-    src_frame: &AVFrame,
-    dst_width: i32,
-    dst_height: i32,
-    dst_format: i32,
-) -> Result<AVFrame> {
+pub fn avframe_convert(src_frame: &AVFrame, dst_width: i32, dst_height: i32, dst_format: i32) -> Result<AVFrame> {
     // 创建目标 AVFrame
     let mut dst_frame = AVFrame::new();
     dst_frame.set_width(dst_width);
@@ -140,9 +129,7 @@ pub fn avframe_to_mat(frame: &AVFrame) -> Result<Mat> {
         // BGR24 格式可以直接转换
         f if f == ffi::AV_PIX_FMT_BGR24 => (opencv::core::CV_8UC3, false),
         // BGR32/BGRA 格式可以直接转换
-        f if f == ffi::AV_PIX_FMT_BGR32 || f == ffi::AV_PIX_FMT_BGRA => {
-            (opencv::core::CV_8UC4, false)
-        }
+        f if f == ffi::AV_PIX_FMT_BGR32 || f == ffi::AV_PIX_FMT_BGRA => (opencv::core::CV_8UC4, false),
         // GRAY8 格式可以直接转换
         f if f == ffi::AV_PIX_FMT_GRAY8 => (opencv::core::CV_8UC1, false),
         // 其他格式需要转换到 BGR24
@@ -174,11 +161,7 @@ pub fn avframe_to_mat(frame: &AVFrame) -> Result<Mat> {
         for y in 0..height as usize {
             let src_line = src_data.add(y * src_linesize);
             let dst_line = dst_data.add(y * dst_step);
-            std::ptr::copy_nonoverlapping(
-                src_line,
-                dst_line,
-                width as usize * (cv_type >> 3) as usize,
-            );
+            std::ptr::copy_nonoverlapping(src_line, dst_line, width as usize * (cv_type >> 3) as usize);
         }
         mat
     };
@@ -239,19 +222,13 @@ pub fn image_to_mat(img: &RgbImage) -> Result<Mat> {
 
     // 创建 RGB Mat
     let rgb_mat = unsafe {
-        Mat::new_rows_cols_with_data_unsafe_def(
-            height,
-            width,
-            opencv::core::CV_8UC3,
-            img.as_raw().as_ptr() as *mut _,
-        )
-        .context("Failed to create RGB Mat")?
+        Mat::new_rows_cols_with_data_unsafe_def(height, width, opencv::core::CV_8UC3, img.as_raw().as_ptr() as *mut _)
+            .context("Failed to create RGB Mat")?
     };
 
     // 转换为 openCV 默认 BGR 格式
     let mut bgr_mat = Mat::default();
-    imgproc::cvt_color_def(&rgb_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR)
-        .context("Failed to convert RGB to BGR")?;
+    imgproc::cvt_color_def(&rgb_mat, &mut bgr_mat, imgproc::COLOR_RGB2BGR).context("Failed to convert RGB to BGR")?;
 
     Ok(bgr_mat)
 }
@@ -264,17 +241,13 @@ pub fn mat_to_image(mat: &Mat) -> Result<RgbImage> {
 
     // 转换为 RGB
     let mut rgb_mat = Mat::default();
-    imgproc::cvt_color_def(mat, &mut rgb_mat, imgproc::COLOR_BGR2RGB)
-        .context("Failed to convert BGR to RGB")?;
+    imgproc::cvt_color_def(mat, &mut rgb_mat, imgproc::COLOR_BGR2RGB).context("Failed to convert BGR to RGB")?;
 
     let width = rgb_mat.cols() as u32;
     let height = rgb_mat.rows() as u32;
 
     // 获取连续数据
-    let buffer = rgb_mat
-        .data_bytes()
-        .context("Failed to get mat data")?
-        .to_vec();
+    let buffer = rgb_mat.data_bytes().context("Failed to get mat data")?.to_vec();
 
     RgbImage::from_raw(width, height, buffer).context("Failed to create RgbImage from Mat data")
 }
@@ -330,10 +303,8 @@ mod tests {
         let height = 240;
 
         // 创建一个 3 通道的空白图像
-        let mut mat = unsafe {
-            Mat::new_rows_cols(height, width, opencv::core::CV_8UC3)
-                .context("Failed to create Mat")?
-        };
+        let mut mat =
+            unsafe { Mat::new_rows_cols(height, width, opencv::core::CV_8UC3).context("Failed to create Mat")? };
 
         // 创建渐变效果
         for y in 0..height {
@@ -431,8 +402,7 @@ mod tests {
         assert_eq!(img.width(), mat.cols() as u32);
         assert_eq!(img.height(), mat.rows() as u32);
 
-        img.save("/tmp/test_mat_to_image.png")
-            .expect("mat_to_image error");
+        img.save("/tmp/test_mat_to_image.png").expect("mat_to_image error");
 
         Ok(())
     }

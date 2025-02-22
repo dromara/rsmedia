@@ -3,8 +3,7 @@ use super::avio;
 /// and transcode it. Store the output in memory.
 use anyhow::{Context, Result, bail};
 use rsmpeg::{
-    self, avcodec::AVCodecContext, avformat::AVFormatContextOutput, avutil::AVFrame,
-    error::RsmpegError, ffi,
+    self, avcodec::AVCodecContext, avformat::AVFormatContextOutput, avutil::AVFrame, error::RsmpegError, ffi,
 };
 use std::ffi::CStr;
 
@@ -15,9 +14,7 @@ pub fn encode_write_frame(
     output_format_context: &mut AVFormatContextOutput,
     out_stream_index: usize,
 ) -> Result<()> {
-    encode_context
-        .send_frame(frame_after)
-        .context("Encode frame failed.")?;
+    encode_context.send_frame(frame_after).context("Encode frame failed.")?;
 
     loop {
         let mut packet = match encode_context.receive_packet() {
@@ -56,21 +53,14 @@ pub fn flush_encoder(
         return Ok(());
     }
 
-    encode_write_frame(
-        None,
-        encode_context,
-        output_format_context,
-        out_stream_index,
-    )?;
+    encode_write_frame(None, encode_context, output_format_context, out_stream_index)?;
     Ok(())
 }
 
 /// Transcoding audio and video stream in a multi media file.
 pub fn transcoding(input_file: &CStr, output_file: &CStr) -> Result<()> {
-    let (video_stream_index, mut input_format_context, mut decode_context) =
-        avio::open_input_file(input_file)?;
-    let (mut output_format_context, mut encode_context) =
-        avio::open_output_file(output_file, &decode_context)?;
+    let (video_stream_index, mut input_format_context, mut decode_context) = avio::open_input_file(input_file)?;
+    let (mut output_format_context, mut encode_context) = avio::open_output_file(output_file, &decode_context)?;
 
     loop {
         let mut packet = match input_format_context.read_packet() {
@@ -103,12 +93,7 @@ pub fn transcoding(input_file: &CStr, output_file: &CStr) -> Result<()> {
             };
 
             frame.set_pts(frame.best_effort_timestamp);
-            encode_write_frame(
-                Some(&frame),
-                &mut encode_context,
-                &mut output_format_context,
-                0,
-            )?;
+            encode_write_frame(Some(&frame), &mut encode_context, &mut output_format_context, 0)?;
         }
     }
 
@@ -118,17 +103,10 @@ pub fn transcoding(input_file: &CStr, output_file: &CStr) -> Result<()> {
     Ok(())
 }
 
-pub fn clip_video(
-    input_file: &CStr,
-    output_file: &CStr,
-    start_time: f64,
-    duration: f64,
-) -> Result<()> {
-    let (video_stream_index, mut input_format_context, mut decode_context) =
-        avio::open_input_file(input_file)?;
+pub fn clip_video(input_file: &CStr, output_file: &CStr, start_time: f64, duration: f64) -> Result<()> {
+    let (video_stream_index, mut input_format_context, mut decode_context) = avio::open_input_file(input_file)?;
 
-    let (mut output_format_context, mut encode_context) =
-        avio::open_output_file(output_file, &decode_context)?;
+    let (mut output_format_context, mut encode_context) = avio::open_output_file(output_file, &decode_context)?;
 
     let video_stream = &input_format_context.streams()[video_stream_index];
     let start_time_base = video_stream.time_base;
@@ -200,12 +178,7 @@ pub fn clip_video(
             current_time_ticks = frame.pts;
 
             if current_time_ticks >= start_time_ticks as i64 {
-                encode_write_frame(
-                    Some(&frame),
-                    &mut encode_context,
-                    &mut output_format_context,
-                    0,
-                )?;
+                encode_write_frame(Some(&frame), &mut encode_context, &mut output_format_context, 0)?;
             }
         }
     }

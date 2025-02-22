@@ -10,9 +10,7 @@ use image::DynamicImage;
 
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext, AVPacket},
-    avformat::{
-        AVFormatContextInput, AVFormatContextOutput, AVIOContextContainer, AVIOContextCustom,
-    },
+    avformat::{AVFormatContextInput, AVFormatContextOutput, AVIOContextContainer, AVIOContextCustom},
     avutil::{self, AVFrame, AVMem, AVRational},
     ffi,
 };
@@ -43,9 +41,7 @@ impl Decoder {
         Ok((frame_rate.num as f64 / frame_rate.den as f64) as u64)
     }
 
-    pub fn decode_iter(
-        &mut self,
-    ) -> impl Iterator<Item = Result<(i64, DynamicImage), anyhow::Error>> + '_ {
+    pub fn decode_iter(&mut self) -> impl Iterator<Item = Result<(i64, DynamicImage), anyhow::Error>> + '_ {
         std::iter::from_fn(move || match self.decode_next() {
             Ok(Some(frame)) => Some(Ok(frame)),
             Ok(None) => None,
@@ -65,10 +61,7 @@ impl Decoder {
                 }
             }
 
-            println!(
-                "decode_next current_packet: {}",
-                self.current_packet.is_some()
-            );
+            println!("decode_next current_packet: {}", self.current_packet.is_some());
 
             if let Some(packet) = self.current_packet.take() {
                 println!(
@@ -107,9 +100,7 @@ impl Decoder {
 }
 
 /// Get `video_stream_index`, `input_format_context`, `decode_context`.
-pub fn open_input_file(
-    filename: &CStr,
-) -> anyhow::Result<(usize, AVFormatContextInput, AVCodecContext)> {
+pub fn open_input_file(filename: &CStr) -> anyhow::Result<(usize, AVFormatContextInput, AVCodecContext)> {
     let mut input_format_context = AVFormatContextInput::open(filename, None, &mut None)?;
     input_format_context.dump(0, filename)?;
 
@@ -158,24 +149,22 @@ pub fn open_output_file(
             buffer.write_all(buf).unwrap();
             buf.len() as _
         })),
-        Some(Box::new(
-            move |_: &mut Vec<u8>, offset: i64, whence: i32| {
-                println!("offset: {}, whence: {}", offset, whence);
-                let mut buffer = match buffer.lock() {
-                    Ok(x) => x,
-                    Err(_) => return -1,
-                };
-                let mut seek_ = |offset: i64, whence: i32| -> anyhow::Result<i64> {
-                    Ok(match whence {
-                        libc::SEEK_CUR => buffer.seek(SeekFrom::Current(offset))?,
-                        libc::SEEK_SET => buffer.seek(SeekFrom::Start(offset as u64))?,
-                        libc::SEEK_END => buffer.seek(SeekFrom::End(offset))?,
-                        _ => return Err(anyhow!("Unsupported whence")),
-                    } as i64)
-                };
-                seek_(offset, whence).unwrap_or(-1)
-            },
-        )),
+        Some(Box::new(move |_: &mut Vec<u8>, offset: i64, whence: i32| {
+            println!("offset: {}, whence: {}", offset, whence);
+            let mut buffer = match buffer.lock() {
+                Ok(x) => x,
+                Err(_) => return -1,
+            };
+            let mut seek_ = |offset: i64, whence: i32| -> anyhow::Result<i64> {
+                Ok(match whence {
+                    libc::SEEK_CUR => buffer.seek(SeekFrom::Current(offset))?,
+                    libc::SEEK_SET => buffer.seek(SeekFrom::Start(offset as u64))?,
+                    libc::SEEK_END => buffer.seek(SeekFrom::End(offset))?,
+                    _ => return Err(anyhow!("Unsupported whence")),
+                } as i64)
+            };
+            seek_(offset, whence).unwrap_or(-1)
+        })),
     );
 
     let mut output_format_context =
@@ -248,24 +237,22 @@ pub fn open_output_file_custom(
             buffer.write_all(buf).unwrap();
             buf.len() as _
         })),
-        Some(Box::new(
-            move |_: &mut Vec<u8>, offset: i64, whence: i32| {
-                println!("offset: {}, whence: {}", offset, whence);
-                let mut buffer = match buffer.lock() {
-                    Ok(x) => x,
-                    Err(_) => return -1,
-                };
-                let mut seek_ = |offset: i64, whence: i32| -> anyhow::Result<i64> {
-                    Ok(match whence {
-                        libc::SEEK_CUR => buffer.seek(SeekFrom::Current(offset))?,
-                        libc::SEEK_SET => buffer.seek(SeekFrom::Start(offset as u64))?,
-                        libc::SEEK_END => buffer.seek(SeekFrom::End(offset))?,
-                        _ => return Err(anyhow!("Unsupported whence")),
-                    } as i64)
-                };
-                seek_(offset, whence).unwrap_or(-1)
-            },
-        )),
+        Some(Box::new(move |_: &mut Vec<u8>, offset: i64, whence: i32| {
+            println!("offset: {}, whence: {}", offset, whence);
+            let mut buffer = match buffer.lock() {
+                Ok(x) => x,
+                Err(_) => return -1,
+            };
+            let mut seek_ = |offset: i64, whence: i32| -> anyhow::Result<i64> {
+                Ok(match whence {
+                    libc::SEEK_CUR => buffer.seek(SeekFrom::Current(offset))?,
+                    libc::SEEK_SET => buffer.seek(SeekFrom::Start(offset as u64))?,
+                    libc::SEEK_END => buffer.seek(SeekFrom::End(offset))?,
+                    _ => return Err(anyhow!("Unsupported whence")),
+                } as i64)
+            };
+            seek_(offset, whence).unwrap_or(-1)
+        })),
     );
 
     let mut output_format_context =
@@ -341,16 +328,11 @@ pub fn pgm_save(frame: &AVFrame, filename: &str) -> Result<()> {
 
 pub fn save_avframe_to_image(yuv_frame: &AVFrame, output_file_name: &str) -> Result<()> {
     // 转换为 RGB24 格式
-    let rgb_frame = crate::misc::av_convert::avframe_convert(
-        &yuv_frame,
-        yuv_frame.width,
-        yuv_frame.height,
-        ffi::AV_PIX_FMT_RGB24,
-    )?;
+    let rgb_frame =
+        crate::misc::av_convert::avframe_convert(&yuv_frame, yuv_frame.width, yuv_frame.height, ffi::AV_PIX_FMT_RGB24)?;
 
     // 保存图像
-    save_image_avframe_rgb24(&rgb_frame, output_file_name)
-        .expect("save_image_avframe_rgb24 failed.");
+    save_image_avframe_rgb24(&rgb_frame, output_file_name).expect("save_image_avframe_rgb24 failed.");
 
     Ok(())
 }
@@ -375,10 +357,7 @@ pub fn save_image_avframe_rgb24(rgb_frame: &AVFrame, output_file_name: &str) -> 
         "png" => rgb_image.save_with_format(path, image::ImageFormat::Png)?,
         "jpg" | "jpeg" => rgb_image.save_with_format(path, image::ImageFormat::Jpeg)?,
         _ => {
-            return Err(Error::msg(format!(
-                "Unsupported image format: {}",
-                extension
-            )));
+            return Err(Error::msg(format!("Unsupported image format: {}", extension)));
         }
     }
 

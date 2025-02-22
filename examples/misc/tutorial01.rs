@@ -36,13 +36,8 @@ fn _main(file: &CStr, out_dir: &str) -> Result<()> {
         decode_context
     };
 
-    let image_buffer = AVImage::new(
-        ffi::AV_PIX_FMT_RGB32,
-        decode_context.width,
-        decode_context.height,
-        1,
-    )
-    .context("Failed to create image buffer.")?;
+    let image_buffer = AVImage::new(ffi::AV_PIX_FMT_RGB32, decode_context.width, decode_context.height, 1)
+        .context("Failed to create image buffer.")?;
 
     let mut frame_rgb = AVFrameWithImage::new(image_buffer);
 
@@ -104,11 +99,7 @@ mod tests {
 
     #[test]
     fn tutorial01_test1() {
-        _main(
-            cstr!("tests/assets/vids/bear.mp4"),
-            "tests/output/tutorial01/bear",
-        )
-        .unwrap();
+        _main(cstr!("tests/assets/vids/bear.mp4"), "tests/output/tutorial01/bear").unwrap();
     }
 
     #[test]
@@ -122,10 +113,6 @@ mod tests {
 
     #[test]
     fn tutorial01_test3() {
-        _main(
-            cstr!("tests/assets/vids/vp8.mp4"),
-            "tests/output/tutorial01/vp8",
-        )
-        .unwrap();
+        _main(cstr!("tests/assets/vids/vp8.mp4"), "tests/output/tutorial01/vp8").unwrap();
     }
 }

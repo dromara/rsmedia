@@ -199,7 +199,7 @@ impl Encoder {
         };
 
         encode_ctx
-            .open(Some(settings.options().to_dict().av_dict()))
+            .open(Some(settings.options().to_dict()))
             .context("Could not open encode context")?;
 
         let writer_stream_index = {
@@ -521,7 +521,7 @@ unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
 
 /// Holds a logical combination of encoder settings.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Settings {
     width: i32,
     height: i32,
@@ -676,8 +676,8 @@ impl Settings {
     }
 
     /// Get encoder options.
-    pub fn options(&self) -> &Options {
-        &self.options
+    pub fn options(&self) -> Options {
+        self.options.clone()
     }
 
     /// Get codec.

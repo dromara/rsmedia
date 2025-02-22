@@ -149,8 +149,8 @@ impl Packet {
     }
 
     #[inline]
-    pub fn side_data(&self) -> PacketSideDataIter {
-        PacketSideDataIter::new(&self.inner)
+    pub fn side_data(self) -> PacketSideDataIter<'_> {
+        PacketSideDataIter::new(self.inner)
     }
 
     #[inline]
@@ -325,15 +325,15 @@ impl Clone for Packet {
 //////////////////////////////////////////////////////////////////////////////////
 
 pub struct PacketSideDataIter<'a> {
-    ptr: *const AVPacket,
+    ptr: AVPacket,
     cur: c_int,
     _marker: PhantomData<&'a Packet>,
 }
 
 impl PacketSideDataIter<'_> {
-    pub fn new(ptr: *const AVPacket) -> Self {
+    pub fn new(pkt: AVPacket) -> Self {
         PacketSideDataIter {
-            ptr,
+            ptr: pkt,
             cur: 0,
             _marker: PhantomData,
         }
@@ -344,24 +344,21 @@ impl<'a> Iterator for PacketSideDataIter<'a> {
     type Item = PacketSideData<'a>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        unsafe {
-            if self.cur >= (*self.ptr).side_data_elems {
-                None
-            } else {
-                self.cur += 1;
+        if self.cur >= self.ptr.side_data_elems {
+            None
+        } else {
+            self.cur += 1;
+            unsafe {
                 Some(PacketSideData::wrap(
-                    (*self.ptr).side_data.offset((self.cur - 1) as isize),
+                    self.ptr.side_data.offset((self.cur - 1) as isize),
                 ))
             }
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        unsafe {
-            let length = (*self.ptr).side_data_elems as usize;
-
-            (length - self.cur as usize, Some(length - self.cur as usize))
-        }
+        let length = self.ptr.side_data_elems as usize;
+        (length - self.cur as usize, Some(length - self.cur as usize))
     }
 }
 

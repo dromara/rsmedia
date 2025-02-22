@@ -1,11 +1,13 @@
 use crate::location::Location;
-use crate::options::{Dictionary, Options};
+use crate::options::Options;
 use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
+use crate::utils;
 use crate::Packet;
 
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::avformat::AVFormatContextOutput;
+use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
@@ -15,11 +17,6 @@ use std::ffi::CString;
 use std::ops::Bound;
 use std::path::Path;
 use std::ptr;
-
-/// use to_cstring when stable
-pub(crate) fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
-    CString::new(path.as_ref().as_os_str().to_str().unwrap()).unwrap()
-}
 
 /// Builds a [`Reader`].
 ///
@@ -72,7 +69,10 @@ impl<'a> ReaderBuilder<'a> {
                 source: self.source,
             }),
             Some(options) => Ok(Reader {
-                input: Self::input_with_dictionary(&self.source.as_path(), options.to_dict())?,
+                input: Self::input_with_dictionary(
+                    &self.source.as_path(),
+                    options.clone().to_dict(),
+                )?,
                 source: self.source,
             }),
         }
@@ -81,7 +81,7 @@ impl<'a> ReaderBuilder<'a> {
     pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = from_path(path);
+            let path = utils::from_path(path);
 
             match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut())
             {
@@ -102,16 +102,17 @@ impl<'a> ReaderBuilder<'a> {
 
     pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
         path: &P,
-        options: Dictionary,
+        mut options: AVDictionary,
     ) -> Result<AVFormatContextInput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = from_path(path);
-            let opts = options.disown();
-            let res =
-                ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), opts as *mut _);
-
-            Dictionary::own(opts);
+            let path = utils::from_path(path);
+            let res = ffi::avformat_open_input(
+                &mut ps,
+                path.as_ptr(),
+                ptr::null_mut(),
+                options.as_mut_ptr() as *mut _,
+            );
 
             match res {
                 0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
@@ -327,14 +328,14 @@ impl<'a> WriterBuilder<'a> {
                 destination: self.destination,
             }),
             (None, Some(options)) => Ok(Writer {
-                output: Self::output_with(&self.destination.as_path(), options.to_dict())?,
+                output: Self::output_with(&self.destination.as_path(), options.clone().to_dict())?,
                 destination: self.destination,
             }),
             (Some(format), Some(options)) => Ok(Writer {
                 output: Self::output_as_with(
                     &self.destination.as_path(),
                     format,
-                    options.to_dict(),
+                    options.clone().to_dict(),
                 )?,
                 destination: self.destination,
             }),
@@ -345,7 +346,7 @@ impl<'a> WriterBuilder<'a> {
         // Ok(AVFormatContextOutput::create(&from_path(path), None)?)
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = from_path(path);
+            let path = utils::from_path(path);
             match ffi::avformat_alloc_output_context2(
                 &mut ps,
                 ptr::null_mut(),
@@ -369,12 +370,11 @@ impl<'a> WriterBuilder<'a> {
 
     pub fn output_with<P: AsRef<Path> + ?Sized>(
         path: &P,
-        options: Dictionary,
+        mut options: AVDictionary,
     ) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = from_path(path);
-            let opts = options.disown();
+            let path = utils::from_path(path);
 
             match ffi::avformat_alloc_output_context2(
                 &mut ps,
@@ -388,10 +388,8 @@ impl<'a> WriterBuilder<'a> {
                         path.as_ptr(),
                         ffi::AVIO_FLAG_WRITE as c_int,
                         ptr::null(),
-                        opts as *mut _,
+                        options.as_mut_ptr() as *mut _,
                     );
-
-                    Dictionary::own(opts);
 
                     match res {
                         0 => Ok(AVFormatContextOutput::from_raw(
@@ -412,7 +410,7 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = from_path(path);
+            let path = utils::from_path(path);
             let format = CString::new(format).unwrap();
 
             match ffi::avformat_alloc_output_context2(
@@ -440,13 +438,12 @@ impl<'a> WriterBuilder<'a> {
     pub fn output_as_with<P: AsRef<Path> + ?Sized>(
         path: &P,
         format: &str,
-        options: Dictionary,
+        mut options: AVDictionary,
     ) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
-            let path = from_path(path);
+            let path = utils::from_path(path);
             let format = CString::new(format).unwrap();
-            let opts = options.disown();
 
             match ffi::avformat_alloc_output_context2(
                 &mut ps,
@@ -460,10 +457,8 @@ impl<'a> WriterBuilder<'a> {
                         path.as_ptr(),
                         ffi::AVIO_FLAG_WRITE as c_int,
                         ptr::null(),
-                        opts as *mut _,
+                        options.as_mut_ptr() as *mut _,
                     );
-
-                    Dictionary::own(opts);
 
                     match res {
                         0 => Ok(AVFormatContextOutput::from_raw(
@@ -557,7 +552,7 @@ impl<'a> BufWriterBuilder<'a> {
     pub fn build(self) -> Result<BufWriter> {
         Ok(BufWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned().unwrap_or_default(),
+            options: self.options.cloned().unwrap(),
         })
     }
 }
@@ -641,7 +636,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     pub fn build(self) -> Result<PacketizedBufWriter> {
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned().unwrap_or_default(),
+            options: self.options.cloned().unwrap(),
             buffers: Vec::new(),
         })
     }
@@ -772,7 +767,7 @@ pub(crate) mod private {
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
             self.output
-                .write_header(&mut Some(self.options.to_dict().av_dict()))?;
+                .write_header(&mut Some(self.options.clone().to_dict()))?;
             Ok(self.end_write())
         }
 
@@ -803,7 +798,7 @@ pub(crate) mod private {
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
             self.output
-                .write_header(&mut Some(self.options.to_dict().av_dict()))?;
+                .write_header(&mut Some(self.options.clone().to_dict()))?;
             self.end_write();
             Ok(self.take_buffers())
         }

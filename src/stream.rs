@@ -1,11 +1,11 @@
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
-use crate::options::{Dictionary, DictionaryRef};
 use crate::packet::Packet;
 use crate::Rational;
 
 use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
 use rsmpeg::avformat::AVFormatContextInput;
+use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
@@ -198,9 +198,9 @@ impl Stream<'_> {
         unsafe { Rational::from((*self.as_ptr()).avg_frame_rate) }
     }
 
-    pub fn metadata(&self) -> DictionaryRef {
-        unsafe { DictionaryRef::wrap((*self.as_ptr()).metadata) }
-    }
+    // pub fn metadata(&self) -> DictionaryRef {
+    //     unsafe { DictionaryRef::wrap((*self.as_ptr()).metadata) }
+    // }
 }
 
 impl PartialEq for Stream<'_> {
@@ -306,10 +306,9 @@ impl StreamMut<'_> {
     //     }
     // }
 
-    pub fn set_metadata(&mut self, metadata: Dictionary) {
+    pub fn set_metadata(&mut self, metadata: &mut AVDictionary) {
         unsafe {
-            let metadata = metadata.disown();
-            (*self.as_mut_ptr()).metadata = metadata;
+            (*self.as_mut_ptr()).metadata = metadata.as_mut_ptr();
         }
     }
 }

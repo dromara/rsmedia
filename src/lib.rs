@@ -16,6 +16,7 @@ pub mod rational;
 pub mod resize;
 pub mod stream;
 pub mod time;
+pub mod utils;
 
 pub use decode::{Decoder, DecoderBuilder};
 pub use encode::{Encoder, EncoderBuilder};

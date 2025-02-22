@@ -3,7 +3,7 @@ use crate::pixel::PixelFormat;
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVPixelFormat};
+use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContextMut, AVPixelFormat};
 use rsmpeg::ffi;
 
 /// 硬件加速设备配置
@@ -137,22 +137,22 @@ impl HWContext {
             .hw_frames_ctx_mut()
             .unwrap()
             .get_buffer(&mut sw_frame)
-            .context("Failed to allocate hardware frame buffer")?;
-        sw_frame
-            .hwframe_transfer_data(hw_frame)
-            .context("Failed while transferring frame data to hardware memory")?;
+            .context("download_frame Failed to allocate hardware frame buffer")?;
+        sw_frame.hwframe_transfer_data(hw_frame).context(
+            "download_frame Failed while transfer hw_frame data to sw_frame hardware memory",
+        )?;
 
         // copy props
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(self.get_format(false));
         // extra
-        // sw_frame.set_pts(hw_frame.pts);
-        // sw_frame.set_time_base(hw_frame.time_base);
-        // sw_frame.set_sample_rate(hw_frame.sample_rate);
-        // sw_frame.set_pict_type(hw_frame.pict_type);
-        // sw_frame.set_ch_layout(hw_frame.ch_layout);
-        // sw_frame.set_nb_samples(hw_frame.nb_samples);
+        sw_frame.set_pts(hw_frame.pts);
+        sw_frame.set_time_base(hw_frame.time_base);
+        sw_frame.set_sample_rate(hw_frame.sample_rate);
+        sw_frame.set_pict_type(hw_frame.pict_type);
+        sw_frame.set_ch_layout(hw_frame.ch_layout);
+        sw_frame.set_nb_samples(hw_frame.nb_samples);
 
         // runtime error:
         // unsafe {
@@ -198,22 +198,22 @@ impl HWContext {
             .hw_frames_ctx_mut()
             .unwrap()
             .get_buffer(&mut hw_frame)
-            .context("Failed to allocate hardware frame buffer")?;
-        hw_frame
-            .hwframe_transfer_data(sw_frame)
-            .context("Failed while transferring frame data to hardware memory")?;
+            .context("upload_frame Failed to allocate hardware frame buffer")?;
+        hw_frame.hwframe_transfer_data(sw_frame).context(
+            "upload_frame Failed while transfer sw_frame data to hw_frame hardware memory",
+        )?;
 
         // copy props
         hw_frame.set_width(sw_frame.width);
         hw_frame.set_height(sw_frame.height);
         hw_frame.set_format(self.get_format(true));
         // extra
-        // hw_frame.set_pts(sw_frame.pts);
-        // hw_frame.set_time_base(sw_frame.time_base);
-        // hw_frame.set_sample_rate(sw_frame.sample_rate);
-        // hw_frame.set_pict_type(sw_frame.pict_type);
-        // hw_frame.set_ch_layout(sw_frame.ch_layout);
-        // hw_frame.set_nb_samples(sw_frame.nb_samples);
+        hw_frame.set_pts(sw_frame.pts);
+        hw_frame.set_time_base(sw_frame.time_base);
+        hw_frame.set_sample_rate(sw_frame.sample_rate);
+        hw_frame.set_pict_type(sw_frame.pict_type);
+        hw_frame.set_ch_layout(sw_frame.ch_layout);
+        hw_frame.set_nb_samples(sw_frame.nb_samples);
 
         // runtime error:
         // unsafe {
@@ -419,5 +419,50 @@ impl From<HWDeviceType> for ffi::AVHWDeviceType {
             #[cfg(feature = "ffmpeg7")]
             HWDeviceType::D3D12VA => ffi::AV_HWDEVICE_TYPE_D3D12VA,
         }
+    }
+}
+
+fn pix_formats_to_vec(formats: *const ffi::AVPixelFormat) -> Vec<PixelFormat> {
+    let mut ret = Vec::new();
+    unsafe {
+        let mut ptr = formats;
+        while *ptr != ffi::AV_PIX_FMT_NONE {
+            ret.push(PixelFormat::from_raw(*ptr).unwrap());
+            ptr = ptr.offset(1);
+        }
+    }
+    ret
+}
+
+pub fn get_transfer_formats_from_gpu(mut hw_frame_ctx: AVHWFramesContextMut) -> Vec<PixelFormat> {
+    let mut formats = std::ptr::null_mut();
+    unsafe {
+        ffi::av_hwframe_transfer_get_formats(
+            hw_frame_ctx.as_mut_ptr(),
+            ffi::AV_HWFRAME_TRANSFER_DIRECTION_FROM,
+            &mut formats,
+            0,
+        );
+    }
+    if formats.is_null() {
+        Vec::new()
+    } else {
+        pix_formats_to_vec(formats)
+    }
+}
+pub fn get_transfer_formats_to_gpu(mut hw_frame_ctx: AVHWFramesContextMut) -> Vec<PixelFormat> {
+    let mut formats = std::ptr::null_mut();
+    unsafe {
+        ffi::av_hwframe_transfer_get_formats(
+            hw_frame_ctx.as_mut_ptr(),
+            ffi::AV_HWFRAME_TRANSFER_DIRECTION_TO,
+            &mut formats,
+            0,
+        );
+    }
+    if formats.is_null() {
+        Vec::new()
+    } else {
+        pix_formats_to_vec(formats)
     }
 }

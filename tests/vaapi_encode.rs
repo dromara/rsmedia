@@ -3,12 +3,12 @@ use anyhow::{Context, Result};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
-    avutil::{ra, AVFrame, AVHWDeviceContext},
+    avutil::{AVFrame, AVHWDeviceContext, ra},
     error::RsmpegError,
     ffi::{
-        AVHWDeviceType, AVPixelFormat, AV_HWDEVICE_TYPE_CUDA, AV_HWDEVICE_TYPE_VAAPI,
-        AV_HWDEVICE_TYPE_VIDEOTOOLBOX, AV_PIX_FMT_CUDA, AV_PIX_FMT_NV12, AV_PIX_FMT_VAAPI,
-        AV_PIX_FMT_VIDEOTOOLBOX,
+        AV_HWDEVICE_TYPE_CUDA, AV_HWDEVICE_TYPE_VAAPI, AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+        AV_PIX_FMT_CUDA, AV_PIX_FMT_NV12, AV_PIX_FMT_VAAPI, AV_PIX_FMT_VIDEOTOOLBOX,
+        AVHWDeviceType, AVPixelFormat,
     },
 };
 use std::{

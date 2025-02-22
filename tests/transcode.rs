@@ -1,12 +1,12 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/transcode.c
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avfilter::{AVFilter, AVFilterContextMut, AVFilterGraph, AVFilterInOut},
     avformat::{AVFormatContextInput, AVFormatContextOutput},
     avutil::{
-        av_inv_q, av_rescale_q, get_sample_fmt_name, ra, AVChannelLayout, AVDictionary, AVFrame,
+        AVChannelLayout, AVDictionary, AVFrame, av_inv_q, av_rescale_q, get_sample_fmt_name, ra,
     },
     error::RsmpegError,
     ffi,
@@ -415,7 +415,7 @@ pub fn transcode(
                 let mut frame = match decode_context.receive_frame() {
                     Ok(frame) => frame,
                     Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => {
-                        break
+                        break;
                     }
                     Err(e) => bail!(e),
                 };

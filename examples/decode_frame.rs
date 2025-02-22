@@ -1,6 +1,6 @@
 use anyhow::Context;
 use image::{ImageBuffer, Rgb};
-use rsmedia::{frame, DecoderBuilder};
+use rsmedia::{DecoderBuilder, frame};
 use std::error::Error;
 use tokio::task;
 

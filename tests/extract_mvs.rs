@@ -1,10 +1,10 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/extract_mvs.c
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodecContext, AVPacket},
     avformat::AVFormatContextInput,
-    avutil::{get_media_type_string, AVDictionary},
+    avutil::{AVDictionary, get_media_type_string},
     error::RsmpegError,
     ffi,
 };

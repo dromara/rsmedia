@@ -1,9 +1,9 @@
+use crate::Packet;
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
 use crate::utils;
-use crate::Packet;
 
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::avformat::AVFormatContextOutput;
@@ -411,7 +411,7 @@ impl<'a> WriterBuilder<'a> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
-            let format = CString::new(format).unwrap();
+            let format = CString::new(format)?;
 
             match ffi::avformat_alloc_output_context2(
                 &mut ps,
@@ -443,7 +443,7 @@ impl<'a> WriterBuilder<'a> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
-            let format = CString::new(format).unwrap();
+            let format = CString::new(format)?;
 
             match ffi::avformat_alloc_output_context2(
                 &mut ps,
@@ -774,14 +774,14 @@ pub(crate) mod private {
         fn write_frame(&mut self, packet: &mut Packet) -> Result<Buf> {
             self.begin_write();
             packet.write(&mut self.output)?;
-            flush_output(&mut self.output).unwrap();
+            flush_output(&mut self.output)?;
             Ok(self.end_write())
         }
 
         fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Buf> {
             self.begin_write();
             packet.write_interleaved(&mut self.output)?;
-            flush_output(&mut self.output).unwrap();
+            flush_output(&mut self.output)?;
             Ok(self.end_write())
         }
 
@@ -806,7 +806,7 @@ pub(crate) mod private {
         fn write_frame(&mut self, packet: &mut Packet) -> Result<Bufs> {
             self.begin_write();
             packet.write(&mut self.output)?;
-            flush_output(&mut self.output).unwrap();
+            flush_output(&mut self.output)?;
             self.end_write();
             Ok(self.take_buffers())
         }
@@ -814,7 +814,7 @@ pub(crate) mod private {
         fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Bufs> {
             self.begin_write();
             packet.write_interleaved(&mut self.output)?;
-            flush_output(&mut self.output).unwrap();
+            flush_output(&mut self.output)?;
             self.end_write();
             Ok(self.take_buffers())
         }
@@ -893,7 +893,7 @@ pub(crate) mod private {
 pub(crate) fn output_raw(format: &str) -> Result<AVFormatContextOutput> {
     unsafe {
         let mut output_ptr = std::ptr::null_mut();
-        let format = std::ffi::CString::new(format).unwrap();
+        let format = std::ffi::CString::new(format)?;
         match ffi::avformat_alloc_output_context2(
             &mut output_ptr,
             std::ptr::null_mut(),

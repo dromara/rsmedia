@@ -35,7 +35,7 @@ pub fn avio_reading(file_path: &CStr) -> Result<()> {
             let mut frame = match decode_context.receive_frame() {
                 Ok(frame) => frame,
                 Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => {
-                    break
+                    break;
                 }
                 Err(e) => panic!("{}", e),
             };

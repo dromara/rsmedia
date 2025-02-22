@@ -203,9 +203,7 @@ pub fn convert_ndarray_rgb_to_yuv(rgb: &FrameArray) -> Result<FrameArray> {
     fn compute_y(r: f64, g: f64, b: f64) -> u8 {
         // BT.601 标准:
         // Y = 0.299 * R + 0.587 * G + 0.114 * B
-        (0.299 * r + 0.587 * g + 0.114 * b)
-            .round()
-            .clamp(0.0, 255.0) as u8
+        (0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0.0, 255.0) as u8
     }
 
     // 1.2. UV分量计算 - 精确2x2块处理
@@ -214,12 +212,8 @@ pub fn convert_ndarray_rgb_to_yuv(rgb: &FrameArray) -> Result<FrameArray> {
         // BT.601 标准:
         // U = -0.169 * R - 0.331 * G + 0.500 * B + 128
         // V = 0.500 * R - 0.419 * G - 0.081 * B + 128
-        let u = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0)
-            .round()
-            .clamp(0.0, 255.0) as u8;
-        let v = (0.500 * r - 0.419 * g - 0.081 * b + 128.0)
-            .round()
-            .clamp(0.0, 255.0) as u8;
+        let u = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0).round().clamp(0.0, 255.0) as u8;
+        let v = (0.500 * r - 0.419 * g - 0.081 * b + 128.0).round().clamp(0.0, 255.0) as u8;
         (u, v)
     }
 
@@ -389,8 +383,7 @@ pub fn convert_avframe(
     // SWS_BITEXACT       = 1 << 19,
 
     // 考虑性能和质量平衡
-    let flags =
-        ffi::SWS_BICUBIC | ffi::SWS_FULL_CHR_H_INT | ffi::SWS_ACCURATE_RND | ffi::SWS_BITEXACT;
+    let flags = ffi::SWS_BICUBIC | ffi::SWS_FULL_CHR_H_INT | ffi::SWS_ACCURATE_RND | ffi::SWS_BITEXACT;
 
     // 创建转换上下文
     let mut sws_ctx = SwsContext::get_context(
@@ -513,8 +506,7 @@ pub fn convert_frame_to_ndarray_rgb24(frame: &mut AVFrame) -> Result<FrameArray>
         let frame_format = frame.format;
         assert_eq!(frame_format, PixelFormat::RGB24.into_raw());
 
-        let mut frame_array =
-            FrameArray::default((frame_height as usize, frame_width as usize, 3_usize));
+        let mut frame_array = FrameArray::default((frame_height as usize, frame_width as usize, 3_usize));
 
         let bytes_copied = ffi::av_image_copy_to_buffer(
             frame_array.as_mut_ptr(),
@@ -764,11 +756,7 @@ mod tests {
         // 验证帧属性
         assert_eq!(frame.width, 64, "Frame width mismatch");
         assert_eq!(frame.height, 48, "Frame height mismatch");
-        assert_eq!(
-            frame.format,
-            PixelFormat::YUV420P.into_raw(),
-            "Frame format mismatch"
-        );
+        assert_eq!(frame.format, PixelFormat::YUV420P.into_raw(), "Frame format mismatch");
 
         // 验证数据
         unsafe {
@@ -866,10 +854,7 @@ mod tests {
 
             for y in 0..48 {
                 for x in 0..64 {
-                    assert_eq!(
-                        *orig_y.add(y * y_linesize + x),
-                        *conv_y.add(y * y_linesize + x)
-                    );
+                    assert_eq!(*orig_y.add(y * y_linesize + x), *conv_y.add(y * y_linesize + x));
                 }
             }
 
@@ -880,10 +865,7 @@ mod tests {
 
             for y in 0..24 {
                 for x in 0..32 {
-                    assert_eq!(
-                        *orig_u.add(y * u_linesize + x),
-                        *conv_u.add(y * u_linesize + x)
-                    );
+                    assert_eq!(*orig_u.add(y * u_linesize + x), *conv_u.add(y * u_linesize + x));
                 }
             }
 
@@ -894,10 +876,7 @@ mod tests {
 
             for y in 0..24 {
                 for x in 0..32 {
-                    assert_eq!(
-                        *orig_v.add(y * v_linesize + x),
-                        *conv_v.add(y * v_linesize + x)
-                    );
+                    assert_eq!(*orig_v.add(y * v_linesize + x), *conv_v.add(y * v_linesize + x));
                 }
             }
         }
@@ -1120,11 +1099,7 @@ mod tests {
         let yuv = convert_ndarray_rgb_to_yuv(&rgb).unwrap();
 
         // 检查尺寸
-        assert_eq!(
-            yuv.dim(),
-            (4, 4, 3),
-            "Output dimensions don't match expected size"
-        );
+        assert_eq!(yuv.dim(), (4, 4, 3), "Output dimensions don't match expected size");
 
         // 计算预期的 YUV 值
         // 使用标准转换公式:
@@ -1231,27 +1206,9 @@ mod tests {
         // YUV(128,128,128) 应该转换为灰色
         for y in 0..4 {
             for x in 0..4 {
-                assert_eq!(
-                    rgb[[y, x, 0]],
-                    128,
-                    "Red channel value mismatch at [{}, {}]",
-                    y,
-                    x
-                );
-                assert_eq!(
-                    rgb[[y, x, 1]],
-                    128,
-                    "Green channel value mismatch at [{}, {}]",
-                    y,
-                    x
-                );
-                assert_eq!(
-                    rgb[[y, x, 2]],
-                    128,
-                    "Blue channel value mismatch at [{}, {}]",
-                    y,
-                    x
-                );
+                assert_eq!(rgb[[y, x, 0]], 128, "Red channel value mismatch at [{}, {}]", y, x);
+                assert_eq!(rgb[[y, x, 1]], 128, "Green channel value mismatch at [{}, {}]", y, x);
+                assert_eq!(rgb[[y, x, 2]], 128, "Blue channel value mismatch at [{}, {}]", y, x);
             }
         }
     }
@@ -1277,15 +1234,8 @@ mod tests {
         for y in 0..4 {
             for x in 0..4 {
                 for c in 0..3 {
-                    let diff =
-                        (original_rgb[[y, x, c]] as i16 - converted_rgb[[y, x, c]] as i16).abs();
-                    assert!(
-                        diff <= 5,
-                        "Color difference too large at [{}, {}, {}]",
-                        y,
-                        x,
-                        c
-                    );
+                    let diff = (original_rgb[[y, x, c]] as i16 - converted_rgb[[y, x, c]] as i16).abs();
+                    assert!(diff <= 5, "Color difference too large at [{}, {}, {}]", y, x, c);
                 }
             }
         }
@@ -1327,27 +1277,9 @@ mod tests {
         for y in 0..4 {
             for x in 0..4 {
                 // 检查是否为预期值
-                assert_eq!(
-                    rgb[[y, x, 0]],
-                    200,
-                    "Red channel mismatch at [{}, {}]",
-                    y,
-                    x
-                );
-                assert_eq!(
-                    rgb[[y, x, 1]],
-                    150,
-                    "Green channel mismatch at [{}, {}]",
-                    y,
-                    x
-                );
-                assert_eq!(
-                    rgb[[y, x, 2]],
-                    100,
-                    "Blue channel mismatch at [{}, {}]",
-                    y,
-                    x
-                );
+                assert_eq!(rgb[[y, x, 0]], 200, "Red channel mismatch at [{}, {}]", y, x);
+                assert_eq!(rgb[[y, x, 1]], 150, "Green channel mismatch at [{}, {}]", y, x);
+                assert_eq!(rgb[[y, x, 2]], 100, "Blue channel mismatch at [{}, {}]", y, x);
             }
         }
 
@@ -1555,10 +1487,7 @@ mod tests {
             };
 
             // 过滤有效的差异分布数据
-            let diff_distribution = diff_hist
-                .into_iter()
-                .filter(|&(_, count)| count > 0)
-                .collect();
+            let diff_distribution = diff_hist.into_iter().filter(|&(_, count)| count > 0).collect();
 
             Self {
                 psnr,
@@ -1594,11 +1523,7 @@ mod tests {
     }
 
     impl QualityReport {
-        fn new(
-            dimensions: (usize, usize),
-            conversion_time: std::time::Duration,
-            metrics: ImageQualityMetrics,
-        ) -> Self {
+        fn new(dimensions: (usize, usize), conversion_time: std::time::Duration, metrics: ImageQualityMetrics) -> Self {
             Self {
                 timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                 user: std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
@@ -1611,21 +1536,12 @@ mod tests {
         fn generate_report(&self) -> String {
             let mut report = String::new();
 
-            report.push_str(&format!(
-                "Current Date and Time (UTC): {}\n",
-                self.timestamp
-            ));
+            report.push_str(&format!("Current Date and Time (UTC): {}\n", self.timestamp));
             report.push_str(&format!("Current User's Login: {}\n\n", self.user));
 
             report.push_str("=== 图像转换质量报告 ===\n");
-            report.push_str(&format!(
-                "图像大小: {}x{}\n",
-                self.dimensions.0, self.dimensions.1
-            ));
-            report.push_str(&format!(
-                "转换耗时: {:.6}s\n\n",
-                self.conversion_time.as_secs_f64()
-            ));
+            report.push_str(&format!("图像大小: {}x{}\n", self.dimensions.0, self.dimensions.1));
+            report.push_str(&format!("转换耗时: {:.6}s\n\n", self.conversion_time.as_secs_f64()));
 
             report.push_str("--- 质量指标 ---\n");
             report.push_str(&format!("PSNR: {:.2} dB\n", self.metrics.psnr));

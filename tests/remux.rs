@@ -24,13 +24,13 @@ fn log_packet(time_base: AVRational, pkt: &AVPacket, tag: &str) {
 }
 
 fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
-    let mut input_format_context = AVFormatContextInput::open(input_path, None, &mut None)
-        .context("Create input format context failed.")?;
+    let mut input_format_context =
+        AVFormatContextInput::open(input_path, None, &mut None).context("Create input format context failed.")?;
     input_format_context
         .dump(0, input_path)
         .context("Dump input format context failed.")?;
-    let mut output_format_context = AVFormatContextOutput::create(output_path, None)
-        .context("Create output format context failed.")?;
+    let mut output_format_context =
+        AVFormatContextOutput::create(output_path, None).context("Create output format context failed.")?;
     let stream_mapping: Vec<_> = {
         let mut stream_index = 0usize;
         input_format_context
@@ -58,10 +58,7 @@ fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
         .write_header(&mut None)
         .context("Writer header failed.")?;
 
-    while let Some(mut packet) = input_format_context
-        .read_packet()
-        .context("Read packet failed.")?
-    {
+    while let Some(mut packet) = input_format_context.read_packet().context("Read packet failed.")? {
         let input_stream_index = packet.stream_index as usize;
         let Some(output_stream_index) = stream_mapping[input_stream_index] else {
             continue;
@@ -79,9 +76,7 @@ fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
             .interleaved_write_frame(&mut packet)
             .context("Interleaved write frame failed.")?;
     }
-    output_format_context
-        .write_trailer()
-        .context("Write trailer failed.")
+    output_format_context.write_trailer().context("Write trailer failed.")
 }
 
 #[test]

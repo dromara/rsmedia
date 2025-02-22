@@ -9,12 +9,7 @@ use rsmpeg::{
 };
 use std::{ffi::CStr, fs::File, io::prelude::*, ops::Deref, slice};
 
-fn thumbnail(
-    input_video_path: &CStr,
-    output_image_path: &CStr,
-    width: Option<i32>,
-    height: Option<i32>,
-) -> Result<()> {
+fn thumbnail(input_video_path: &CStr, output_image_path: &CStr, width: Option<i32>, height: Option<i32>) -> Result<()> {
     let mut input_format_context = AVFormatContextInput::open(input_video_path, None, &mut None)?;
 
     let (video_stream_index, mut decode_context) = {
@@ -87,22 +82,12 @@ fn thumbnail(
         )
         .context("Invalid swscontext parameter.")?;
 
-        let image_buffer = AVImage::new(
-            encode_context.pix_fmt,
-            encode_context.width,
-            encode_context.height,
-            1,
-        )
-        .context("Image buffer parameter invalid.")?;
+        let image_buffer = AVImage::new(encode_context.pix_fmt, encode_context.width, encode_context.height, 1)
+            .context("Image buffer parameter invalid.")?;
 
         let mut scaled_cover_frame = AVFrameWithImage::new(image_buffer);
 
-        sws_context.scale_frame(
-            &cover_frame,
-            0,
-            decode_context.height,
-            &mut scaled_cover_frame,
-        )?;
+        sws_context.scale_frame(&cover_frame, 0, decode_context.height, &mut scaled_cover_frame)?;
 
         println!("{:#?}", scaled_cover_frame.deref());
 
@@ -111,9 +96,7 @@ fn thumbnail(
     };
 
     let mut file = File::create(output_image_path.to_str().unwrap()).unwrap();
-    let data = unsafe {
-        slice::from_raw_parts(scaled_cover_packet.data, scaled_cover_packet.size as usize)
-    };
+    let data = unsafe { slice::from_raw_parts(scaled_cover_packet.data, scaled_cover_packet.size as usize) };
     file.write_all(data)?;
 
     Ok(())

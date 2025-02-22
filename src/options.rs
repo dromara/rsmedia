@@ -14,11 +14,7 @@ impl Options {
     ///
     /// This sets the `rtsp_transport` to `tcp` in ffmpeg options.
     pub fn preset_rtsp_transport_tcp() -> Self {
-        let opts = AVDictionary::new(
-            &utils::from_str("rtsp_transport"),
-            &utils::from_str("tcp"),
-            0,
-        );
+        let opts = AVDictionary::new(&utils::from_str("rtsp_transport"), &utils::from_str("tcp"), 0);
         Self(opts)
     }
 
@@ -140,12 +136,7 @@ impl From<Options> for HashMap<String, String> {
     fn from(item: Options) -> Self {
         item.0
             .into_iter()
-            .map(|entry| {
-                (
-                    utils::to_string(entry.key()),
-                    utils::to_string(entry.value()),
-                )
-            })
+            .map(|entry| (utils::to_string(entry.key()), utils::to_string(entry.value())))
             .collect()
     }
 }

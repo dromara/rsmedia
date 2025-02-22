@@ -50,11 +50,7 @@ pub unsafe fn str_from_c_ptr<'s>(ptr: *const libc::c_char) -> &'s str {
 /// # Safety
 #[inline]
 pub unsafe fn str_from_c_ptr_opt<'s>(ptr: *const libc::c_char) -> Option<&'s str> {
-    if ptr.is_null() {
-        None
-    } else {
-        Some(str_from_c_ptr(ptr))
-    }
+    if ptr.is_null() { None } else { Some(str_from_c_ptr(ptr)) }
 }
 
 // 使用示例

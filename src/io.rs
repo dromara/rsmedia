@@ -69,10 +69,7 @@ impl<'a> ReaderBuilder<'a> {
                 source: self.source,
             }),
             Some(options) => Ok(Reader {
-                input: Self::input_with_dictionary(
-                    &self.source.as_path(),
-                    options.clone().to_dict(),
-                )?,
+                input: Self::input_with_dictionary(&self.source.as_path(), options.clone().to_dict())?,
                 source: self.source,
             }),
         }
@@ -83,12 +80,9 @@ impl<'a> ReaderBuilder<'a> {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
 
-            match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut())
-            {
+            match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut()) {
                 0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
-                    r if r >= 0 => Ok(AVFormatContextInput::from_raw(
-                        ptr::NonNull::new(ps).unwrap(),
-                    )),
+                    r if r >= 0 => Ok(AVFormatContextInput::from_raw(ptr::NonNull::new(ps).unwrap())),
                     e => {
                         ffi::avformat_close_input(&mut ps);
                         Err(Error::new(RsmpegError::from(e)))
@@ -107,18 +101,11 @@ impl<'a> ReaderBuilder<'a> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
-            let res = ffi::avformat_open_input(
-                &mut ps,
-                path.as_ptr(),
-                ptr::null_mut(),
-                options.as_mut_ptr() as *mut _,
-            );
+            let res = ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), options.as_mut_ptr() as *mut _);
 
             match res {
                 0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
-                    r if r >= 0 => Ok(AVFormatContextInput::from_raw(
-                        ptr::NonNull::new(ps).unwrap(),
-                    )),
+                    r if r >= 0 => Ok(AVFormatContextInput::from_raw(ptr::NonNull::new(ps).unwrap())),
                     e => {
                         ffi::avformat_close_input(&mut ps);
                         Err(Error::new(RsmpegError::from(e)))
@@ -208,8 +195,7 @@ impl Reader {
         let timestamp = CONVERSION_FACTOR * timestamp_milliseconds;
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
 
-        self._seek(timestamp, range)
-            .context("Failed to seek in reader")?;
+        self._seek(timestamp, range).context("Failed to seek in reader")?;
 
         Ok(())
     }
@@ -231,8 +217,7 @@ impl Reader {
     /// Seek to start of reader. This function performs best effort seeking to the start of the
     /// file.
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self._seek(i64::MIN, ..)
-            .context("Failed to seek to start of reader")?;
+        self._seek(i64::MIN, ..).context("Failed to seek to start of reader")?;
         Ok(())
     }
 
@@ -262,9 +247,7 @@ impl Reader {
         Ok(self
             .input
             .find_best_stream(ffi::AVMEDIA_TYPE_VIDEO)?
-            .ok_or(RsmpegError::FindStreamInfoError(
-                ffi::AVERROR_STREAM_NOT_FOUND,
-            ))?
+            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?
             .0)
     }
 }
@@ -332,11 +315,7 @@ impl<'a> WriterBuilder<'a> {
                 destination: self.destination,
             }),
             (Some(format), Some(options)) => Ok(Writer {
-                output: Self::output_as_with(
-                    &self.destination.as_path(),
-                    format,
-                    options.clone().to_dict(),
-                )?,
+                output: Self::output_as_with(&self.destination.as_path(), format, options.clone().to_dict())?,
                 destination: self.destination,
             }),
         }
@@ -347,20 +326,9 @@ impl<'a> WriterBuilder<'a> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
-            match ffi::avformat_alloc_output_context2(
-                &mut ps,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-            ) {
-                0 => match ffi::avio_open(
-                    &mut (*ps).pb,
-                    path.as_ptr(),
-                    ffi::AVIO_FLAG_WRITE as c_int,
-                ) {
-                    0 => Ok(AVFormatContextOutput::from_raw(
-                        std::ptr::NonNull::new(ps).unwrap(),
-                    )),
+            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
+                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as c_int) {
+                    0 => Ok(AVFormatContextOutput::from_raw(std::ptr::NonNull::new(ps).unwrap())),
                     e => Err(Error::new(RsmpegError::from(e))),
                 },
                 e => Err(Error::new(RsmpegError::from(e))),
@@ -368,20 +336,12 @@ impl<'a> WriterBuilder<'a> {
         }
     }
 
-    pub fn output_with<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        mut options: AVDictionary,
-    ) -> Result<AVFormatContextOutput> {
+    pub fn output_with<P: AsRef<Path> + ?Sized>(path: &P, mut options: AVDictionary) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
 
-            match ffi::avformat_alloc_output_context2(
-                &mut ps,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-            ) {
+            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
                 0 => {
                     let res = ffi::avio_open2(
                         &mut (*ps).pb,
@@ -392,9 +352,7 @@ impl<'a> WriterBuilder<'a> {
                     );
 
                     match res {
-                        0 => Ok(AVFormatContextOutput::from_raw(
-                            ptr::NonNull::new(ps).unwrap(),
-                        )),
+                        0 => Ok(AVFormatContextOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
                         e => Err(Error::new(RsmpegError::from(e))),
                     }
                 }
@@ -404,29 +362,15 @@ impl<'a> WriterBuilder<'a> {
         }
     }
 
-    pub fn output_as<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        format: &str,
-    ) -> Result<AVFormatContextOutput> {
+    pub fn output_as<P: AsRef<Path> + ?Sized>(path: &P, format: &str) -> Result<AVFormatContextOutput> {
         unsafe {
             let mut ps = ptr::null_mut();
             let path = utils::from_path(path);
             let format = CString::new(format)?;
 
-            match ffi::avformat_alloc_output_context2(
-                &mut ps,
-                ptr::null_mut(),
-                format.as_ptr(),
-                path.as_ptr(),
-            ) {
-                0 => match ffi::avio_open(
-                    &mut (*ps).pb,
-                    path.as_ptr(),
-                    ffi::AVIO_FLAG_WRITE as c_int,
-                ) {
-                    0 => Ok(AVFormatContextOutput::from_raw(
-                        ptr::NonNull::new(ps).unwrap(),
-                    )),
+            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), format.as_ptr(), path.as_ptr()) {
+                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as c_int) {
+                    0 => Ok(AVFormatContextOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
                     e => Err(Error::new(RsmpegError::from(e))),
                 },
 
@@ -445,12 +389,7 @@ impl<'a> WriterBuilder<'a> {
             let path = utils::from_path(path);
             let format = CString::new(format)?;
 
-            match ffi::avformat_alloc_output_context2(
-                &mut ps,
-                ptr::null_mut(),
-                format.as_ptr(),
-                path.as_ptr(),
-            ) {
+            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), format.as_ptr(), path.as_ptr()) {
                 0 => {
                     let res = ffi::avio_open2(
                         &mut (*ps).pb,
@@ -461,9 +400,7 @@ impl<'a> WriterBuilder<'a> {
                     );
 
                     match res {
-                        0 => Ok(AVFormatContextOutput::from_raw(
-                            ptr::NonNull::new(ps).unwrap(),
-                        )),
+                        0 => Ok(AVFormatContextOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
                         e => Err(Error::new(RsmpegError::from(e))),
                     }
                 }
@@ -532,10 +469,7 @@ impl<'a> BufWriterBuilder<'a> {
     ///
     /// * `format` - Container format to use.
     pub fn new(format: &'a str) -> Self {
-        Self {
-            format,
-            options: None,
-        }
+        Self { format, options: None }
     }
 
     /// Specify options for the backend.
@@ -616,10 +550,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     ///
     /// * `format` - Container format to use.
     pub fn new(format: &'a str) -> Self {
-        Self {
-            format,
-            options: None,
-        }
+        Self { format, options: None }
     }
 
     /// Specify options for the backend.
@@ -731,9 +662,7 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            self.output
-                .write_header(&mut None)
-                .context("Failed to write header")?;
+            self.output.write_header(&mut None).context("Failed to write header")?;
             Ok(())
         }
 
@@ -754,9 +683,7 @@ pub(crate) mod private {
         }
 
         fn write_trailer(&mut self) -> Result<()> {
-            self.output
-                .write_trailer()
-                .context("Failed to write trailer")?;
+            self.output.write_trailer().context("Failed to write trailer")?;
             Ok(())
         }
     }
@@ -766,8 +693,7 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            self.output
-                .write_header(&mut Some(self.options.clone().to_dict()))?;
+            self.output.write_header(&mut Some(self.options.clone().to_dict()))?;
             Ok(self.end_write())
         }
 
@@ -797,8 +723,7 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            self.output
-                .write_header(&mut Some(self.options.clone().to_dict()))?;
+            self.output.write_header(&mut Some(self.options.clone().to_dict()))?;
             self.end_write();
             Ok(self.take_buffers())
         }
@@ -946,8 +871,7 @@ pub(crate) fn output_raw_buf_end(output: &mut AVFormatContextOutput) -> Vec<u8> 
         // `buffer_raw` through a ptr ptr. It also returns the size of that buffer.
         let output_pb = (*output.as_mut_ptr()).pb;
         let mut buffer_raw: *mut u8 = std::ptr::null_mut();
-        let buffer_size =
-            ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
+        let buffer_size = ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
 
         // Reset the `pb` field or `avformat_close` will try to free it!
         (*output.as_mut_ptr()).pb = std::ptr::null_mut::<ffi::AVIOContext>();
@@ -1003,9 +927,7 @@ pub fn output_raw_packetized_buf_start(
             // what verion we're dealing with, this trick will convert to the either the signature
             // where the buffer argument is `*const u8` or `*mut u8`.
             #[allow(clippy::missing_transmute_annotations)]
-            Some(std::mem::transmute::<*const (), _>(
-                output_raw_buf_start_callback as _,
-            )),
+            Some(std::mem::transmute::<*const (), _>(output_raw_buf_start_callback as _)),
             // No `seek`.
             None,
         );
@@ -1073,11 +995,7 @@ pub fn init_logging() {
 
 /// Passthrough function that is passed to `libavformat` in `avio_alloc_context` and pushes buffers
 /// from a packetized stream onto the packet buffer held in `opaque`.
-extern "C" fn output_raw_buf_start_callback(
-    opaque: *mut std::ffi::c_void,
-    buffer: *const u8,
-    buffer_size: i32,
-) -> i32 {
+extern "C" fn output_raw_buf_start_callback(opaque: *mut std::ffi::c_void, buffer: *const u8, buffer_size: i32) -> i32 {
     unsafe {
         // Acquire a reference to the packet buffer transmuted from the `opaque` gotten through
         // `libavformat`.

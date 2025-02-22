@@ -75,12 +75,7 @@ impl<'a> DecoderBuilder<'a> {
         );
 
         Ok(Decoder {
-            decoder: DecoderSplit::new(
-                &reader,
-                reader_stream_index,
-                self.resize,
-                self.hw_device_type,
-            )?,
+            decoder: DecoderSplit::new(&reader, reader_stream_index, self.resize, self.hw_device_type)?,
             reader,
             reader_stream_index,
             draining: false,
@@ -132,13 +127,8 @@ impl Decoder {
             .input
             .streams()
             .get(self.reader_stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(
-                ffi::AVERROR_STREAM_NOT_FOUND,
-            ))?;
-        Ok(Time::new(
-            Some(reader_stream.duration),
-            reader_stream.time_base.into(),
-        ))
+            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
+        Ok(Time::new(Some(reader_stream.duration), reader_stream.time_base.into()))
     }
 
     /// Number of frames in the decoder stream.
@@ -149,9 +139,7 @@ impl Decoder {
             .input
             .streams()
             .get(self.reader_stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(
-                ffi::AVERROR_STREAM_NOT_FOUND,
-            ))?
+            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?
             .nb_frames
             .max(0) as u64)
     }
@@ -296,9 +284,7 @@ impl Decoder {
     /// See [`Reader::seek_to_start`](crate::io::Reader::seek_to_start) for more information.
     #[inline]
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self.reader
-            .seek_to_start()
-            .inspect(|_| self.decoder.flush())
+        self.reader.seek_to_start().inspect(|_| self.decoder.flush())
     }
 
     /// Split the decoder into a decoder (of type [`DecoderSplit`]) and a [`Reader`].
@@ -374,12 +360,14 @@ impl DecoderSplit {
         resize: Option<Resize>,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
-        let reader_stream = reader.input.streams().get(reader_stream_index).ok_or(
-            RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND),
-        )?;
+        let reader_stream = reader
+            .input
+            .streams()
+            .get(reader_stream_index)
+            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
 
-        let decoder = AVCodec::find_decoder(reader_stream.codecpar().codec_id)
-            .context("Failed to find decoder for stream")?;
+        let decoder =
+            AVCodec::find_decoder(reader_stream.codecpar().codec_id).context("Failed to find decoder for stream")?;
 
         let mut decode_ctx = AVCodecContext::new(&decoder);
         decode_ctx.set_time_base(reader_stream.time_base);
@@ -395,9 +383,7 @@ impl DecoderSplit {
             None => None,
         };
 
-        decode_ctx
-            .open(None)
-            .context("Failed to open decoder for stream")?;
+        decode_ctx.open(None).context("Failed to open decoder for stream")?;
 
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize

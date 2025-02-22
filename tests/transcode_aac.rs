@@ -20,8 +20,8 @@ const OUTPUT_BIT_RATE: i64 = 96000;
 const OUTPUT_CHANNELS: i32 = 2;
 
 fn open_input_file(input_file: &CStr) -> Result<(AVFormatContextInput, AVCodecContext, usize)> {
-    let input_format_context = AVFormatContextInput::open(input_file, None, &mut None)
-        .context("Could not open input file")?;
+    let input_format_context =
+        AVFormatContextInput::open(input_file, None, &mut None).context("Could not open input file")?;
     let (audio_index, decoder) = input_format_context
         .find_best_stream(ffi::AVMEDIA_TYPE_AUDIO)?
         .context("Failed to find audio stream")?;
@@ -29,9 +29,7 @@ fn open_input_file(input_file: &CStr) -> Result<(AVFormatContextInput, AVCodecCo
     let stream = &input_format_context.streams()[audio_index];
     let mut decode_context = AVCodecContext::new(&decoder);
     decode_context.apply_codecpar(&stream.codecpar())?;
-    decode_context
-        .open(None)
-        .context("Could not open input codec")?;
+    decode_context.open(None).context("Could not open input codec")?;
     decode_context.set_pkt_timebase(stream.time_base);
     Ok((input_format_context, decode_context, audio_index))
 }
@@ -45,8 +43,7 @@ fn open_output_file(
         AVFormatContextOutput::create(output_file, None).context("Failed to open output file.")?;
 
     // Find the encoder to be used by its name.
-    let encode_codec =
-        AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).context("Failed to find aac encoder")?;
+    let encode_codec = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).context("Failed to find aac encoder")?;
 
     let mut encode_context = AVCodecContext::new(&encode_codec);
 
@@ -71,10 +68,7 @@ fn open_output_file(
     Ok((output_format_context, encode_context))
 }
 
-fn init_resampler(
-    decode_context: &mut AVCodecContext,
-    encode_context: &mut AVCodecContext,
-) -> Result<SwrContext> {
+fn init_resampler(decode_context: &mut AVCodecContext, encode_context: &mut AVCodecContext) -> Result<SwrContext> {
     let mut resample_context = SwrContext::new(
         &encode_context.ch_layout,
         encode_context.sample_fmt,
@@ -84,20 +78,13 @@ fn init_resampler(
         decode_context.sample_rate,
     )
     .context("Could not allocate resample context")?;
-    resample_context
-        .init()
-        .context("Could not open resample context")?;
+    resample_context.init().context("Could not open resample context")?;
     Ok(resample_context)
 }
 
-fn add_samples_to_fifo(
-    fifo: &mut AVAudioFifo,
-    samples_buffer: &AVSamples,
-    frame_size: i32,
-) -> Result<()> {
+fn add_samples_to_fifo(fifo: &mut AVAudioFifo, samples_buffer: &AVSamples, frame_size: i32) -> Result<()> {
     fifo.realloc(fifo.size() + frame_size);
-    unsafe { fifo.write(samples_buffer.audio_data.as_ptr(), frame_size) }
-        .context("Could not write data to FIFO")?;
+    unsafe { fifo.write(samples_buffer.audio_data.as_ptr(), frame_size) }.context("Could not write data to FIFO")?;
     Ok(())
 }
 
@@ -113,9 +100,7 @@ fn init_output_frame(
     frame.set_format(sample_fmt);
     frame.set_sample_rate(sample_rate);
 
-    frame
-        .get_buffer(0)
-        .context("Could not allocate output frame samples")?;
+    frame.get_buffer(0).context("Could not allocate output frame samples")?;
 
     Ok(frame)
 }
@@ -170,22 +155,16 @@ fn load_encode_and_write(
 
 fn transcode_aac(input_file: &CStr, output_file: &CStr) -> Result<()> {
     // Open the input file for reading.
-    let (mut input_format_context, mut decode_context, audio_stream_index) =
-        open_input_file(input_file)?;
+    let (mut input_format_context, mut decode_context, audio_stream_index) = open_input_file(input_file)?;
 
     // Open the output file for writing.
-    let (mut output_format_context, mut encode_context) =
-        open_output_file(output_file, &decode_context)?;
+    let (mut output_format_context, mut encode_context) = open_output_file(output_file, &decode_context)?;
 
     // Initialize the resampler to be able to convert audio sample formats.
     let mut resample_context = init_resampler(&mut decode_context, &mut encode_context)?;
 
     // Initialize the FIFO buffer to store audio samples to be encoded.
-    let mut fifo = AVAudioFifo::new(
-        encode_context.sample_fmt,
-        encode_context.ch_layout.nb_channels,
-        1,
-    );
+    let mut fifo = AVAudioFifo::new(encode_context.sample_fmt, encode_context.ch_layout.nb_channels, 1);
 
     // Write the header of the output file container.
     output_format_context
@@ -204,10 +183,7 @@ fn transcode_aac(input_file: &CStr, output_file: &CStr) -> Result<()> {
             }
 
             // Break when no more input packets.
-            let packet = match input_format_context
-                .read_packet()
-                .context("Could not read frame")?
-            {
+            let packet = match input_format_context.read_packet().context("Could not read frame")? {
                 Some(x) => x,
                 None => break,
             };

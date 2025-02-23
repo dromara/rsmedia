@@ -7,18 +7,18 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::time::Time;
-use crate::{Rational, RawFrame};
-
+use crate::{Rational, RawFrame, utils};
 use anyhow::{Context, Error, Result};
-use rsmpeg::avcodec::{AVCodec, AVCodecContext};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
     source: Location,
-    options: Option<&'a Options>,
     resize: Option<Resize>,
+    codec_name: Option<String>,
+    options: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
@@ -29,10 +29,18 @@ impl<'a> DecoderBuilder<'a> {
     pub fn new(source: impl Into<Location>) -> Self {
         Self {
             source: source.into(),
-            options: None,
             resize: None,
+            options: None,
+            codec_name: None,
             hw_device_type: None,
         }
+    }
+
+    /// Set the codec name to use for decoding.
+    /// If not set, the decoder will try to guess the codec based on the input.
+    pub fn with_codec_name(mut self, codec_name: String) -> Self {
+        self.codec_name = Some(codec_name);
+        self
     }
 
     /// Set custom options. Options are applied to the input.
@@ -66,18 +74,28 @@ impl<'a> DecoderBuilder<'a> {
             reader_builder = reader_builder.with_options(options);
         }
         let reader = reader_builder.build().unwrap();
-        let reader_stream_index = reader.best_video_stream_index()?;
-        let stream_info = reader.stream_info(reader_stream_index)?;
+        let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
+        let stream_info = reader.stream_info(video_stream_index)?;
         tracing::info!(
-            "decoder stream index: {} stream_info: {}",
-            reader_stream_index,
+            "decoder video stream index: {} stream_info: {}",
+            video_stream_index,
             stream_info
         );
 
+        let codec = {
+            let codec_name = if let Some(ref codec_name) = self.codec_name {
+                codec_name.as_str()
+            } else {
+                codec_name.as_str()
+            };
+            AVCodec::find_decoder_by_name(&utils::from_str(codec_name))
+                .context(format!("Failed to find decoder by codec name: '{}'", codec_name))?
+        };
+
         Ok(Decoder {
-            decoder: DecoderSplit::new(&reader, reader_stream_index, self.resize, self.hw_device_type)?,
+            decoder: DecoderSplit::new(&reader, video_stream_index, codec, self.resize, self.hw_device_type)?,
             reader,
-            reader_stream_index,
+            stream_index: video_stream_index,
             draining: false,
         })
     }
@@ -98,7 +116,7 @@ impl<'a> DecoderBuilder<'a> {
 pub struct Decoder {
     decoder: DecoderSplit,
     reader: Reader,
-    reader_stream_index: usize,
+    stream_index: usize,
     draining: bool,
 }
 
@@ -126,7 +144,7 @@ impl Decoder {
             .reader
             .input
             .streams()
-            .get(self.reader_stream_index)
+            .get(self.stream_index)
             .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
         Ok(Time::new(Some(reader_stream.duration), reader_stream.time_base.into()))
     }
@@ -138,7 +156,7 @@ impl Decoder {
             .reader
             .input
             .streams()
-            .get(self.reader_stream_index)
+            .get(self.stream_index)
             .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?
             .nb_frames
             .max(0) as u64)
@@ -181,7 +199,7 @@ impl Decoder {
     pub fn decode(&mut self) -> Result<(Time, FrameArray)> {
         Ok(loop {
             if !self.draining {
-                match self.reader.read(self.reader_stream_index) {
+                match self.reader.read(self.stream_index) {
                     Ok(packet) => match self.decoder.decode(packet) {
                         Ok(Some(frame)) => break frame,
                         Ok(None) => {}
@@ -227,7 +245,7 @@ impl Decoder {
     pub fn decode_raw(&mut self) -> Result<RawFrame> {
         Ok(loop {
             if !self.draining {
-                match self.reader.read(self.reader_stream_index) {
+                match self.reader.read(self.stream_index) {
                     Ok(packet) => match self.decoder.decode_raw(packet) {
                         Ok(Some(frame)) => break frame,
                         Ok(None) => {}
@@ -297,7 +315,7 @@ impl Decoder {
     /// Tuple of the [`DecoderSplit`], [`Reader`] and the reader stream index.
     #[inline]
     pub fn into_parts(self) -> (DecoderSplit, Reader, usize) {
-        (self.decoder, self.reader, self.reader_stream_index)
+        (self.decoder, self.reader, self.stream_index)
     }
 
     /// Get the decoders input size (resolution dimensions): width and height.
@@ -319,7 +337,7 @@ impl Decoder {
             .reader
             .input
             .streams()
-            .get(self.reader_stream_index)
+            .get(self.stream_index)
             .map(|stream| Rational::from(stream.r_frame_rate));
 
         if let Some(frame_rate) = frame_rate {
@@ -356,20 +374,18 @@ impl DecoderSplit {
     /// * `resize` - Optional resize strategy to apply to frames.
     pub fn new(
         reader: &Reader,
-        reader_stream_index: usize,
+        stream_index: usize,
+        codec: AVCodecRef,
         resize: Option<Resize>,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
         let reader_stream = reader
             .input
             .streams()
-            .get(reader_stream_index)
+            .get(stream_index)
             .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
 
-        let decoder =
-            AVCodec::find_decoder(reader_stream.codecpar().codec_id).context("Failed to find decoder for stream")?;
-
-        let mut decode_ctx = AVCodecContext::new(&decoder);
+        let mut decode_ctx = AVCodecContext::new(&codec);
         decode_ctx.set_time_base(reader_stream.time_base);
         decode_ctx.apply_codecpar(&reader_stream.codecpar())?;
         let (width, height) = (decode_ctx.width, decode_ctx.height);

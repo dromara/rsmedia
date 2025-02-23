@@ -9,7 +9,7 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::pixel::PixelFormat;
 use crate::time::Time;
-use crate::{Rational, RawFrame};
+use crate::{Rational, RawFrame, utils};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::avutil::{self, AVPixelFormat};
@@ -18,7 +18,6 @@ use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
 use libc::c_uint;
-use std::ffi::CString;
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
@@ -172,11 +171,7 @@ impl Encoder {
         let global_header = AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
             .contains(AvFormatFlags::GLOBAL_HEADER);
 
-        let codec = match settings.codec() {
-            None => return Err(Error::msg("Invalid codec parameters.")),
-            Some(c) => c,
-        };
-        let mut encode_ctx = AVCodecContext::new(&codec);
+        let mut encode_ctx = AVCodecContext::new(&settings.codec());
 
         // Some formats require this flag to be set or the output will
         // not be playable by dumb players.
@@ -673,13 +668,16 @@ impl Settings {
         self.options.clone()
     }
 
-    /// Get codec.
-    pub fn codec(&self) -> Option<AVCodecRef> {
-        // Try to use the default libx264 encoder
-        match &self.codec_name {
-            Some(codec) => AVCodec::find_encoder_by_name(&CString::new(codec.to_string()).unwrap()),
-            None => AVCodec::find_encoder_by_name(&CString::new(Self::CODEC_NAME).unwrap()),
-        }
+    /// Get codec, or Try to use the default codec libx264 if none specified.
+    pub fn codec(&self) -> AVCodecRef {
+        let codec_name = if let Some(codec_name) = &self.codec_name {
+            codec_name.as_ref()
+        } else {
+            Self::CODEC_NAME
+        };
+        AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
+            .context(format!("Failed to find encoder for codec {}", codec_name))
+            .unwrap()
     }
 
     /// Apply the settings to an encoder.

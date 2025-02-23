@@ -23,7 +23,7 @@ pub fn str_opt<S: AsRef<str> + ?Sized>(s: Option<&S>) -> Option<CString> {
 
 /// 从 CStr 转换为 String，提供默认值
 pub fn to_string(s: &CStr) -> String {
-    s.to_str().map(String::from).unwrap_or_default()
+    s.to_str().map(String::from).unwrap()
 }
 
 #[cfg(unix)]

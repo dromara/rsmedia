@@ -538,7 +538,6 @@ impl DecoderSplit {
                         };
                         Ok(f)
                     } else {
-                        println!("Not hardware decoding, or not applicable");
                         tracing::debug!("Hardware decoding not available or not applicable");
                         Ok(Some(frame))
                     }

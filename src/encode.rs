@@ -83,7 +83,7 @@ impl<'a> EncoderBuilder<'a> {
 
     /// Set interleaved. This will cause the encoder to use interleaved write instead of normal
     /// write.
-    pub fn interleaved(mut self) -> Self {
+    pub fn with_interleaved(mut self) -> Self {
         self.interleaved = true;
         self
     }
@@ -306,7 +306,6 @@ impl Encoder {
                     if hw_ctx.is_hw_frame(&frame) {
                         frame
                     } else {
-                        println!("Uploading frame to hardware memory...");
                         hw_ctx
                             .upload_frame(&mut self.encoder, &frame)
                             .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?
@@ -404,8 +403,9 @@ impl Encoder {
     ///
     /// * `packet` - Encoded packet.
     fn write(&mut self, mut packet: Packet) -> Result<()> {
-        packet.set_stream_index(self.writer_stream_index);
         packet.set_pos(-1);
+        packet.set_pts(packet.dts());
+        packet.set_stream_index(self.writer_stream_index);
         packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {
             self.writer.write_interleaved(&mut packet)?;
@@ -458,7 +458,8 @@ impl Encoder {
          - Dimensions: {}x{}\n\
          - Format: {}\n\
          - PTS: {}\n\
-         - Packet Duration: {}\n\
+         - Packet DTS: {}\n\
+         - Packet POS: {}\n\
          - Time Base: {}\n\
          - Linesize: [{}, {}, {}, {}]\n\
          - Key Frame: {}\n\
@@ -480,6 +481,7 @@ impl Encoder {
             frame.height,
             frame.format,
             frame.pts,
+            frame.pkt_dts,
             frame.pkt_pos,
             time_base_str,
             frame.linesize[0],
@@ -539,7 +541,7 @@ impl Settings {
 
     /// This is the assumed FPS for the encoder to use. Note that this does not need to be correct
     /// exactly.
-    const FRAME_RATE: i32 = 30;
+    const FRAME_RATE: i32 = 24;
 
     /// Default bit rate.
     /// 分辨率(width, height) + 推荐比特率（单位：bps）

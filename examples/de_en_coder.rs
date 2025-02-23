@@ -1,15 +1,23 @@
-use rsmedia::EncoderBuilder;
-use rsmedia::decode::Decoder;
 use rsmedia::encode::Settings;
+use rsmedia::hwaccel::HWDeviceType;
+use rsmedia::{DecoderBuilder, EncoderBuilder, Options, Resize};
 use std::path::Path;
 
 fn main() {
     let source = Path::new("/tmp/bear.mp4");
-    let mut decoder = Decoder::new(source).expect("failed to create decoder");
+    let mut decoder = DecoderBuilder::new(source)
+        .with_resize(Resize::Exact(320, 180))
+        .with_options(&Options::preset_h264())
+        .with_hardware_device(HWDeviceType::VIDEOTOOLBOX)
+        .build()
+        .expect("failed to create decoder");
 
-    let settings = Settings::preset_h264_yuv420p(320, 180, false);
+    let settings = Settings::preset_h264_yuv420p(320, 180, false).with_codec_name("h264_videotoolbox".to_string());
     let mut encoder = EncoderBuilder::new(Path::new("/tmp/output.mp4"), settings)
         .with_format("mp4")
+        .with_interleaved()
+        .with_options(&Options::preset_h264())
+        .with_hardware_device(HWDeviceType::VIDEOTOOLBOX)
         .build()
         .expect("failed to create encoder");
 

@@ -5,8 +5,8 @@ use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
 use crate::utils;
 
-use rsmpeg::avformat::AVFormatContextOutput;
 use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextURL, AVOutputFormat};
+use rsmpeg::avformat::{AVFormatContextOutput, AVInputFormat};
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::{UnsafeDerefMut, ffi};
@@ -75,7 +75,8 @@ impl<'a> ReaderBuilder<'a> {
 
     pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
-        Ok(AVFormatContextInput::open(&path, None, &mut None).unwrap())
+        let format_opt = AVInputFormat::find(&path);
+        Ok(AVFormatContextInput::open(&path, format_opt.as_deref(), &mut None).unwrap())
     }
 
     pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
@@ -83,7 +84,8 @@ impl<'a> ReaderBuilder<'a> {
         options: AVDictionary,
     ) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
-        Ok(AVFormatContextInput::open(&path, None, &mut Some(options)).unwrap())
+        let format_opt = AVInputFormat::find(&path);
+        Ok(AVFormatContextInput::open(&path, format_opt.as_deref(), &mut Some(options)).unwrap())
     }
 }
 
@@ -212,12 +214,23 @@ impl Reader {
     }
 
     /// Find the best video stream and return the index.
-    pub fn best_video_stream_index(&self) -> Result<usize> {
-        Ok(self
+    pub fn best_video_stream_index(&self) -> Result<(usize, String)> {
+        let res = self
             .input
             .find_best_stream(ffi::AVMEDIA_TYPE_VIDEO)?
-            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?
-            .0)
+            .map(|(index, codec)| (index, utils::to_string(codec.name())))
+            .ok_or(Error::msg("No video stream found"))?;
+        Ok(res)
+    }
+
+    /// Find the best audio stream and return the index.
+    pub fn best_audio_stream_index(&self) -> Result<(usize, String)> {
+        let res = self
+            .input
+            .find_best_stream(ffi::AVMEDIA_TYPE_AUDIO)?
+            .map(|(index, codec)| (index, utils::to_string(codec.name())))
+            .ok_or(Error::msg("No audio stream found"))?;
+        Ok(res)
     }
 }
 

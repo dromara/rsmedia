@@ -8,9 +8,8 @@ use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
-use std::marker::PhantomData;
-
 use libc::{c_int, c_uint};
+use std::marker::PhantomData;
 
 /// Represents a stream packet.
 #[derive(Debug)]
@@ -379,8 +378,8 @@ pub struct PacketIter<'a> {
     context: &'a mut AVFormatContextInput,
 }
 
-impl PacketIter<'_> {
-    pub fn new(context: &mut AVFormatContextInput) -> PacketIter {
+impl<'a> PacketIter<'a> {
+    pub fn new(context: &'a mut AVFormatContextInput) -> PacketIter<'a> {
         PacketIter { context }
     }
 }
@@ -389,16 +388,14 @@ impl<'a> Iterator for PacketIter<'a> {
     type Item = Result<(Stream<'a>, Packet), RsmpegError>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        let mut packet = Packet::empty();
-
-        match packet.read(self.context) {
-            Ok(..) => unsafe {
+        match self.context.read_packet() {
+            Ok(Some(pkt)) => unsafe {
                 Some(Ok((
-                    Stream::wrap(std::mem::transmute_copy(&self.context), packet.stream_index()),
-                    packet,
+                    Stream::wrap(std::mem::transmute_copy(&self.context), pkt.stream_index as usize),
+                    Packet::new_with_avpacket(pkt),
                 )))
             },
-            Err(RsmpegError::BufferSinkEofError) => None,
+            Ok(None) => None,
             Err(e) => Some(Err(e)),
         }
     }

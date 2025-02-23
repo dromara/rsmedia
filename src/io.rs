@@ -5,15 +5,13 @@ use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
 use crate::utils;
 
-use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::avformat::AVFormatContextOutput;
+use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextURL, AVOutputFormat};
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
-use rsmpeg::ffi;
+use rsmpeg::{UnsafeDerefMut, ffi};
 
 use anyhow::{Context, Error, Result};
-use libc::c_int;
-use std::ffi::CString;
 use std::ops::Bound;
 use std::path::Path;
 use std::ptr;
@@ -69,52 +67,23 @@ impl<'a> ReaderBuilder<'a> {
                 source: self.source,
             }),
             Some(options) => Ok(Reader {
-                input: Self::input_with_dictionary(&self.source.as_path(), options.clone().to_dict())?,
+                input: Self::input_with_dictionary(&self.source.as_path(), options.to_dict())?,
                 source: self.source,
             }),
         }
     }
 
     pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
-        unsafe {
-            let mut ps = ptr::null_mut();
-            let path = utils::from_path(path);
-
-            match ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), ptr::null_mut()) {
-                0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
-                    r if r >= 0 => Ok(AVFormatContextInput::from_raw(ptr::NonNull::new(ps).unwrap())),
-                    e => {
-                        ffi::avformat_close_input(&mut ps);
-                        Err(Error::new(RsmpegError::from(e)))
-                    }
-                },
-
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
+        let path = utils::from_path(path);
+        Ok(AVFormatContextInput::open(&path, None, &mut None).unwrap())
     }
 
     pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
         path: &P,
-        mut options: AVDictionary,
+        options: AVDictionary,
     ) -> Result<AVFormatContextInput> {
-        unsafe {
-            let mut ps = ptr::null_mut();
-            let path = utils::from_path(path);
-            let res = ffi::avformat_open_input(&mut ps, path.as_ptr(), ptr::null_mut(), options.as_mut_ptr() as *mut _);
-
-            match res {
-                0 => match ffi::avformat_find_stream_info(ps, ptr::null_mut()) {
-                    r if r >= 0 => Ok(AVFormatContextInput::from_raw(ptr::NonNull::new(ps).unwrap())),
-                    e => {
-                        ffi::avformat_close_input(&mut ps);
-                        Err(Error::new(RsmpegError::from(e)))
-                    }
-                },
-
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
+        let path = utils::from_path(path);
+        Ok(AVFormatContextInput::open(&path, None, &mut Some(options)).unwrap())
     }
 }
 
@@ -311,103 +280,80 @@ impl<'a> WriterBuilder<'a> {
                 destination: self.destination,
             }),
             (None, Some(options)) => Ok(Writer {
-                output: Self::output_with(&self.destination.as_path(), options.clone().to_dict())?,
+                output: Self::output_with(&self.destination.as_path(), options.to_dict())?,
                 destination: self.destination,
             }),
             (Some(format), Some(options)) => Ok(Writer {
-                output: Self::output_as_with(&self.destination.as_path(), format, options.clone().to_dict())?,
+                output: Self::output_as_with(&self.destination.as_path(), format, options.to_dict())?,
                 destination: self.destination,
             }),
         }
     }
 
     pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
-        // Ok(AVFormatContextOutput::create(&from_path(path), None)?)
-        unsafe {
-            let mut ps = ptr::null_mut();
-            let path = utils::from_path(path);
-            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
-                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as c_int) {
-                    0 => Ok(AVFormatContextOutput::from_raw(std::ptr::NonNull::new(ps).unwrap())),
-                    e => Err(Error::new(RsmpegError::from(e))),
-                },
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
+        let path = utils::from_path(path);
+        let ofctx = AVFormatContextOutput::create(&path, None).unwrap();
+        Ok(ofctx)
     }
 
-    pub fn output_with<P: AsRef<Path> + ?Sized>(path: &P, mut options: AVDictionary) -> Result<AVFormatContextOutput> {
-        unsafe {
-            let mut ps = ptr::null_mut();
-            let path = utils::from_path(path);
-
-            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), ptr::null(), path.as_ptr()) {
-                0 => {
-                    let res = ffi::avio_open2(
-                        &mut (*ps).pb,
-                        path.as_ptr(),
-                        ffi::AVIO_FLAG_WRITE as c_int,
-                        ptr::null(),
-                        options.as_mut_ptr() as *mut _,
-                    );
-
-                    match res {
-                        0 => Ok(AVFormatContextOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
-                        e => Err(Error::new(RsmpegError::from(e))),
-                    }
-                }
-
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
+    /// TODO: options
+    pub fn output_with<P: AsRef<Path> + ?Sized>(path: &P, _options: AVDictionary) -> Result<AVFormatContextOutput> {
+        let path = utils::from_path(path);
+        let ofctx = AVFormatContextOutput::create(&path, None).unwrap();
+        Ok(ofctx)
     }
 
     pub fn output_as<P: AsRef<Path> + ?Sized>(path: &P, format: &str) -> Result<AVFormatContextOutput> {
-        unsafe {
-            let mut ps = ptr::null_mut();
-            let path = utils::from_path(path);
-            let format = CString::new(format)?;
+        let path = utils::from_path(path);
+        let format = utils::from_str(format);
+        let ofmt = AVOutputFormat::guess_format(None, Some(&format), None);
+        let ofctx = unsafe {
+            let mut output_format_context = ptr::null_mut();
+            ffi::avformat_alloc_output_context2(
+                &mut output_format_context,
+                ofmt.map(|x| x.as_ptr()).unwrap_or_else(ptr::null) as _,
+                ptr::null_mut(),
+                path.as_ptr(),
+            );
 
-            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), format.as_ptr(), path.as_ptr()) {
-                0 => match ffi::avio_open(&mut (*ps).pb, path.as_ptr(), ffi::AVIO_FLAG_WRITE as c_int) {
-                    0 => Ok(AVFormatContextOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
-                    e => Err(Error::new(RsmpegError::from(e))),
-                },
+            let mut output_format_context =
+                AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());
+            let mut io_ctx = AVIOContextURL::open(&path, ffi::AVIO_FLAG_WRITE).unwrap();
+            output_format_context.deref_mut().pb = io_ctx.as_mut_ptr();
+            output_format_context.io_context = Some(AVIOContextContainer::Url(io_ctx));
+            output_format_context
+        };
 
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
+        Ok(ofctx)
     }
 
+    /// TODO: options
     pub fn output_as_with<P: AsRef<Path> + ?Sized>(
         path: &P,
         format: &str,
-        mut options: AVDictionary,
+        _options: AVDictionary,
     ) -> Result<AVFormatContextOutput> {
-        unsafe {
-            let mut ps = ptr::null_mut();
-            let path = utils::from_path(path);
-            let format = CString::new(format)?;
+        let path = utils::from_path(path);
+        let format = utils::from_str(format);
+        let ofmt = AVOutputFormat::guess_format(None, Some(&format), None);
+        let ofctx = unsafe {
+            let mut output_format_context = ptr::null_mut();
+            ffi::avformat_alloc_output_context2(
+                &mut output_format_context,
+                ofmt.map(|x| x.as_ptr()).unwrap_or_else(std::ptr::null) as _,
+                ptr::null_mut(),
+                path.as_ptr(),
+            );
 
-            match ffi::avformat_alloc_output_context2(&mut ps, ptr::null_mut(), format.as_ptr(), path.as_ptr()) {
-                0 => {
-                    let res = ffi::avio_open2(
-                        &mut (*ps).pb,
-                        path.as_ptr(),
-                        ffi::AVIO_FLAG_WRITE as c_int,
-                        ptr::null(),
-                        options.as_mut_ptr() as *mut _,
-                    );
+            let mut output_format_context =
+                AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());
+            let mut io_ctx = AVIOContextURL::open(&path, ffi::AVIO_FLAG_WRITE).unwrap();
+            output_format_context.deref_mut().pb = io_ctx.as_mut_ptr();
+            output_format_context.io_context = Some(AVIOContextContainer::Url(io_ctx));
+            output_format_context
+        };
 
-                    match res {
-                        0 => Ok(AVFormatContextOutput::from_raw(ptr::NonNull::new(ps).unwrap())),
-                        e => Err(Error::new(RsmpegError::from(e))),
-                    }
-                }
-
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
+        Ok(ofctx)
     }
 }
 
@@ -693,7 +639,7 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            self.output.write_header(&mut Some(self.options.clone().to_dict()))?;
+            self.output.write_header(&mut Some(self.options.to_dict()))?;
             Ok(self.end_write())
         }
 
@@ -723,7 +669,7 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            self.output.write_header(&mut Some(self.options.clone().to_dict()))?;
+            self.output.write_header(&mut Some(self.options.to_dict()))?;
             self.end_write();
             Ok(self.take_buffers())
         }

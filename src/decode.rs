@@ -145,7 +145,7 @@ impl Decoder {
             .input
             .streams()
             .get(self.stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
+            .ok_or(Error::msg(format!("stream: {} not found!", self.stream_index)))?;
         Ok(Time::new(Some(reader_stream.duration), reader_stream.time_base.into()))
     }
 
@@ -157,7 +157,7 @@ impl Decoder {
             .input
             .streams()
             .get(self.stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?
+            .ok_or(Error::msg(format!("stream: {} not found!", self.stream_index)))?
             .nb_frames
             .max(0) as u64)
     }
@@ -358,7 +358,7 @@ impl Decoder {
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
 pub struct DecoderSplit {
     decoder: AVCodecContext,
-    decoder_time_base: Rational,
+    time_base: Rational,
     hw_context: Option<HWContext>,
     size: (u32, u32),
     size_out: (u32, u32),
@@ -383,7 +383,7 @@ impl DecoderSplit {
             .input
             .streams()
             .get(stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
+            .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
 
         let mut decode_ctx = AVCodecContext::new(&codec);
         decode_ctx.set_time_base(reader_stream.time_base);
@@ -413,7 +413,7 @@ impl DecoderSplit {
 
         Ok(Self {
             decoder: decode_ctx,
-            decoder_time_base: reader_stream.time_base.into(),
+            time_base: reader_stream.time_base.into(),
             hw_context,
             size,
             size_out,
@@ -424,7 +424,7 @@ impl DecoderSplit {
     /// Get decoder time base.
     #[inline]
     pub fn time_base(&self) -> Rational {
-        self.decoder_time_base
+        self.time_base
     }
 
     /// Decode a [`Packet`].
@@ -532,7 +532,7 @@ impl DecoderSplit {
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
     fn send_packet_to_decoder(&mut self, packet: Packet) -> Result<()> {
         let (mut packet, packet_time_base) = packet.into_inner_parts();
-        packet.rescale_ts(packet_time_base.into(), self.decoder_time_base.into());
+        packet.rescale_ts(packet_time_base.into(), self.time_base().into());
 
         self.decoder.send_packet(Some(&packet))?;
 
@@ -579,7 +579,7 @@ impl DecoderSplit {
     fn raw_frame_to_time_and_frame(&self, frame: &mut RawFrame) -> Result<(Time, FrameArray)> {
         // We use the packet DTS here (which is `frame->pkt_dts`) because that is what the
         // encoder will use when encoding for the `PTS` field.
-        let timestamp = Time::new(Some(frame.pkt_dts), self.decoder_time_base);
+        let timestamp = Time::new(Some(frame.pkt_dts), self.time_base());
         // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
         // after I convert it, If you want RGB24, always remember to convert it yourself!
         let frame = frame::avframe_yuv_to_ndarray(frame).unwrap();

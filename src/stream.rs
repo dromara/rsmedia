@@ -6,10 +6,9 @@ use crate::packet::Packet;
 use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::avutil::AVDictionary;
-use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use libc::{c_int, c_uint};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -35,7 +34,7 @@ impl StreamInfo {
             .input
             .streams()
             .get(stream_index)
-            .ok_or(RsmpegError::FindStreamInfoError(ffi::AVERROR_STREAM_NOT_FOUND))?;
+            .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
 
         Self::from_params(stream.codecpar().to_owned(), stream.time_base.into(), stream_index)
     }
@@ -126,8 +125,8 @@ pub struct Stream<'a> {
     index: usize,
 }
 
-impl Stream<'_> {
-    pub fn wrap(context: &AVFormatContextInput, index: usize) -> Stream {
+impl<'a> Stream<'a> {
+    pub fn wrap(context: &'a AVFormatContextInput, index: usize) -> Stream<'a> {
         Stream { context, index }
     }
 

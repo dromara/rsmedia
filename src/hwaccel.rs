@@ -40,6 +40,16 @@ impl HWDeviceConfig {
     pub fn vaapi(device_path: Option<String>) -> Self {
         Self::new(HWDeviceType::VAAPI, PixelFormat::VAAPI, PixelFormat::NV12, device_path)
     }
+
+    /// 创建VDPAU配置
+    pub fn vdpau() -> Self {
+        Self::new(HWDeviceType::VDPAU, PixelFormat::VDPAU, PixelFormat::NV12, None)
+    }
+
+    /// 创建Vulkan配置
+    pub fn vulkan() -> Self {
+        Self::new(HWDeviceType::VULKAN, PixelFormat::VULKAN, PixelFormat::NV12, None)
+    }
 }
 
 pub struct HWContext {
@@ -223,25 +233,6 @@ impl HWContext {
             self.config.sw_pixel_format.into_raw()
         }
     }
-
-    pub fn find_hw_pix_fmt_with_codec(&self, codec: &AVCodec) -> Option<AVPixelFormat> {
-        let mut i = 0;
-        loop {
-            unsafe {
-                let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
-                if !hw_config.is_null() {
-                    let hw_config_supports_codec =
-                        (((*hw_config).methods) as i32 & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32) != 0;
-                    if hw_config_supports_codec && (*hw_config).device_type == self.config.device_type.into() {
-                        break Some((*hw_config).pix_fmt);
-                    }
-                } else {
-                    break None;
-                }
-            }
-            i += 1;
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -344,6 +335,25 @@ impl HWDeviceType {
             HWDeviceType::OPENCL | HWDeviceType::VULKAN => PixelFormat::RGBA,
             // 其他设备默认使用 NV12
             _ => PixelFormat::NV12,
+        }
+    }
+
+    pub fn find_hw_pixel_format_with_codec(&self, codec: &AVCodec) -> Option<AVPixelFormat> {
+        let mut i = 0;
+        loop {
+            unsafe {
+                let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
+                if !hw_config.is_null() {
+                    let hw_config_supports_codec =
+                        (((*hw_config).methods) as i32 & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32) != 0;
+                    if hw_config_supports_codec && (*hw_config).device_type == (*self).into() {
+                        break Some((*hw_config).pix_fmt);
+                    }
+                } else {
+                    break None;
+                }
+            }
+            i += 1;
         }
     }
 }

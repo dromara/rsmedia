@@ -76,11 +76,7 @@ impl<'a> DecoderBuilder<'a> {
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
         let stream_info = reader.stream_info(video_stream_index)?;
-        log::info!(
-            "decoder video stream index: {} stream_info: {}",
-            video_stream_index,
-            stream_info
-        );
+        log::info!("{}", stream_info);
 
         let codec = {
             let codec_name = if let Some(ref codec_name) = self.codec_name {

@@ -1,11 +1,10 @@
-use crate::Rational;
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::packet::Packet;
+use crate::{Rational, utils};
 
-use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
-use rsmpeg::avformat::AVFormatContextInput;
-use rsmpeg::avutil::AVDictionary;
+use rsmpeg::avformat::{AVFormatContextInput, AVStreamRef};
+use rsmpeg::avutil::{AVDictionary, AVMediaType};
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
@@ -17,9 +16,27 @@ use std::ops::Deref;
 /// purpose of transmuxing or transcoding.
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
+    /// Stream index
     pub index: usize,
-    codec_parameters: AVCodecParameters,
-    time_base: Rational,
+    /// Stream type video/audio/subtitle
+    pub stream_type: String,
+    /// Stream codec
+    pub codec: usize,
+    /// Pixel format / Sample format
+    pub format: isize,
+    /// time_base
+    pub time_base: Rational,
+    /// Video width
+    pub width: usize,
+    /// Video height
+    pub height: usize,
+    /// Video FPS
+    pub fps: f32,
+    /// Audio sample rate
+    pub sample_rate: isize,
+
+    /// Codec parameters
+    pub(crate) codec_parameters: *mut ffi::AVCodecParameters,
 }
 
 impl StreamInfo {
@@ -36,49 +53,73 @@ impl StreamInfo {
             .get(stream_index)
             .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
 
-        Self::from_params(stream.codecpar().to_owned(), stream.time_base.into(), stream_index)
+        Self::from_params(stream, stream_index)
     }
 
-    pub fn from_params(codecpar: AVCodecParameters, timebase: Rational, stream_index: usize) -> Result<Self> {
-        Ok(Self {
-            index: stream_index,
-            codec_parameters: codecpar,
-            time_base: timebase,
-        })
+    pub fn from_params(av_stream: &AVStreamRef, stream_index: usize) -> Result<Self> {
+        unsafe {
+            let stream = av_stream.deref();
+            let media_type = {
+                let media = AVMediaType((*stream.codecpar).codec_type);
+                if media.is_video() {
+                    "video"
+                } else if media.is_audio() {
+                    "audio"
+                } else if media.is_subtitle() {
+                    "subtitle"
+                } else if media.is_data() {
+                    "data"
+                } else {
+                    "unknown"
+                }
+            };
+            let codec = (*stream.codecpar).codec_id;
+            let pix_fmt = (*stream.codecpar).format;
+            let width = (*stream.codecpar).width;
+            let height = (*stream.codecpar).height;
+            let fps = ffi::av_q2d(stream.avg_frame_rate);
+            let sample_rate = (*stream.codecpar).sample_rate;
+
+            Ok(Self {
+                index: stream_index,
+                stream_type: media_type.to_string(),
+                codec: codec as usize,
+                format: pix_fmt as isize,
+                time_base: stream.time_base.into(),
+                width: width as usize,
+                height: height as usize,
+                fps: fps as f32,
+                sample_rate: sample_rate as isize,
+                codec_parameters: stream.codecpar,
+            })
+        }
     }
 
     /// Turn information back into parts for usage.
     ///
     /// Note: Consumes stream information object.
-    ///
-    /// # Return value
-    ///
-    /// A tuple consisting of:
-    /// * The stream index.
-    /// * Codec parameters.
-    /// * Original stream time base.
     #[allow(unused)]
-    pub(crate) fn into_parts(self) -> (usize, AVCodecParameters, Rational) {
+    pub(crate) fn into_parts(self) -> (usize, *mut ffi::AVCodecParameters, Rational) {
         (self.index, self.codec_parameters, self.time_base)
     }
 }
 
 impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let codec = {
-            let mut c = AVCodec::find_encoder(self.codec_parameters.codec_id);
-            if c.is_none() {
-                c = AVCodec::find_decoder(self.codec_parameters.codec_id);
+        let codec_name = unsafe { utils::from_cstr(ffi::avcodec_get_name(self.codec as c_uint)) };
+        let pix_fmt = unsafe {
+            if self.stream_type.eq_ignore_ascii_case("video") {
+                utils::from_cstr(ffi::av_get_pix_fmt_name(self.format as c_int))
+            } else if self.stream_type.eq_ignore_ascii_case("audio") {
+                utils::from_cstr(ffi::av_get_sample_fmt_name(self.format as c_int))
+            } else {
+                "unknown"
             }
-            c.unwrap()
         };
         write!(
             f,
-            "StreamInfo {{ index: {}, codec: {}:{}, time_base: {} }}",
-            self.index,
-            codec.name().to_str().unwrap(),
-            codec.long_name().to_str().unwrap(),
-            self.time_base
+            "{} #{}: codec={},size={}x{},fps={:.3},pix_fmt={}",
+            self.stream_type, self.index, codec_name, self.width, self.height, self.fps, pix_fmt,
         )
     }
 }

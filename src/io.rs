@@ -66,8 +66,9 @@ impl<'a> ReaderBuilder<'a> {
                 input: Self::input(&self.source.as_path())?,
                 source: self.source,
             }),
-            Some(options) => Ok(Reader {
-                input: Self::input_with_dictionary(&self.source.as_path(), options.to_dict())?,
+            // TODO: options
+            Some(_options) => Ok(Reader {
+                input: Self::input_with_dictionary(&self.source.as_path(), &mut None)?,
                 source: self.source,
             }),
         }
@@ -81,11 +82,11 @@ impl<'a> ReaderBuilder<'a> {
 
     pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
         path: &P,
-        options: AVDictionary,
+        options: &mut Option<AVDictionary>,
     ) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
         let format_opt = AVInputFormat::find(&path);
-        Ok(AVFormatContextInput::open(&path, format_opt.as_deref(), &mut Some(options)).unwrap())
+        Ok(AVFormatContextInput::open(&path, format_opt.as_deref(), options).unwrap())
     }
 }
 
@@ -296,12 +297,14 @@ impl<'a> WriterBuilder<'a> {
                 output: Self::output_as(&self.destination.as_path(), format)?,
                 destination: self.destination,
             }),
-            (None, Some(options)) => Ok(Writer {
-                output: Self::output_with(&self.destination.as_path(), options.to_dict())?,
+            (None, Some(_options)) => Ok(Writer {
+                // TODO: options
+                output: Self::output_with(&self.destination.as_path(), None)?,
                 destination: self.destination,
             }),
-            (Some(format), Some(options)) => Ok(Writer {
-                output: Self::output_as_with(&self.destination.as_path(), format, options.to_dict())?,
+            (Some(format), Some(_options)) => Ok(Writer {
+                // TODO: options
+                output: Self::output_as_with(&self.destination.as_path(), format, None)?,
                 destination: self.destination,
             }),
         }
@@ -314,7 +317,10 @@ impl<'a> WriterBuilder<'a> {
     }
 
     /// TODO: options
-    pub fn output_with<P: AsRef<Path> + ?Sized>(path: &P, _options: AVDictionary) -> Result<AVFormatContextOutput> {
+    pub fn output_with<P: AsRef<Path> + ?Sized>(
+        path: &P,
+        _options: Option<AVDictionary>,
+    ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let ofctx = AVFormatContextOutput::create(&path, None).unwrap();
         Ok(ofctx)
@@ -328,9 +334,9 @@ impl<'a> WriterBuilder<'a> {
             let mut output_format_context = ptr::null_mut();
             ffi::avformat_alloc_output_context2(
                 &mut output_format_context,
-                ofmt.map(|x| x.as_ptr()).unwrap_or_else(ptr::null) as _,
+                ofmt.map(|x| x.as_ptr()).unwrap_or_else(ptr::null),
                 ptr::null_mut(),
-                path.as_ptr(),
+                path.as_c_str().as_ptr(),
             );
 
             let mut output_format_context =
@@ -348,7 +354,7 @@ impl<'a> WriterBuilder<'a> {
     pub fn output_as_with<P: AsRef<Path> + ?Sized>(
         path: &P,
         format: &str,
-        _options: AVDictionary,
+        _options: Option<AVDictionary>,
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
@@ -357,9 +363,9 @@ impl<'a> WriterBuilder<'a> {
             let mut output_format_context = ptr::null_mut();
             ffi::avformat_alloc_output_context2(
                 &mut output_format_context,
-                ofmt.map(|x| x.as_ptr()).unwrap_or_else(std::ptr::null) as _,
+                ofmt.map(|x| x.as_ptr()).unwrap_or_else(ptr::null),
                 ptr::null_mut(),
-                path.as_ptr(),
+                path.as_c_str().as_ptr(),
             );
 
             let mut output_format_context =
@@ -474,6 +480,7 @@ impl<'a> BufWriterBuilder<'a> {
 /// ```
 pub struct BufWriter {
     pub(crate) output: AVFormatContextOutput,
+    #[allow(unused)]
     options: Options,
 }
 
@@ -557,6 +564,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 /// ```
 pub struct PacketizedBufWriter {
     pub(crate) output: AVFormatContextOutput,
+    #[allow(unused)]
     options: Options,
     buffers: Bufs,
 }
@@ -666,7 +674,8 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            self.output.write_header(&mut Some(self.options.to_dict()))?;
+            // TODO: options
+            self.output.write_header(&mut None)?;
             Ok(self.end_write())
         }
 
@@ -696,7 +705,8 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            self.output.write_header(&mut Some(self.options.to_dict()))?;
+            // TODO: options
+            self.output.write_header(&mut None)?;
             self.end_write();
             Ok(self.take_buffers())
         }

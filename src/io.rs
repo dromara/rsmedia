@@ -123,16 +123,20 @@ impl Reader {
     /// ```
     pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
         loop {
-            match self.packets().next().unwrap() {
-                Ok((stream, packet)) => {
-                    if stream.index() == stream_index {
-                        return Ok(Packet::new(packet, stream.time_base()));
+            match self.packets().next() {
+                Some(pkt_res) => match pkt_res {
+                    Ok((stream, packet)) => {
+                        if stream.index() == stream_index {
+                            return Ok(Packet::new(packet, stream.time_base()));
+                        }
+                        log::debug!("Skipping packet from stream {}", stream.index());
                     }
-                }
-                Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return Err(Error::new(e));
-                }
+                    Err(e) => {
+                        log::error!("Error reading packet: {}", e);
+                        return Err(Error::new(e));
+                    }
+                },
+                None => return Err(Error::msg("No more packets")),
             }
         }
     }

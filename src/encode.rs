@@ -192,9 +192,8 @@ impl Encoder {
             None => None,
         };
 
-        encode_ctx
-            .open(Some(settings.options().to_dict()))
-            .context("Could not open encode context")?;
+        let dict = settings.options.map(|op| op.to_dict());
+        encode_ctx.open(dict).context("Failed to open encode context")?;
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();
@@ -457,9 +456,10 @@ pub struct Settings {
     max_b_frames: i32,
     keyframe_interval: u64,
     thread_count: i32,
-    options: Options,
     codec_name: Option<String>,
     pixel_format: PixelFormat,
+    // dict
+    pub options: Option<Options>,
 }
 
 impl Settings {
@@ -505,7 +505,7 @@ impl Settings {
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             pixel_format: PixelFormat::YUV420P,
-            options,
+            options: Some(options),
         }
     }
 
@@ -536,7 +536,7 @@ impl Settings {
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             pixel_format,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
-            options,
+            options: Some(options),
         }
     }
 
@@ -591,13 +591,8 @@ impl Settings {
 
     /// Set the options.
     pub fn with_options(mut self, options: Options) -> Self {
-        self.options = options;
+        self.options = Some(options);
         self
-    }
-
-    /// Get encoder options.
-    pub fn options(&self) -> Options {
-        self.options.clone()
     }
 
     /// Get codec, or Try to use the default codec libx264 if none specified.

@@ -202,6 +202,9 @@ impl Encoder {
             out_stream.index as usize
         };
 
+        let stream_info = writer.stream_info(writer_stream_index)?;
+        log::info!("{}", stream_info);
+
         Ok(Self {
             writer,
             writer_stream_index,
@@ -288,7 +291,7 @@ impl Encoder {
         }
         frame.set_time_base(self.time_base().into());
 
-        log::info!("send frame to encoder: {:?}", frame);
+        log::debug!("send frame to encoder: {:?}", frame);
 
         // 发送帧到编码器
         match self.hw_context.as_ref() {
@@ -486,7 +489,7 @@ impl Settings {
     /// Create encoder settings for an H264 stream with YUV420p pixel format. This will encode to
     /// arguably the most widely compatible video file since H264 is a common codec and YUV420p is
     /// the most commonly used pixel format.
-    pub fn preset_h264_yuv420p(width: i32, height: i32, realtime: bool) -> Settings {
+    pub fn preset_h264(width: i32, height: i32, realtime: bool) -> Settings {
         let options = if realtime {
             Options::preset_h264_realtime()
         } else {
@@ -586,12 +589,6 @@ impl Settings {
     /// Set the pixel format.
     pub fn with_pixel_format(mut self, pixel_format: PixelFormat) -> Self {
         self.pixel_format = pixel_format;
-        self
-    }
-
-    /// Set the options.
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = Some(options);
         self
     }
 

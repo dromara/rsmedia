@@ -1,4 +1,5 @@
 use std::ffi::{CStr, CString, OsStr};
+use std::os::raw::c_char;
 use std::path::Path;
 
 /// 从任意实现了 AsRef<Path> 的类型转换为 CString
@@ -37,20 +38,27 @@ pub fn from_os_str(path_or_url: impl AsRef<OsStr>) -> CString {
     CString::new(path_or_url.as_ref().to_string_lossy().as_bytes()).unwrap()
 }
 
-/// `ptr` must be non-null and valid.
-/// Ensure that the returned lifetime is correctly bounded.
+/// 将 C 字符串指针转换为 Rust 字符串引用
+///
 /// # Safety
-#[inline]
-pub unsafe fn str_from_c_ptr<'s>(ptr: *const libc::c_char) -> &'s str {
-    unsafe { std::str::from_utf8_unchecked(CStr::from_ptr(ptr).to_bytes()) }
+///
+/// - 指针必须指向一个有效的以 null 结尾的 C 字符串
+/// - 字符串内容必须是有效的 UTF-8
+pub unsafe fn from_cstr<'a>(ptr: *const c_char) -> &'a str {
+    if ptr.is_null() {
+        return "";
+    }
+    CStr::from_ptr(ptr).to_str().unwrap()
 }
 
-/// `ptr` must be null or valid.
-/// Ensure that the returned lifetime is correctly bounded.
+/// 将 Rust 字符串转换为 C 字符串指针
+///
 /// # Safety
-#[inline]
-pub unsafe fn str_from_c_ptr_opt<'s>(ptr: *const libc::c_char) -> Option<&'s str> {
-    if ptr.is_null() { None } else { Some(str_from_c_ptr(ptr)) }
+///
+/// 返回的指针需要手动释放，否则会造成内存泄漏
+/// 使用 `free_cstr` 函数释放内存
+pub unsafe fn to_cstr(s: &str) -> *mut c_char {
+    CString::new(s).unwrap().into_raw()
 }
 
 // 使用示例

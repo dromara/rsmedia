@@ -383,7 +383,7 @@ impl DecoderSplit {
         reader: &Reader,
         stream_index: usize,
         codec: AVCodecRef,
-        options: Option<&Options>,
+        _options: Option<&Options>, // TODO: options
         resize: Option<Resize>,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
@@ -407,8 +407,9 @@ impl DecoderSplit {
             None => None,
         };
 
-        let dict = options.map(|options| options.to_dict());
-        decode_ctx.open(dict).context("Failed to open decoder for stream")?;
+        // TODO: options
+        // let dict = options.map(|options| options.to_dict().clone());
+        decode_ctx.open(None).context("Failed to open decoder for stream")?;
 
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize

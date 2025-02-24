@@ -192,8 +192,9 @@ impl Encoder {
             None => None,
         };
 
-        let dict = settings.options.map(|op| op.to_dict());
-        encode_ctx.open(dict).context("Failed to open encode context")?;
+        // TODO: options
+        // let dict = settings.options.map(|op| op.to_dict().clone());
+        encode_ctx.open(None).context("Failed to open encode context")?;
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();

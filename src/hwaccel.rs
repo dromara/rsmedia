@@ -205,7 +205,7 @@ impl HWContext {
     /// * `bool` - True if the frame is in hardware memory
     pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
         if frame.hw_frames_ctx.is_null() || frame.format != self.config.hw_pixel_format.into_raw() {
-            tracing::error!(
+            log::error!(
                 "Frame hw_ctx is null or format ({:?}) doesn't match expected hardware format ({:?})",
                 frame.format,
                 self.config.hw_pixel_format

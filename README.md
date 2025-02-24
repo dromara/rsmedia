@@ -8,7 +8,14 @@ Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rs
 
 ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
-## FFI bindings
+## FFmpeg Documentation
+
+- [Official Documentation](https://ffmpeg.org/documentation.html)
+- [FFmpeg WIKI](https://trac.ffmpeg.org/wiki)
+- [Hardware acceleration](https://trac.ffmpeg.org/wiki/HWAccelIntro)
+- [FFmpeg API Documentation](https://ffmpeg.org/doxygen/trunk/)
+
+## FFI bindingss
 
 - [rusty_ffmpeg](https://github.com/CCExtractor/rusty_ffmpeg)
 - [rust-ffmpeg](https://github.com/meh/rust-ffmpeg/)
@@ -25,33 +32,20 @@ ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtrac
 >
 > <https://github.com/remotia/remotia-ffmpeg-codecs>
 
-## Test on: [jrottenberg/ffmpeg](https://github.com/jrottenberg/ffmpeg)
->
-> ffmpeg:5.1-ubuntu [🟢]
->
-> ffmpeg:6.1-ubuntu [🟢]
->
-> ffmpeg:7.1-ubuntu [🟢]
-
-### Architecture
->
-> ubuntu-latest: [🟢]
->
-> macos-latest: [🟢]
->
-> windows-latest: [🟢]
 
 ## Status
 >
-> ⛔ 格式不正确
+> ⛔ Incorrect formatting
 >
-> ✔️ 注册成功
+> ✔️ Register successfully
 >
-> ⭕ 成功
+> ✅ Succeed
 >
-> 🔴 构建失败
+> 🔴 Build failed
 >
-> 🟢 测试通过
+> 🟢 Test passed
+> 
+> ❌ Test failed
 
 ## Advanced usage
 
@@ -74,7 +68,7 @@ Use the `ndarray` feature to be able to use raw frames with the
 - `ffmpeg6` or `ffmpeg7`:
 
 ```toml
-rsmedia = { version = "0.1.0", features = ["ffmpeg7"] }
+rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
 ```
 
 ## 📖 Examples

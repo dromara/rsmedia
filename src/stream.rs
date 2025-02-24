@@ -21,7 +21,7 @@ pub struct StreamInfo {
     /// Stream type video/audio/subtitle
     pub stream_type: String,
     /// Stream codec
-    pub codec: usize,
+    pub codec: isize,
     /// Pixel format / Sample format
     pub format: isize,
     /// time_base
@@ -83,7 +83,7 @@ impl StreamInfo {
             Ok(Self {
                 index: stream_index,
                 stream_type: media_type.to_string(),
-                codec: codec as usize,
+                codec: codec as isize,
                 format: pix_fmt as isize,
                 time_base: stream.time_base.into(),
                 width: width as usize,
@@ -106,7 +106,10 @@ impl StreamInfo {
 
 impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let codec_name = unsafe { utils::from_cstr(ffi::avcodec_get_name(self.codec as c_uint)) };
+        let codec_name = unsafe {
+            #[allow(clippy::missing_transmute_annotations)]
+            utils::from_cstr(ffi::avcodec_get_name(std::intrinsics::transmute(self.codec as i32)))
+        };
         let pix_fmt = unsafe {
             if self.stream_type.eq_ignore_ascii_case("video") {
                 utils::from_cstr(ffi::av_get_pix_fmt_name(self.format as c_int))

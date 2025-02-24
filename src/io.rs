@@ -130,7 +130,7 @@ impl Reader {
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Error reading packet: {}", e);
+                    log::error!("Error reading packet: {}", e);
                     return Err(Error::new(e));
                 }
             }

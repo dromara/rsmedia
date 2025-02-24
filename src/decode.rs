@@ -76,7 +76,7 @@ impl<'a> DecoderBuilder<'a> {
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
         let stream_info = reader.stream_info(video_stream_index)?;
-        tracing::info!(
+        log::info!(
             "decoder video stream index: {} stream_info: {}",
             video_stream_index,
             stream_info
@@ -202,7 +202,9 @@ impl Decoder {
                 match self.reader.read(self.stream_index) {
                     Ok(packet) => match self.decoder.decode(packet) {
                         Ok(Some(frame)) => break frame,
-                        Ok(None) => {}
+                        Ok(None) => {
+                            log::debug!("[decode]: no frame decoded.");
+                        }
                         Err(err) => return Err(err),
                     },
                     Err(err) => return Err(err),
@@ -248,7 +250,9 @@ impl Decoder {
                 match self.reader.read(self.stream_index) {
                     Ok(packet) => match self.decoder.decode_raw(packet) {
                         Ok(Some(frame)) => break frame,
-                        Ok(None) => {}
+                        Ok(None) => {
+                            log::debug!("[decode_raw]: no frame decoded.");
+                        }
                         Err(err) => return Err(err),
                     },
                     Err(err) => return Err(err),
@@ -548,13 +552,13 @@ impl DecoderSplit {
                         let f = match hw_ctx.download_frame(&mut self.decoder, &frame) {
                             Ok(f) => Some(f),
                             Err(e) => {
-                                tracing::error!("Failed to download frame from hw_device: {}", e);
+                                log::error!("Failed to download frame from hw_device: {}", e);
                                 None
                             }
                         };
                         Ok(f)
                     } else {
-                        tracing::debug!("Hardware decoding not available or not applicable");
+                        log::debug!("Hardware decoding not available or not applicable");
                         Ok(Some(frame))
                     }
                 }

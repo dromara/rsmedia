@@ -248,6 +248,7 @@ impl Encoder {
     ///
     /// * `frame` - Frame to encode.
     pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
+        log::info!("encode_raw raw_frame: {:?}", raw_frame);
         if raw_frame.width != self.encoder.width || raw_frame.height != self.encoder.height {
             return Err(anyhow::anyhow!(
                 "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
@@ -288,10 +289,7 @@ impl Encoder {
         }
         frame.set_time_base(self.time_base().into());
 
-        // debug frame
-        println!("rawFrame: {}", Self::debug_frame_info(raw_frame));
-        println!("----------------------------------------------");
-        println!("dstFrame: {}", Self::debug_frame_info(&frame));
+        log::info!("send frame to encoder: {:?}", frame);
 
         // 发送帧到编码器
         match self.hw_context.as_ref() {
@@ -435,72 +433,6 @@ impl Encoder {
     /// 发送一个空帧来刷新编码器 EOF
     fn send_eof(&mut self) -> Result<()> {
         Ok(self.encoder.send_frame(None)?)
-    }
-
-    fn debug_frame_info(frame: &RawFrame) -> String {
-        let time_base = frame.time_base;
-        let time_base_str = format!("{}/{}", time_base.num, time_base.den);
-
-        // channel layout
-        let ch_layout_str = unsafe {
-            let mut buf = [0i8; 64];
-            ffi::av_channel_layout_describe(&frame.ch_layout, buf.as_mut_ptr(), buf.len() as _);
-            std::ffi::CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
-        };
-
-        format!(
-            "Frame Info:\n\
-         - Dimensions: {}x{}\n\
-         - Format: {}\n\
-         - PTS: {}\n\
-         - Packet DTS: {}\n\
-         - Packet POS: {}\n\
-         - Time Base: {}\n\
-         - Linesize: [{}, {}, {}, {}]\n\
-         - Key Frame: {}\n\
-         - Pict Type: {}\n\
-         - Sample Rate: {}\n\
-         - Samples per Channel (nb_samples): {}\n\
-         - Channel Layout: {}\n\
-         - Best Effort PTS: {}\n\
-         - Flags: {}\n\
-         - Color Range: {}\n\
-         - Color Primaries: {}\n\
-         - Color Transfer: {}\n\
-         - Color Space: {}\n\
-         - Crop Rectangle: {}x{} at ({},{})\n\
-         - Quality: {}\n\
-         - Repeat Picture: {}\n\
-         ",
-            frame.width,
-            frame.height,
-            frame.format,
-            frame.pts,
-            frame.pkt_dts,
-            frame.pkt_pos,
-            time_base_str,
-            frame.linesize[0],
-            frame.linesize[1],
-            frame.linesize[2],
-            frame.linesize[3],
-            frame.key_frame,
-            frame.pict_type,
-            frame.sample_rate,
-            frame.nb_samples,
-            ch_layout_str,
-            frame.best_effort_timestamp,
-            frame.flags,
-            frame.color_range,
-            frame.color_primaries,
-            frame.color_trc,
-            frame.colorspace,
-            frame.width - frame.crop_right as i32 - frame.crop_left as i32,
-            frame.height - frame.crop_bottom as i32 - frame.crop_top as i32,
-            frame.crop_left,
-            frame.crop_top,
-            frame.quality,
-            frame.repeat_pict
-        )
     }
 }
 

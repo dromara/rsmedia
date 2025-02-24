@@ -120,6 +120,10 @@ impl HWContext {
         }
 
         let mut sw_frame = AVFrame::new();
+        // copy props
+        sw_frame.set_width(hw_frame.width);
+        sw_frame.set_height(hw_frame.height);
+        sw_frame.set_format(self.get_format(false));
         decoder
             .hw_frames_ctx_mut()
             .unwrap()
@@ -129,10 +133,13 @@ impl HWContext {
             .hwframe_transfer_data(hw_frame)
             .context("download_frame Failed while transfer hw_frame data to sw_frame hardware memory")?;
 
-        // copy props
-        sw_frame.set_width(hw_frame.width);
-        sw_frame.set_height(hw_frame.height);
-        sw_frame.set_format(self.get_format(false));
+        log::debug!(
+            "download gpu hw_frame transfer to sw_frame success pix_fmt:{}, size:{}x{}",
+            sw_frame.format,
+            sw_frame.width,
+            sw_frame.height
+        );
+
         // extra
         sw_frame.set_pts(hw_frame.pts);
         sw_frame.set_time_base(hw_frame.time_base);
@@ -177,6 +184,10 @@ impl HWContext {
 
         // Create new frame for hardware format
         let mut hw_frame = AVFrame::new();
+        // copy props
+        hw_frame.set_width(sw_frame.width);
+        hw_frame.set_height(sw_frame.height);
+        hw_frame.set_format(self.get_format(true));
         encoder
             .hw_frames_ctx_mut()
             .unwrap()
@@ -186,10 +197,13 @@ impl HWContext {
             .hwframe_transfer_data(sw_frame)
             .context("upload_frame Failed while transfer sw_frame data to hw_frame hardware memory")?;
 
-        // copy props
-        hw_frame.set_width(sw_frame.width);
-        hw_frame.set_height(sw_frame.height);
-        hw_frame.set_format(self.get_format(true));
+        log::debug!(
+            "upload gpu sw_frame transfer to hw_frame success pix_fmt:{}, size:{}x{}",
+            hw_frame.format,
+            hw_frame.width,
+            hw_frame.height
+        );
+
         // extra
         hw_frame.set_pts(sw_frame.pts);
         hw_frame.set_time_base(sw_frame.time_base);
@@ -216,7 +230,7 @@ impl HWContext {
     pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
         if frame.hw_frames_ctx.is_null() || frame.format != self.config.hw_pixel_format.into_raw() {
             log::error!(
-                "Frame hw_ctx is null or format ({:?}) doesn't match expected hardware format ({:?})",
+                "frame hw_ctx is null or format ({:?}) doesn't match expected hardware format ({:?})",
                 frame.format,
                 self.config.hw_pixel_format
             );

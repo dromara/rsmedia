@@ -129,7 +129,7 @@ impl Reader {
                         if stream.index() == stream_index {
                             return Ok(Packet::new(packet, stream.time_base()));
                         }
-                        log::debug!("Skipping packet from stream {}", stream.index());
+                        log::debug!("Skipping packet from stream: {}", stream.index());
                     }
                     Err(e) => {
                         log::error!("Error reading packet: {}", e);
@@ -405,6 +405,16 @@ impl Writer {
     #[inline]
     pub fn new(destination: impl Into<Location>) -> Result<Self> {
         WriterBuilder::new(destination).build()
+    }
+
+    /// Retrieve stream information for a stream. Stream information can be used to set up a
+    /// corresponding stream for transmuxing or transcoding.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream_index` - Index of stream to produce information for.
+    pub fn stream_info(&self, stream_index: usize) -> Result<StreamInfo> {
+        StreamInfo::from_writer(self, stream_index)
     }
 }
 

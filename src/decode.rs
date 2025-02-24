@@ -563,7 +563,7 @@ impl DecoderSplit {
                         };
                         Ok(f)
                     } else {
-                        log::debug!("Hardware decoding not available or not applicable");
+                        log::warn!("Hardware acceleration decoding not available!");
                         Ok(Some(frame))
                     }
                 }

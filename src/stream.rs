@@ -1,7 +1,7 @@
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::packet::Packet;
-use crate::{Rational, utils};
+use crate::{Rational, Writer, utils};
 
 use rsmpeg::avformat::{AVFormatContextInput, AVStreamRef};
 use rsmpeg::avutil::{AVDictionary, AVMediaType};
@@ -51,7 +51,17 @@ impl StreamInfo {
             .input
             .streams()
             .get(stream_index)
-            .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
+            .ok_or(Error::msg(format!("reader stream: {} not found!", stream_index)))?;
+
+        Self::from_params(stream, stream_index)
+    }
+
+    pub(crate) fn from_writer(writer: &Writer, stream_index: usize) -> Result<Self> {
+        let stream = writer
+            .output
+            .streams()
+            .get(stream_index)
+            .ok_or(Error::msg(format!("writer stream: {} not found!", stream_index)))?;
 
         Self::from_params(stream, stream_index)
     }

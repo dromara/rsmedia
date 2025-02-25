@@ -3,7 +3,7 @@ use crate::pixel::PixelFormat;
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContextMut, AVPixelFormat};
+use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
 use rsmpeg::ffi;
 
 /// 硬件加速设备配置
@@ -118,12 +118,19 @@ impl HWContext {
     /// ```
     pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
-        if hw_frame.format != self.config.hw_pixel_format.into_raw() {
+        if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into_raw() {
             return Err(Error::msg(format!(
-                "Input frame is not a valid hardware frame: format={:?}, hw_frames_ctx={:?}",
+                "Input frame is not a valid hardware frame: format={:?}, expected={:?}, hw_frames_ctx={:?}",
                 hw_frame.format,
+                self.config.hw_pixel_format,
                 hw_frame.hw_frames_ctx.is_null()
             )));
+        }
+
+        unsafe {
+            decoder.set_hw_frames_ctx(AVHWFramesContext::from_raw(
+                std::ptr::NonNull::new(hw_frame.hw_frames_ctx).unwrap(),
+            ))
         }
 
         // 确保解码器上下文有硬件帧上下文

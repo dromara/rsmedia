@@ -554,7 +554,7 @@ impl DecoderSplit {
         match self.decoder_receive_frame().unwrap() {
             Some(frame) => match self.hw_context.as_ref() {
                 Some(hw_ctx) => {
-                    if self.decoder.is_hwaccel() && hw_ctx.is_hw_frame(&frame) {
+                    if hw_ctx.is_hw_frame(&frame) {
                         let f = match hw_ctx.download_frame(&mut self.decoder, &frame) {
                             Ok(f) => Some(f),
                             Err(e) => {

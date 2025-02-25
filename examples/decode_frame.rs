@@ -1,5 +1,6 @@
 use anyhow::Context;
 use image::{ImageBuffer, Rgb};
+use rsmedia::hwaccel::HWDeviceType;
 use rsmedia::{DecoderBuilder, frame};
 use std::error::Error;
 use tokio::task;
@@ -12,8 +13,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .parse::<url::Url>()
         .unwrap();
     // let source = std::path::Path::new("rainbow.mp4");
+
     let mut decoder = DecoderBuilder::new(source)
-        // .with_hardware_device(HWDeviceType::VAAPI)
+        .with_codec_name("h264_cuvid".to_string())
+        .with_hardware_device(HWDeviceType::CUDA)
         .build()
         .context("failed to create decoder")?;
 

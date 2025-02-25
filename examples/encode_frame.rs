@@ -9,11 +9,11 @@ fn main() {
 
     let settings = Settings::preset_h264(1280, 720, false)
     // libx264, h264_nvenc, h264_vaapi, h264_videotoolbox
-    .with_codec_name("h264_videotoolbox".to_string());
+    .with_codec_name("h264_nvenc".to_string());
 
     let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), settings)
         .with_format("mp4")
-        .with_hardware_device(HWDeviceType::VIDEOTOOLBOX)
+        .with_hardware_device(HWDeviceType::CUDA)
         .build()
         .expect("failed to create encoder");
 

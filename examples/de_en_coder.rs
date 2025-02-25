@@ -10,18 +10,20 @@ fn main() {
     let mut decoder = DecoderBuilder::new(source)
         .with_resize(Resize::Exact(320, 180))
         .with_options(&Options::preset_h264())
-        .with_hardware_device(HWDeviceType::VIDEOTOOLBOX)
+        .with_codec_name("h264_cuvid".to_string())
+        .with_hardware_device(HWDeviceType::CUDA)
         .build()
         .expect("failed to create decoder");
 
     let settings = Settings::preset_h264(320, 180, false)
         .with_keyframe_interval(12)
         .with_frame_rate(30)
-        .with_codec_name("h264_videotoolbox".to_string());
+        .with_codec_name("h264_nvenc".to_string());
+
     let mut encoder = EncoderBuilder::new(Path::new("/tmp/output.mp4"), settings)
         .with_format("mp4")
         .with_interleaved()
-        .with_hardware_device(HWDeviceType::VIDEOTOOLBOX)
+        .with_hardware_device(HWDeviceType::CUDA)
         .build()
         .expect("failed to create encoder");
 

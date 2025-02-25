@@ -116,42 +116,43 @@ impl HWContext {
     pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
         if hw_frame.format != self.config.hw_pixel_format.into_raw() {
-            return Err(Error::msg("Input frame is not a hardware frame"));
+            return Err(Error::msg(format!(
+                "Input frame is not a valid hardware frame: format={:?}, hw_frames_ctx={:?}",
+                hw_frame.format,
+                hw_frame.hw_frames_ctx.is_null()
+            )));
         }
 
+        // 确保解码器上下文有硬件帧上下文
+        let mut hw_frames_ctx = decoder
+            .hw_frames_ctx_mut()
+            .ok_or_else(|| Error::msg("Decoder has no hardware frames context"))?;
+
+        // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
-        // copy props
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(self.get_format(false));
-        decoder
-            .hw_frames_ctx_mut()
-            .unwrap()
+
+        // 分配缓冲区
+        hw_frames_ctx
             .get_buffer(&mut sw_frame)
-            .context("download_frame Failed to allocate hardware frame buffer")?;
+            .context("Failed to allocate software frame buffer")?;
+
+        // 从硬件帧传输数据到软件帧
         sw_frame
             .hwframe_transfer_data(hw_frame)
-            .context("download_frame Failed while transfer hw_frame data to sw_frame hardware memory")?;
+            .context("Failed to transfer data from hardware frame to software frame")?;
+
+        // 复制帧属性
+        self.copy_frame_props(&mut sw_frame, hw_frame);
 
         log::debug!(
-            "download gpu hw_frame transfer to sw_frame success pix_fmt:{}, size:{}x{}",
+            "Downloaded frame from GPU: format={}, size={}x{}",
             sw_frame.format,
             sw_frame.width,
             sw_frame.height
         );
-
-        // extra
-        sw_frame.set_pts(hw_frame.pts);
-        sw_frame.set_time_base(hw_frame.time_base);
-        sw_frame.set_sample_rate(hw_frame.sample_rate);
-        sw_frame.set_pict_type(hw_frame.pict_type);
-        sw_frame.set_ch_layout(hw_frame.ch_layout);
-        sw_frame.set_nb_samples(hw_frame.nb_samples);
-
-        // runtime error:
-        // unsafe {
-        //     ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
-        // }
 
         Ok(sw_frame)
     }
@@ -182,42 +183,55 @@ impl HWContext {
             )));
         }
 
-        // Create new frame for hardware format
+        // 确保编码器上下文有硬件帧上下文
+        let mut hw_frames_ctx = encoder
+            .hw_frames_ctx_mut()
+            .ok_or_else(|| Error::msg("Encoder has no hardware frames context"))?;
+
+        // 创建新的硬件帧
         let mut hw_frame = AVFrame::new();
-        // copy props
         hw_frame.set_width(sw_frame.width);
         hw_frame.set_height(sw_frame.height);
         hw_frame.set_format(self.get_format(true));
-        encoder
-            .hw_frames_ctx_mut()
-            .unwrap()
+
+        // 分配硬件缓冲区
+        hw_frames_ctx
             .get_buffer(&mut hw_frame)
-            .context("upload_frame Failed to allocate hardware frame buffer")?;
+            .context("Failed to allocate hardware frame buffer")?;
+
+        // 从软件帧传输数据到硬件帧
         hw_frame
             .hwframe_transfer_data(sw_frame)
-            .context("upload_frame Failed while transfer sw_frame data to hw_frame hardware memory")?;
+            .context("Failed to transfer data from software frame to hardware frame")?;
+
+        // 复制帧属性
+        self.copy_frame_props(&mut hw_frame, sw_frame);
 
         log::debug!(
-            "upload gpu sw_frame transfer to hw_frame success pix_fmt:{}, size:{}x{}",
+            "Uploaded frame to GPU: format={}, size={}x{}",
             hw_frame.format,
             hw_frame.width,
             hw_frame.height
         );
 
-        // extra
-        hw_frame.set_pts(sw_frame.pts);
-        hw_frame.set_time_base(sw_frame.time_base);
-        hw_frame.set_sample_rate(sw_frame.sample_rate);
-        hw_frame.set_pict_type(sw_frame.pict_type);
-        hw_frame.set_ch_layout(sw_frame.ch_layout);
-        hw_frame.set_nb_samples(sw_frame.nb_samples);
+        Ok(hw_frame)
+    }
 
+    /// 复制帧属性
+    fn copy_frame_props(&self, dst: &mut AVFrame, src: &AVFrame) {
+        dst.set_pts(src.pts);
+        dst.set_time_base(src.time_base);
+        dst.set_sample_rate(src.sample_rate);
+        dst.set_pict_type(src.pict_type);
+        dst.set_ch_layout(src.ch_layout);
+        dst.set_nb_samples(src.nb_samples);
+
+        // 可以根据需要添加更多属性复制
+        // 注意：尝试使用 av_frame_copy_props 会导致运行时错误
         // runtime error:
         // unsafe {
-        //     ffi::av_frame_copy_props(hw_frame.as_mut_ptr(), sw_frame.as_ptr());
+        //     ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
         // }
-
-        Ok(hw_frame)
     }
 
     /// Determine if a frame is in hardware memory
@@ -228,15 +242,28 @@ impl HWContext {
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
     pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
-        if frame.hw_frames_ctx.is_null() || frame.format != self.config.hw_pixel_format.into_raw() {
-            log::error!(
-                "frame hw_ctx is null or format ({:?}) doesn't match expected hardware format ({:?})",
+        // 检查硬件帧上下文是否为空
+        if frame.hw_frames_ctx.is_null() {
+            log::debug!("Frame hardware context is null");
+            return false;
+        }
+
+        // 检查帧格式是否匹配硬件像素格式
+        if frame.format != self.config.hw_pixel_format.into_raw() {
+            log::debug!(
+                "Frame format ({:?}) doesn't match hardware format ({:?})",
                 frame.format,
                 self.config.hw_pixel_format
             );
             return false;
         }
+
         true
+    }
+
+    /// Check if a frame is in software memory format
+    pub fn is_sw_frame(&self, frame: &AVFrame) -> bool {
+        frame.format == self.config.sw_pixel_format.into_raw()
     }
 
     /// Helper function to get the appropriate pixel format for a frame

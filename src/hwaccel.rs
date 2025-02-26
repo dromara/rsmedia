@@ -92,6 +92,7 @@ impl HWContext {
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
         unsafe {
             let ctx_mut_ptr = codec_ctx.as_mut_ptr();
+            (*ctx_mut_ptr).sw_pix_fmt = self.config.sw_pixel_format.into_raw();
             (*ctx_mut_ptr).hw_device_ctx = self.device_ctx.as_mut_ptr();
             (*ctx_mut_ptr).hwaccel_flags = ffi::AV_HWACCEL_FLAG_IGNORE_LEVEL as i32;
             // (*codec_ctx).hwaccel

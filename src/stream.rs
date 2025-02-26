@@ -30,10 +30,16 @@ pub struct StreamInfo {
     pub width: usize,
     /// Video height
     pub height: usize,
-    /// Video FPS
-    pub fps: f32,
+    /// Video bit_rate
+    pub bit_rate: i64,
     /// Audio sample rate
     pub sample_rate: isize,
+    /// video_delay
+    pub video_delay: i32,
+    /// Video FPS
+    pub avg_frame_rate: f32,
+    /// Video frame rate
+    pub frame_rate: f32,
 
     /// Codec parameters
     pub(crate) codec_parameters: *mut ffi::AVCodecParameters,
@@ -87,8 +93,11 @@ impl StreamInfo {
             let pix_fmt = (*stream.codecpar).format;
             let width = (*stream.codecpar).width;
             let height = (*stream.codecpar).height;
-            let fps = ffi::av_q2d(stream.avg_frame_rate);
+            let bit_rate = (*stream.codecpar).bit_rate;
+            let video_delay = (*stream.codecpar).video_delay;
             let sample_rate = (*stream.codecpar).sample_rate;
+            let framerate = ffi::av_q2d((*stream.codecpar).framerate);
+            let avg_frame_rate = ffi::av_q2d(stream.avg_frame_rate);
 
             Ok(Self {
                 index: stream_index,
@@ -98,8 +107,11 @@ impl StreamInfo {
                 time_base: stream.time_base.into(),
                 width: width as usize,
                 height: height as usize,
-                fps: fps as f32,
+                bit_rate,
+                video_delay,
                 sample_rate: sample_rate as isize,
+                avg_frame_rate: avg_frame_rate as f32,
+                frame_rate: framerate as f32,
                 codec_parameters: stream.codecpar,
             })
         }
@@ -131,8 +143,17 @@ impl std::fmt::Display for StreamInfo {
         };
         write!(
             f,
-            "{} #{}: codec={},size={}x{},fps={:.3},pix_fmt={}",
-            self.stream_type, self.index, codec_name, self.width, self.height, self.fps, pix_fmt,
+            "{} #{}: codec={}, pix_fmt={}, size={}x{}, bit_rate={}, fps={:.3}, frame_rate={:.3}, video_delay={}",
+            self.stream_type,
+            self.index,
+            codec_name,
+            pix_fmt,
+            self.width,
+            self.height,
+            self.bit_rate,
+            self.avg_frame_rate,
+            self.frame_rate,
+            self.video_delay
         )
     }
 }

@@ -152,7 +152,8 @@ impl HWContext {
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(self.get_format(false));
-        sw_frame.get_buffer(32)
+        sw_frame
+            .get_buffer(32)
             .context("Failed to allocate software frame buffer")?;
 
         // 分配缓冲区

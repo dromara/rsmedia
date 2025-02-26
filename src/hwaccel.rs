@@ -149,6 +149,12 @@ impl HWContext {
 
         // 计算正确的对齐宽度，32 字节对齐
         let aligned_width = (hw_frame.width + 31) & !31;
+        log::trace!(
+            "Aligning width {} to {} (32-byte alignment)",
+            hw_frame.width,
+            aligned_width
+        );
+
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
         sw_frame.set_width(hw_frame.width);
@@ -160,6 +166,12 @@ impl HWContext {
             (*sw_frame_ptr).linesize[1] = aligned_width; // UV 平面
             (*sw_frame_ptr).linesize[2] = 0;
             (*sw_frame_ptr).linesize[3] = 0;
+
+            log::trace!(
+                "Setting NV12 frame linesize: Y={}, UV={}",
+                (*sw_frame_ptr).linesize[0],
+                (*sw_frame_ptr).linesize[1]
+            );
         }
 
         sw_frame

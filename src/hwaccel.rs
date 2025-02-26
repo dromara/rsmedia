@@ -119,7 +119,7 @@ impl HWContext {
     /// let sw_frame = hw_context.download_frame(&hw_frame)?;
     /// // Now sw_frame contains the data in CPU memory
     /// ```
-    pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
+    pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &mut AVFrame) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
         if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into_raw() {
             return Err(Error::msg(format!(
@@ -159,8 +159,8 @@ impl HWContext {
             .context("Failed to allocate software frame buffer")?;
 
         // 从硬件帧传输数据到软件帧
-        sw_frame
-            .hwframe_transfer_data(hw_frame)
+        hw_frame
+            .hwframe_transfer_data(&sw_frame)
             .context("Failed to transfer data from hardware frame to software frame")?;
 
         // 复制帧属性

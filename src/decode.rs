@@ -75,8 +75,6 @@ impl<'a> DecoderBuilder<'a> {
         }
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
-        let stream_info = reader.stream_info(video_stream_index)?;
-        log::info!("{}", stream_info);
 
         let codec = {
             let codec_name = if let Some(ref codec_name) = self.codec_name {
@@ -410,6 +408,9 @@ impl DecoderSplit {
         // TODO: options
         // let dict = options.map(|options| options.to_dict().clone());
         decode_ctx.open(None).context("Failed to open decoder for stream")?;
+
+        let stream_info = reader.stream_info(stream_index)?;
+        log::info!("{}", stream_info);
 
         let (resize_width, resize_height) = match resize {
             Some(resize) => resize

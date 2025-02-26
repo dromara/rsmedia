@@ -553,13 +553,13 @@ impl DecoderSplit {
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
     fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
         let frame_result = self.decoder_receive_frame()?;
-        let Some(frame) = frame_result else {
+        let Some(mut frame) = frame_result else {
             return Ok(None);
         };
 
         let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
             if hw_ctx.is_hw_frame(&frame) {
-                match hw_ctx.download_frame(&mut self.decoder, &frame) {
+                match hw_ctx.download_frame(&mut self.decoder, &mut frame) {
                     Ok(sw_frame) => sw_frame,
                     Err(e) => {
                         log::error!("Failed to download frame from hw_device: {}", e);

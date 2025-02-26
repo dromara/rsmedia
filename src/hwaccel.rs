@@ -92,9 +92,9 @@ impl HWContext {
         unsafe {
             let ctx_mut_ptr = codec_ctx.as_mut_ptr();
             (*ctx_mut_ptr).sw_pix_fmt = self.config.sw_pixel_format.into_raw();
+            (*ctx_mut_ptr).opaque = self.config.hw_pixel_format.into_raw() as _;
             (*ctx_mut_ptr).hw_device_ctx = self.device_ctx.as_mut_ptr();
-            (*ctx_mut_ptr).hwaccel_flags = ffi::AV_HWACCEL_FLAG_IGNORE_LEVEL as i32;
-            (*ctx_mut_ptr).get_format = Some(get_format_callback)
+            (*ctx_mut_ptr).get_format = Some(hwaccel_get_format);
             // (*codec_ctx).hwaccel
             // (*codec_ctx).hwaccel_context
         }
@@ -495,26 +495,19 @@ impl From<HWDeviceType> for ffi::AVHWDeviceType {
     }
 }
 
-unsafe extern "C" fn get_format_callback(
+#[no_mangle]
+unsafe extern "C" fn hwaccel_get_format(
     ctx: *mut ffi::AVCodecContext,
     pix_fmts: *const ffi::AVPixelFormat,
 ) -> ffi::AVPixelFormat {
-    // 确保上下文有效
-    if ctx.is_null() || (*ctx).hw_device_ctx.is_null() {
-        return ffi::AV_PIX_FMT_NONE;
-    }
-
-    let hw_pix_fmt = (*ctx).pix_fmt;
-
     let mut p = pix_fmts;
-    while !p.is_null() && *p != ffi::AV_PIX_FMT_NONE {
-        if *p == hw_pix_fmt {
+    while *p != ffi::AV_PIX_FMT_NONE {
+        #[allow(clippy::useless_transmute)]
+        if *p == std::mem::transmute::<i32, ffi::AVPixelFormat>((*ctx).opaque as i32) {
             return *p;
         }
         p = p.add(1);
     }
-
-    // 如果没有找到支持的硬件格式，返回第一个可用的软件格式
     ffi::AV_PIX_FMT_NONE
 }
 

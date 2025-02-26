@@ -68,6 +68,8 @@ impl HWContext {
         )
         .context("Failed to create hardware device context")?;
 
+        log::info!("Created hardware device context successfully: {:?}", config);
+
         Ok(Self { device_ctx, config })
     }
 

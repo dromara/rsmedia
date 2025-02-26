@@ -7,7 +7,7 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::time::Time;
-use crate::{Rational, RawFrame, utils};
+use crate::{PixelFormat, Rational, RawFrame, utils};
 use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::error::RsmpegError;
@@ -431,8 +431,20 @@ impl DecoderSplit {
         })
     }
 
+    /// Get the decoders input size (resolution dimensions): width * height.
+    #[inline(always)]
+    pub fn size(&self) -> (u32, u32) {
+        self.size
+    }
+
+    /// Get the decoders output size after resizing is applied (resolution dimensions): width * height.
+    #[inline(always)]
+    pub fn size_out(&self) -> (u32, u32) {
+        self.size_out
+    }
+
     /// Get decoder time base.
-    #[inline]
+    #[inline(always)]
     pub fn time_base(&self) -> Rational {
         self.time_base
     }
@@ -527,18 +539,6 @@ impl DecoderSplit {
         }
     }
 
-    /// Get the decoders input size (resolution dimensions): width * height.
-    #[inline(always)]
-    pub fn size(&self) -> (u32, u32) {
-        self.size
-    }
-
-    /// Get the decoders output size after resizing is applied (resolution dimensions): width * height.
-    #[inline(always)]
-    pub fn size_out(&self) -> (u32, u32) {
-        self.size_out
-    }
-
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
     fn send_packet_to_decoder(&mut self, packet: Packet) -> Result<()> {
         let (mut packet, packet_time_base) = packet.into_inner_parts();
@@ -551,27 +551,30 @@ impl DecoderSplit {
 
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
     fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
-        match self.decoder_receive_frame().unwrap() {
-            Some(frame) => match self.hw_context.as_ref() {
-                Some(hw_ctx) => {
-                    if hw_ctx.is_hw_frame(&frame) {
-                        let f = match hw_ctx.download_frame(&mut self.decoder, &frame) {
-                            Ok(f) => Some(f),
-                            Err(e) => {
-                                log::error!("Failed to download frame from hw_device: {}", e);
-                                None
-                            }
-                        };
-                        Ok(f)
-                    } else {
-                        log::warn!("Hardware acceleration decoding not available!");
-                        Ok(Some(frame))
+        let frame_result = self.decoder_receive_frame()?;
+        let Some(frame) = frame_result else {
+            return Ok(None);
+        };
+
+        let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
+            if hw_ctx.is_hw_frame(&frame) {
+                match hw_ctx.download_frame(&mut self.decoder, &frame) {
+                    Ok(sw_frame) => sw_frame,
+                    Err(e) => {
+                        log::error!("Failed to download frame from hw_device: {}", e);
+                        return Err(Error::msg(format!("Failed to download frame from hw_device: {}", e)));
                     }
                 }
-                _ => Ok(Some(frame)),
-            },
-            None => Ok(None),
-        }
+            } else {
+                log::warn!("Hardware acceleration decoding not available!");
+                frame
+            }
+        } else {
+            frame
+        };
+
+        // handle scaling frame if needed (if not, size_out is the same as size)
+        Ok(Some(self.rescale_frame(&processed_frame)?))
     }
 
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
@@ -583,6 +586,25 @@ impl DecoderSplit {
             Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => Ok(None),
             Err(e) => Err(Error::new(e).context("Failed to receive frame from decoder")),
         }
+    }
+
+    /// Rescale frame if needed.
+    fn rescale_frame(&self, frame: &RawFrame) -> Result<RawFrame> {
+        let scaler_input_format = self
+            .hw_context
+            .as_ref()
+            .map_or(frame.format, |ctx| ctx.get_format(true));
+
+        let (resize_width, resize_height) = self.size_out();
+        let is_scale_needed = !(scaler_input_format == PixelFormat::YUV420P.into_raw()
+            && frame.width as u32 == resize_width
+            && frame.height as u32 == resize_height);
+
+        if is_scale_needed {
+            return frame::convert_avframe(frame, resize_width as i32, resize_height as i32, PixelFormat::YUV420P);
+        }
+
+        Ok(frame.clone())
     }
 
     #[cfg(feature = "ndarray")]

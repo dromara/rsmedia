@@ -412,9 +412,7 @@ pub fn convert_avframe(
     dst_frame.set_pict_type(src_frame.pict_type);
     dst_frame.set_ch_layout(src_frame.ch_layout);
     dst_frame.set_nb_samples(src_frame.nb_samples);
-    unsafe {
-        (*dst_frame.as_mut_ptr()).sample_aspect_ratio = src_frame.sample_aspect_ratio;
-    }
+
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
@@ -432,13 +430,15 @@ pub fn convert_avframe(
         ))?;
 
     log::debug!(
-        "scale_frame src:[fmt:{}, size:{}x{}], dst:[fmt:{}, size:{}x{}]",
+        "scale_frame src:[fmt:{}, pts:{}, size:{}x{}], dst:[fmt:{}, pts:{}, size:{}x{}]",
         src_frame.format,
+        src_frame.pts,
         src_frame.width,
         src_frame.height,
-        dst_pix_fmt.into_raw(),
-        dst_width,
-        dst_height
+        dst_frame.format,
+        dst_frame.pts,
+        dst_frame.width,
+        dst_frame.height,
     );
 
     Ok(dst_frame)

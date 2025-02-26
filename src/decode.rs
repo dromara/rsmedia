@@ -398,6 +398,12 @@ impl DecoderSplit {
 
         let hw_context = match hw_device_type {
             Some(device_type) => {
+                if device_type.find_hw_pixel_format_with_codec(&codec).is_none() {
+                    return Err(Error::msg(format!(
+                        "HW acceleration decoder not supported for codec: {}",
+                        utils::to_string(codec.name())
+                    )));
+                }
                 let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap())?;
                 hw_ctx.setup_hw_frames(&mut decode_ctx, width, height)?;
                 Some(hw_ctx)

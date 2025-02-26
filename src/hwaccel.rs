@@ -144,6 +144,9 @@ impl HWContext {
             .hw_frames_ctx_mut()
             .ok_or_else(|| Error::msg("Decoder has no hardware frames context"))?;
 
+        let from_gpu_fmt_vec = get_transfer_formats_from_gpu(&mut hw_frames_ctx);
+        log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
+
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
         sw_frame.set_width(hw_frame.width);
@@ -204,11 +207,18 @@ impl HWContext {
             .hw_frames_ctx_mut()
             .ok_or_else(|| Error::msg("Encoder has no hardware frames context"))?;
 
+        let to_gpu_fmt_vec = get_transfer_formats_to_gpu(&mut hw_frames_ctx);
+        log::debug!("to_gpu_fmt_vec:{:?}", to_gpu_fmt_vec);
+
         // 创建新的硬件帧
         let mut hw_frame = AVFrame::new();
         hw_frame.set_width(sw_frame.width);
         hw_frame.set_height(sw_frame.height);
         hw_frame.set_format(self.get_format(true));
+        unsafe {
+            let hw_frame_ptr = hw_frame.as_mut_ptr();
+            (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
+        }
 
         // 分配硬件缓冲区
         hw_frames_ctx
@@ -471,7 +481,7 @@ fn pix_formats_to_vec(formats: *const ffi::AVPixelFormat) -> Vec<PixelFormat> {
     ret
 }
 
-pub fn get_transfer_formats_from_gpu(mut hw_frame_ctx: AVHWFramesContextMut) -> Vec<PixelFormat> {
+pub fn get_transfer_formats_from_gpu(hw_frame_ctx: &mut AVHWFramesContextMut) -> Vec<PixelFormat> {
     let mut formats = std::ptr::null_mut();
     unsafe {
         ffi::av_hwframe_transfer_get_formats(
@@ -487,7 +497,7 @@ pub fn get_transfer_formats_from_gpu(mut hw_frame_ctx: AVHWFramesContextMut) -> 
         pix_formats_to_vec(formats)
     }
 }
-pub fn get_transfer_formats_to_gpu(mut hw_frame_ctx: AVHWFramesContextMut) -> Vec<PixelFormat> {
+pub fn get_transfer_formats_to_gpu(hw_frame_ctx: &mut AVHWFramesContextMut) -> Vec<PixelFormat> {
     let mut formats = std::ptr::null_mut();
     unsafe {
         ffi::av_hwframe_transfer_get_formats(

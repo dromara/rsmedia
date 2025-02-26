@@ -77,19 +77,18 @@ impl HWContext {
     pub fn setup_hw_frames(&mut self, codec_ctx: &mut AVCodecContext, width: i32, height: i32) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
-        let frames_data = hw_frames_ref.data();
-        frames_data.format = self.config.hw_pixel_format.into_raw();
-        frames_data.sw_format = self.config.sw_pixel_format.into_raw();
-        frames_data.width = width;
-        frames_data.height = height;
-        frames_data.initial_pool_size = 20;
+        hw_frames_ref.data().format = self.config.hw_pixel_format.into_raw();
+        hw_frames_ref.data().sw_format = self.config.sw_pixel_format.into_raw();
+        hw_frames_ref.data().width = width;
+        hw_frames_ref.data().height = height;
+        hw_frames_ref.data().initial_pool_size = 20;
 
         hw_frames_ref
             .init()
             .context("Failed to initialize hardware frame context")?;
 
-        codec_ctx.set_pix_fmt(self.get_format(true));
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
+        codec_ctx.set_pix_fmt(self.get_format(true));
         unsafe {
             let ctx_mut_ptr = codec_ctx.as_mut_ptr();
             (*ctx_mut_ptr).sw_pix_fmt = self.config.sw_pixel_format.into_raw();
@@ -150,11 +149,16 @@ impl HWContext {
 
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
+        sw_frame.set_width(hw_frame.width);
+        sw_frame.set_height(hw_frame.height);
+        sw_frame.set_format(self.get_format(false));
+        sw_frame.get_buffer(32)
+            .context("Failed to allocate software frame buffer")?;
 
         // 分配缓冲区
-        hw_frames_ctx
-            .get_buffer(&mut sw_frame)
-            .context("Failed to allocate software frame buffer")?;
+        // hw_frames_ctx
+        //     .get_buffer(&mut sw_frame)
+        //     .context("Failed to allocate software frame buffer")?;
 
         // 从硬件帧传输数据到软件帧
         sw_frame
@@ -162,16 +166,16 @@ impl HWContext {
             .context("Failed to transfer data from hardware frame to software frame")?;
 
         // 复制帧属性
-        sw_frame.set_width(hw_frame.width);
-        sw_frame.set_height(hw_frame.height);
-        sw_frame.set_format(self.get_format(false));
         self.copy_frame_props(&mut sw_frame, hw_frame);
 
         log::debug!(
-            "Downloaded frame from GPU: format={}, size={}x{}",
+            "Downloaded frame from GPU: format={} (NV12={}), size={}x{}, linesize=[{}, {}]",
             sw_frame.format,
+            ffi::AV_PIX_FMT_NV12,
             sw_frame.width,
-            sw_frame.height
+            sw_frame.height,
+            sw_frame.linesize[0],
+            sw_frame.linesize[1]
         );
 
         Ok(sw_frame)
@@ -218,7 +222,9 @@ impl HWContext {
 
         // 创建新的硬件帧
         let mut hw_frame = AVFrame::new();
-
+        hw_frame.set_width(sw_frame.width);
+        hw_frame.set_height(sw_frame.height);
+        hw_frame.set_format(self.get_format(true));
         unsafe {
             let hw_frame_ptr = hw_frame.as_mut_ptr();
             (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
@@ -235,16 +241,16 @@ impl HWContext {
             .context("Failed to transfer data from software frame to hardware frame")?;
 
         // 复制帧属性
-        hw_frame.set_width(sw_frame.width);
-        hw_frame.set_height(sw_frame.height);
-        hw_frame.set_format(self.get_format(true));
         self.copy_frame_props(&mut hw_frame, sw_frame);
 
         log::debug!(
-            "Uploaded frame to GPU: format={}, size={}x{}",
+            "Uploaded frame to GPU: format={}, (CUDA={}), size={}x{}, linesize=[{}, {}]",
             hw_frame.format,
+            ffi::AV_PIX_FMT_CUDA,
             hw_frame.width,
-            hw_frame.height
+            hw_frame.height,
+            hw_frame.linesize[0],
+            hw_frame.linesize[1]
         );
 
         Ok(hw_frame)
@@ -259,7 +265,18 @@ impl HWContext {
         dst.set_ch_layout(src.ch_layout);
         dst.set_nb_samples(src.nb_samples);
 
-        // 可以根据需要添加更多属性复制
+        // 复制 side data
+        unsafe {
+            for i in 0..src.nb_side_data {
+                let side_data = *src.side_data.add(i as usize);
+                ffi::av_frame_new_side_data_from_buf(
+                    dst.as_mut_ptr(),
+                    (*side_data).type_,
+                    ffi::av_buffer_ref((*side_data).buf),
+                );
+            }
+        }
+
         // 注意：尝试使用 av_frame_copy_props 会导致运行时错误
         // runtime error:
         // unsafe {

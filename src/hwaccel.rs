@@ -147,17 +147,19 @@ impl HWContext {
         let from_gpu_fmt_vec = get_transfer_formats_from_gpu(&mut hw_frames_ctx);
         log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
 
+        // 计算正确的对齐宽度，32 字节对齐
+        let aligned_width = (hw_frame.width + 31) & !31;
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(self.get_format(false));
         unsafe {
-            // 计算正确的对齐宽度，32 字节对齐
-            let aligned_width = (hw_frame.width + 31) & !31;
             let sw_frame_ptr = sw_frame.as_mut_ptr();
             (*sw_frame_ptr).linesize[0] = aligned_width; // Y 平面
             (*sw_frame_ptr).linesize[1] = aligned_width; // UV 平面
+            (*sw_frame_ptr).linesize[2] = 0;
+            (*sw_frame_ptr).linesize[3] = 0;
         }
 
         sw_frame
@@ -178,13 +180,14 @@ impl HWContext {
         self.copy_frame_props(&mut sw_frame, hw_frame);
 
         log::debug!(
-            "Downloaded frame from GPU: format={} (NV12={}), size={}x{}, linesize=[{}, {}]",
+            "Downloaded frame from GPU: format={} (NV12={}), size={}x{}, linesize=[{}, {}], aligned_width={}",
             sw_frame.format,
             ffi::AV_PIX_FMT_NV12,
             sw_frame.width,
             sw_frame.height,
             sw_frame.linesize[0],
-            sw_frame.linesize[1]
+            sw_frame.linesize[1],
+            aligned_width
         );
 
         Ok(sw_frame)
@@ -236,11 +239,8 @@ impl HWContext {
         hw_frame.set_format(self.get_format(true));
         unsafe {
             // 使用相同的对齐方式
-            let aligned_width = (sw_frame.width + 31) & !31;
             let hw_frame_ptr = hw_frame.as_mut_ptr();
             (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
-            (*hw_frame_ptr).linesize[0] = aligned_width;
-            (*hw_frame_ptr).linesize[1] = aligned_width;
         }
 
         // 分配硬件缓冲区

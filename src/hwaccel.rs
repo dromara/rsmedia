@@ -119,7 +119,7 @@ impl HWContext {
     /// let sw_frame = hw_context.download_frame(&hw_frame)?;
     /// // Now sw_frame contains the data in CPU memory
     /// ```
-    pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &mut AVFrame) -> Result<AVFrame> {
+    pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
         // Check if input frame is actually in hardware memory
         if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into_raw() {
             return Err(Error::msg(format!(
@@ -149,9 +149,6 @@ impl HWContext {
 
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
-        sw_frame.set_width(hw_frame.width);
-        sw_frame.set_height(hw_frame.height);
-        sw_frame.set_format(from_gpu_fmt_vec[0].into_raw());
 
         // 分配缓冲区
         hw_frames_ctx
@@ -159,11 +156,14 @@ impl HWContext {
             .context("Failed to allocate software frame buffer")?;
 
         // 从硬件帧传输数据到软件帧
-        hw_frame
-            .hwframe_transfer_data(&sw_frame)
+        sw_frame
+            .hwframe_transfer_data(hw_frame)
             .context("Failed to transfer data from hardware frame to software frame")?;
 
         // 复制帧属性
+        sw_frame.set_width(hw_frame.width);
+        sw_frame.set_height(hw_frame.height);
+        sw_frame.set_format(self.get_format(false));
         self.copy_frame_props(&mut sw_frame, hw_frame);
 
         log::debug!(
@@ -217,9 +217,7 @@ impl HWContext {
 
         // 创建新的硬件帧
         let mut hw_frame = AVFrame::new();
-        // hw_frame.set_width(sw_frame.width);
-        // hw_frame.set_height(sw_frame.height);
-        // hw_frame.set_format(self.get_format(true));
+
         unsafe {
             let hw_frame_ptr = hw_frame.as_mut_ptr();
             (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
@@ -236,6 +234,9 @@ impl HWContext {
             .context("Failed to transfer data from software frame to hardware frame")?;
 
         // 复制帧属性
+        hw_frame.set_width(sw_frame.width);
+        hw_frame.set_height(sw_frame.height);
+        hw_frame.set_format(self.get_format(true));
         self.copy_frame_props(&mut hw_frame, sw_frame);
 
         log::debug!(

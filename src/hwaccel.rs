@@ -147,38 +147,13 @@ impl HWContext {
         let from_gpu_fmt_vec = get_transfer_formats_from_gpu(&mut hw_frames_ctx);
         log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
 
-        // 计算正确的对齐宽度，32 字节对齐
-        let width = hw_frame.width as usize;
-        let aligned_width = ((width + 31) / 32) * 32;
-        log::debug!(
-            "Width alignment: original={}, aligned={}, remainder={}",
-            width,
-            aligned_width,
-            width % 32
-        );
-
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(self.get_format(false));
-        unsafe {
-            let sw_frame_ptr = sw_frame.as_mut_ptr();
-            (*sw_frame_ptr).linesize[0] = aligned_width as i32; // Y 平面
-            (*sw_frame_ptr).linesize[1] = aligned_width as i32; // UV 平面
-            (*sw_frame_ptr).linesize[2] = 0;
-            (*sw_frame_ptr).linesize[3] = 0;
-
-            log::debug!(
-                "Setting NV12 frame linesize: Y={}, UV={}, aligned={}",
-                (*sw_frame_ptr).linesize[0],
-                (*sw_frame_ptr).linesize[1],
-                aligned_width
-            );
-        }
-
         sw_frame
-            .get_buffer(32)
+            .alloc_buffer()
             .context("Failed to allocate software frame buffer")?;
 
         // 分配缓冲区
@@ -195,14 +170,13 @@ impl HWContext {
         self.copy_frame_props(&mut sw_frame, hw_frame);
 
         log::debug!(
-            "Downloaded frame from GPU: format={} (NV12={}), size={}x{}, linesize=[{}, {}], aligned_width={}",
+            "Downloaded frame from GPU: format={} (NV12={}), size={}x{}, linesize=[{}, {}]",
             sw_frame.format,
             ffi::AV_PIX_FMT_NV12,
             sw_frame.width,
             sw_frame.height,
             sw_frame.linesize[0],
             sw_frame.linesize[1],
-            aligned_width
         );
 
         Ok(sw_frame)
@@ -586,5 +560,63 @@ pub fn get_transfer_formats_to_gpu(hw_frame_ctx: &mut AVHWFramesContextMut) -> V
         Vec::new()
     } else {
         pix_formats_to_vec(formats)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    /// 辅助函数来验证特定分辨率的内存布局
+    fn verify_resolution_layout(width: i32, height: i32) {
+        let aligned_width = (width as usize + 31) & !(32 - 1);
+        let y_plane_size = aligned_width * height as usize;
+        let uv_plane_size = aligned_width * (height as usize / 2);
+        let total_size = y_plane_size + uv_plane_size;
+
+        println!("Resolution: {}x{}", width, height);
+        println!(
+            "Aligned width: {} (padding: {} bytes)",
+            aligned_width,
+            aligned_width - width as usize
+        );
+        println!("Y plane size: {} bytes", y_plane_size);
+        println!("UV plane size: {} bytes", uv_plane_size);
+        println!("Total buffer size: {} bytes", total_size);
+        println!("Memory alignment: {} bytes\n", aligned_width % 32);
+    }
+
+    #[inline]
+    fn align_to_32(width: usize) -> usize {
+        // 即使宽度已经是32的倍数，也向上对齐到下一个32字节边界
+        let blocks = (width + 32) / 32;
+        let aligned = blocks * 32;
+
+        // 如果是视频宽度，总是需要额外的padding
+        if width % 32 == 0 && width != 0 {
+            aligned // 返回下一个对齐边界
+        } else {
+            aligned
+        }
+    }
+
+    #[test]
+    fn test_common_resolutions_layout() {
+        // 测试常用分辨率的内存布局
+        let common_resolutions = vec![
+            (1280, 720),  // 720p
+            (1920, 1080), // 1080p
+            (3840, 2160), // 4K
+            (2560, 1440), // 2K
+            (854, 480),   // 480p
+            (640, 480),   // VGA
+            (1024, 768),  // XGA
+            (1366, 768),  // WXGA
+            (1600, 900),  // UXGA
+            (2048, 1080), // 2K DCI
+        ];
+
+        for (width, height) in common_resolutions {
+            verify_resolution_layout(width, height);
+        }
     }
 }

@@ -325,8 +325,16 @@ impl Encoder {
         // see https://github.com/oddity-ai/video-rs/issues/46.
         self.frame_count += 1;
 
-        if let Some(packet) = self.encoder_receive_packet().unwrap() {
-            self.write(packet)?;
+        match self.encoder_receive_packet() {
+            Ok(Some(packet)) => {
+                self.write(packet)?;
+            }
+            Ok(None) => {
+                log::debug!("No packet received from encoder.")
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!("Failed to receive packet from encoder: {}", e));
+            }
         }
 
         Ok(())

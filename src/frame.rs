@@ -419,6 +419,18 @@ pub fn convert_avframe(
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
 
+    sws_ctx
+        .scale_frame(src_frame, 0, src_frame.height, &mut dst_frame)
+        .context(format!(
+            "Failed to scale frame from [fmt:{}, size:{}x{}] to [fmt:{}, size:{}x{}]",
+            src_frame.format,
+            src_frame.width,
+            src_frame.height,
+            dst_pix_fmt.into_raw(),
+            dst_width,
+            dst_height
+        ))?;
+
     log::debug!(
         "scale_frame src:[fmt:{}, size:{}x{}], dst:[fmt:{}, size:{}x{}]",
         src_frame.format,
@@ -428,10 +440,6 @@ pub fn convert_avframe(
         dst_width,
         dst_height
     );
-
-    sws_ctx
-        .scale_frame(src_frame, 0, src_frame.height, &mut dst_frame)
-        .context("Failed to scale frame")?;
 
     Ok(dst_frame)
 }

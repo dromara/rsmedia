@@ -149,9 +149,9 @@ impl HWContext {
 
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
-        sw_frame.set_width(hw_frame.width);
-        sw_frame.set_height(hw_frame.height);
-        sw_frame.set_format(self.get_format(false));
+        sw_frame.set_width(decoder.width);
+        sw_frame.set_height(decoder.height);
+        sw_frame.set_format(from_gpu_fmt_vec[0].into_raw());
 
         // 分配缓冲区
         hw_frames_ctx
@@ -209,12 +209,13 @@ impl HWContext {
 
         let to_gpu_fmt_vec = get_transfer_formats_to_gpu(&mut hw_frames_ctx);
         log::debug!("to_gpu_fmt_vec:{:?}", to_gpu_fmt_vec);
+        assert_eq!(sw_frame.format, to_gpu_fmt_vec[0].into_raw(), "Frame format doesn't match hardware format");
 
         // 创建新的硬件帧
         let mut hw_frame = AVFrame::new();
-        hw_frame.set_width(sw_frame.width);
-        hw_frame.set_height(sw_frame.height);
-        hw_frame.set_format(self.get_format(true));
+        // hw_frame.set_width(sw_frame.width);
+        // hw_frame.set_height(sw_frame.height);
+        // hw_frame.set_format(self.get_format(true));
         unsafe {
             let hw_frame_ptr = hw_frame.as_mut_ptr();
             (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();

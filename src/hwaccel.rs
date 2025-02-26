@@ -148,11 +148,13 @@ impl HWContext {
         log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
 
         // 计算正确的对齐宽度，32 字节对齐
-        let aligned_width = (hw_frame.width + 31) & !31;
-        log::trace!(
-            "Aligning width {} to {} (32-byte alignment)",
-            hw_frame.width,
-            aligned_width
+        let width = hw_frame.width as usize;
+        let aligned_width = ((width + 31) / 32) * 32;
+        log::debug!(
+            "Width alignment: original={}, aligned={}, remainder={}",
+            width,
+            aligned_width,
+            width % 32
         );
 
         // 创建新的软件帧
@@ -162,15 +164,16 @@ impl HWContext {
         sw_frame.set_format(self.get_format(false));
         unsafe {
             let sw_frame_ptr = sw_frame.as_mut_ptr();
-            (*sw_frame_ptr).linesize[0] = aligned_width; // Y 平面
-            (*sw_frame_ptr).linesize[1] = aligned_width; // UV 平面
+            (*sw_frame_ptr).linesize[0] = aligned_width as i32; // Y 平面
+            (*sw_frame_ptr).linesize[1] = aligned_width as i32; // UV 平面
             (*sw_frame_ptr).linesize[2] = 0;
             (*sw_frame_ptr).linesize[3] = 0;
 
-            log::trace!(
-                "Setting NV12 frame linesize: Y={}, UV={}",
+            log::debug!(
+                "Setting NV12 frame linesize: Y={}, UV={}, aligned={}",
                 (*sw_frame_ptr).linesize[0],
-                (*sw_frame_ptr).linesize[1]
+                (*sw_frame_ptr).linesize[1],
+                aligned_width
             );
         }
 

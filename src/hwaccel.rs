@@ -152,6 +152,14 @@ impl HWContext {
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(self.get_format(false));
+        unsafe {
+            // 计算正确的对齐宽度，32 字节对齐
+            let aligned_width = (hw_frame.width + 31) & !31;
+            let sw_frame_ptr = sw_frame.as_mut_ptr();
+            (*sw_frame_ptr).linesize[0] = aligned_width; // Y 平面
+            (*sw_frame_ptr).linesize[1] = aligned_width; // UV 平面
+        }
+
         sw_frame
             .get_buffer(32)
             .context("Failed to allocate software frame buffer")?;
@@ -227,8 +235,12 @@ impl HWContext {
         hw_frame.set_height(sw_frame.height);
         hw_frame.set_format(self.get_format(true));
         unsafe {
+            // 使用相同的对齐方式
+            let aligned_width = (sw_frame.width + 31) & !31;
             let hw_frame_ptr = hw_frame.as_mut_ptr();
             (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
+            (*hw_frame_ptr).linesize[0] = aligned_width;
+            (*hw_frame_ptr).linesize[1] = aligned_width;
         }
 
         // 分配硬件缓冲区

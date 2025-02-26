@@ -130,9 +130,12 @@ impl HWContext {
         }
 
         unsafe {
-            decoder.set_hw_frames_ctx(AVHWFramesContext::from_raw(
-                std::ptr::NonNull::new(hw_frame.hw_frames_ctx).unwrap(),
-            ))
+            if decoder.hw_frames_ctx_mut().is_none() {
+                log::debug!("decoder hw_frames_ctx is null, is_hwaccel:{}", decoder.is_hwaccel());
+                decoder.set_hw_frames_ctx(AVHWFramesContext::from_raw(
+                    std::ptr::NonNull::new(hw_frame.hw_frames_ctx).unwrap(),
+                ));
+            }
         }
 
         // 确保解码器上下文有硬件帧上下文

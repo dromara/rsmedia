@@ -149,8 +149,8 @@ impl HWContext {
 
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
-        // sw_frame.set_width(hw_frame.width);
-        // sw_frame.set_height(hw_frame.height);
+        sw_frame.set_width(hw_frame.width);
+        sw_frame.set_height(hw_frame.height);
         sw_frame.set_format(from_gpu_fmt_vec[0].into_raw());
 
         // 分配缓冲区

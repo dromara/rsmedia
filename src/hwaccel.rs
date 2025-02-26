@@ -273,7 +273,7 @@ impl HWContext {
     ///
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
-    pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
+    pub fn is_hw_frame(&self, frame: AVFrame) -> bool {
         // 检查硬件帧上下文是否为空
         if frame.hw_frames_ctx.is_null() {
             log::debug!("Frame hardware context is null");
@@ -294,7 +294,7 @@ impl HWContext {
     }
 
     /// Check if a frame is in software memory format
-    pub fn is_sw_frame(&self, frame: &AVFrame) -> bool {
+    pub fn is_sw_frame(&self, frame: AVFrame) -> bool {
         frame.format == self.config.sw_pixel_format.into_raw()
     }
 

@@ -558,7 +558,7 @@ impl DecoderSplit {
         };
 
         let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
-            if hw_ctx.is_hw_frame(&frame) {
+            if hw_ctx.is_hw_frame(frame.clone()) {
                 match hw_ctx.download_frame(&mut self.decoder, &frame) {
                     Ok(sw_frame) => sw_frame,
                     Err(e) => {

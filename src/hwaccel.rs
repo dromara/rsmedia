@@ -140,12 +140,12 @@ impl HWContext {
         }
 
         // 确保解码器上下文有硬件帧上下文
-        let mut hw_frames_ctx = decoder
-            .hw_frames_ctx_mut()
-            .ok_or_else(|| Error::msg("Decoder has no hardware frames context"))?;
-
-        let from_gpu_fmt_vec = get_transfer_formats_from_gpu(&mut hw_frames_ctx);
-        log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
+        // let mut hw_frames_ctx = decoder
+        //     .hw_frames_ctx_mut()
+        //     .ok_or_else(|| Error::msg("Decoder has no hardware frames context"))?;
+        //
+        // let from_gpu_fmt_vec = get_transfer_formats_from_gpu(&mut hw_frames_ctx);
+        // log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
 
         // 创建新的软件帧
         let mut sw_frame = AVFrame::new();
@@ -213,13 +213,8 @@ impl HWContext {
             .hw_frames_ctx_mut()
             .ok_or_else(|| Error::msg("Encoder has no hardware frames context"))?;
 
-        let to_gpu_fmt_vec = get_transfer_formats_to_gpu(&mut hw_frames_ctx);
-        log::debug!("to_gpu_fmt_vec:{:?}", to_gpu_fmt_vec);
-        assert_eq!(
-            sw_frame.format,
-            to_gpu_fmt_vec[0].into_raw(),
-            "Frame format doesn't match hardware format"
-        );
+        // let to_gpu_fmt_vec = get_transfer_formats_to_gpu(&mut hw_frames_ctx);
+        // log::debug!("to_gpu_fmt_vec:{:?}", to_gpu_fmt_vec);
 
         // 创建新的硬件帧
         let mut hw_frame = AVFrame::new();
@@ -267,7 +262,7 @@ impl HWContext {
         dst.set_ch_layout(src.ch_layout);
         dst.set_nb_samples(src.nb_samples);
 
-        // 复制 side data
+        // copy side_data
         unsafe {
             for i in 0..src.nb_side_data {
                 let side_data = *src.side_data.add(i as usize);

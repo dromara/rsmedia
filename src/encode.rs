@@ -171,7 +171,8 @@ impl Encoder {
         let global_header = AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
             .contains(AvFormatFlags::GLOBAL_HEADER);
 
-        let mut encode_ctx = AVCodecContext::new(&settings.codec());
+        let codec = settings.codec();
+        let mut encode_ctx = AVCodecContext::new(&codec);
 
         // Some formats require this flag to be set or the output will
         // not be playable by dumb players.
@@ -184,6 +185,12 @@ impl Encoder {
 
         let hw_context = match hw_device_type {
             Some(device_type) => {
+                if device_type.find_hw_pixel_format_with_codec(&codec).is_none() {
+                    return Err(Error::msg(format!(
+                        "HW acceleration encoder not supported for codec: {}",
+                        utils::to_string(codec.name())
+                    )));
+                }
                 let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
                     .context("Hardware acceleration context initialization failed.")?;
                 hw_ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;

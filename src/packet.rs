@@ -262,7 +262,7 @@ impl Packet {
     pub fn new_with_avpacket(pkt: AVPacket) -> Self {
         Packet {
             inner: pkt,
-            time_base: Rational::new(1, 30 * 1000),
+            time_base: Rational::new(1, 24),
         }
     }
 

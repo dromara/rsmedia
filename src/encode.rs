@@ -135,7 +135,7 @@ impl<'a> EncoderBuilder<'a> {
 /// ```
 pub struct Encoder {
     hw_context: Option<HWContext>,
-    encoder: AVCodecContext,
+    encode_ctx: AVCodecContext,
     writer: Writer,
     writer_stream_index: usize,
     interleaved: bool,
@@ -208,7 +208,7 @@ impl Encoder {
 
         Ok(Self {
             hw_context,
-            encoder: encode_ctx,
+            encode_ctx,
             writer,
             writer_stream_index,
             interleaved,
@@ -229,7 +229,7 @@ impl Encoder {
     #[cfg(feature = "ndarray")]
     pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<()> {
         let (height, width, channels) = frame.dim();
-        if height != self.encoder.height as usize || width != self.encoder.width as usize || channels != 3 {
+        if height != self.encode_ctx.height as usize || width != self.encode_ctx.width as usize || channels != 3 {
             return Err(Error::msg("Invalid frame format."));
         }
 
@@ -252,12 +252,12 @@ impl Encoder {
     /// * `frame` - Frame to encode.
     pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
         log::info!("encode_raw raw_frame: {:?}", raw_frame);
-        if raw_frame.width != self.encoder.width || raw_frame.height != self.encoder.height {
+        if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
             return Err(anyhow::anyhow!(
                 "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
                 PixelFormat::from_raw(raw_frame.format)?,
-                self.encoder.width,
-                self.encoder.height,
+                self.encode_ctx.width,
+                self.encode_ctx.height,
                 raw_frame.width,
                 raw_frame.height
             ));
@@ -271,7 +271,7 @@ impl Encoder {
 
         // 根据编码器类型选择目标像素格式
         let target_format = if self.hw_context.is_some() {
-            self.encoder
+            self.encode_ctx
                 .hw_frames_ctx_mut()
                 .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
                 .unwrap_or(PixelFormat::YUV420P)
@@ -296,7 +296,7 @@ impl Encoder {
                 let hw_frame = {
                     if hw_ctx.is_sw_frame(frame.clone()) {
                         hw_ctx
-                            .upload_frame(&mut self.encoder, &frame)
+                            .upload_frame(&mut self.encode_ctx, &frame)
                             .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?
                     } else {
                         frame
@@ -304,13 +304,13 @@ impl Encoder {
                 };
 
                 // 发送硬件帧到编码器
-                self.encoder
+                self.encode_ctx
                     .send_frame(Some(&hw_frame))
                     .map_err(|e| Error::msg(format!("Failed to send hardware frame: {}", e)))?;
             }
             None => {
                 // 软件编码
-                self.encoder
+                self.encode_ctx
                     .send_frame(Some(&frame))
                     .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
             }
@@ -350,27 +350,27 @@ impl Encoder {
     /// Get encoder time base.
     #[inline]
     pub fn time_base(&self) -> Rational {
-        self.encoder.time_base.into()
+        self.encode_ctx.time_base.into()
     }
 
     #[inline]
     pub fn frame_rate(&self) -> Rational {
-        self.encoder.framerate.into()
+        self.encode_ctx.framerate.into()
     }
 
     #[inline]
     pub fn width(&self) -> i32 {
-        self.encoder.width
+        self.encode_ctx.width
     }
 
     #[inline]
     pub fn height(&self) -> i32 {
-        self.encoder.height
+        self.encode_ctx.height
     }
 
     #[inline]
     pub fn pix_fmt(&self) -> AVPixelFormat {
-        self.encoder.pix_fmt
+        self.encode_ctx.pix_fmt
     }
 
     /// calculate key frame and pts
@@ -401,7 +401,7 @@ impl Encoder {
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
     fn encoder_receive_packet(&mut self) -> Result<Option<Packet>> {
-        let packet = match self.encoder.receive_packet() {
+        let packet = match self.encode_ctx.receive_packet() {
             Ok(p) => Packet::new_with_avpacket(p),
             Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
                 return Ok(None);
@@ -443,6 +443,14 @@ impl Encoder {
 
     /// Flush the encoder, drain any packets that still need processing.
     fn flush(&mut self) -> Result<()> {
+        // 确定编码器是否支持延迟（delay）
+        // 如果编码器不支持延迟，那么就没有必要进行 flush 操作，因为在这种情况下，编码器不会保留任何未处理的数据。
+        // 如果编码器支持延迟（delay），则在结束编码之前发送 EOS 包是有必要的，
+        // 因为编码器可能还在缓冲一些数据，直到接收到 EOS 信号才会处理完这些数据并输出剩余的包。
+        if self.encode_ctx.codec().capabilities & ffi::AV_CODEC_CAP_DELAY as i32 == 0 {
+            return Ok(());
+        }
+
         // Maximum number of invocations to `encoder_receive_packet`
         // to drain the items still on the queue before giving up.
         const MAX_DRAIN_ITERATIONS: u32 = 100;
@@ -465,7 +473,7 @@ impl Encoder {
 
     /// 发送一个空帧来刷新编码器 EOF
     fn send_eof(&mut self) -> Result<()> {
-        Ok(self.encoder.send_frame(None)?)
+        Ok(self.encode_ctx.send_frame(None)?)
     }
 }
 

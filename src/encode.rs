@@ -422,15 +422,18 @@ impl Encoder {
 
     /// Flush the encoder, drain any packets that still need processing.
     fn flush(&mut self) -> Result<()> {
+        // Maximum number of invocations to `encoder_receive_packet`
+        // to drain the items still on the queue before giving up.
+        const MAX_DRAIN_ITERATIONS: u32 = 100;
+
         // Notify the encoder that the last frame has been sent.
         self.send_eof().context("Send EOF frame failed.")?;
 
-        loop {
+        for i in 0..MAX_DRAIN_ITERATIONS {
             match self.encoder_receive_packet() {
                 Ok(Some(packet)) => self.write(packet)?,
                 Ok(None) => {
-                    log::debug!("No more packet received.");
-                    break;
+                    log::debug!("No more packet received, try: {}", i);
                 }
                 Err(e) => return Err(e).context("Receive packet failed.")?,
             }

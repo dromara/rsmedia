@@ -652,6 +652,26 @@ impl Drop for DecoderSplit {
                 }
             }
         }
+
+        unsafe {
+            // explicitly drop the hw_context to release the hardware resources
+            // 1. malloc(): unsorted double linked list corrupted
+            // 2. malloc(): mismatching next->prev_size (unsorted)
+            // 3. free(): invalid pointer
+            // 4. double free or corruption (fasttop)
+            let codec_ctx_ptr = self.decode_ctx.as_mut_ptr();
+            if !codec_ctx_ptr.is_null() {
+                if !(*codec_ctx_ptr).hw_frames_ctx.is_null() {
+                    let _hw_frames = (*codec_ctx_ptr).hw_frames_ctx;
+                    (*codec_ctx_ptr).hw_frames_ctx = std::ptr::null_mut();
+                }
+
+                if !(*codec_ctx_ptr).hw_device_ctx.is_null() {
+                    let _hw_device = (*codec_ctx_ptr).hw_device_ctx;
+                    (*codec_ctx_ptr).hw_device_ctx = std::ptr::null_mut();
+                }
+            }
+        }
     }
 }
 

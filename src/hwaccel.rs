@@ -74,7 +74,13 @@ impl HWContext {
     }
 
     /// 设置编解码器的硬件帧上下文
-    pub fn setup_hw_frames(&mut self, is_decoder: bool, codec_ctx: &mut AVCodecContext, width: i32, height: i32) -> Result<()> {
+    pub fn setup_hw_frames(
+        &mut self,
+        is_decoder: bool,
+        codec_ctx: &mut AVCodecContext,
+        width: i32,
+        height: i32,
+    ) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
         hw_frames_ref.data().format = self.config.hw_pixel_format.into_raw();

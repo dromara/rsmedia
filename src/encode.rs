@@ -286,17 +286,8 @@ impl Encoder {
             raw_frame.clone()
         };
 
-        // Producer key frame every once in a while
-        if self.frame_count % self.keyframe_interval == 0 {
-            frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
-        }
-        frame.set_time_base(self.time_base().into());
-
-        log::debug!(
-            "send frame to encoder time_base:{:?}, frame: {:?}",
-            frame.time_base,
-            frame
-        );
+        // 计算关键帧
+        self.calc_key_frame_pts(&mut frame);
 
         // 发送帧到编码器
         match self.hw_context.as_ref() {
@@ -324,10 +315,6 @@ impl Encoder {
                     .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
             }
         }
-
-        // Increment frame count regardless of whether or not frame is written,
-        // see https://github.com/oddity-ai/video-rs/issues/46.
-        self.frame_count += 1;
 
         match self.encoder_receive_packet() {
             Ok(Some(packet)) => {
@@ -367,6 +354,11 @@ impl Encoder {
     }
 
     #[inline]
+    pub fn frame_rate(&self) -> Rational {
+        self.encoder.framerate.into()
+    }
+
+    #[inline]
     pub fn width(&self) -> i32 {
         self.encoder.width
     }
@@ -379,6 +371,31 @@ impl Encoder {
     #[inline]
     pub fn pix_fmt(&self) -> AVPixelFormat {
         self.encoder.pix_fmt
+    }
+
+    /// calculate key frame and pts
+    fn calc_key_frame_pts(&mut self, frame: &mut RawFrame) {
+        // Producer key frame every once in a while
+        if self.frame_count % self.keyframe_interval == 0 {
+            frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
+        }
+
+        let pts_increment = self.time_base().denominator() as i64 / self.frame_rate().numerator() as i64;
+        let pts = self.frame_count as i64 * pts_increment;
+
+        // Update frame pts
+        frame.set_time_base(self.time_base().into());
+        frame.set_pts(pts);
+
+        // Increment frame count regardless of whether or not frame is written,
+        // see https://github.com/oddity-ai/video-rs/issues/46.
+        self.frame_count += 1;
+
+        log::debug!(
+            "send frame to encoder time_base:{:?}, frame: {:?}",
+            frame.time_base,
+            frame
+        );
     }
 
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
@@ -483,8 +500,8 @@ impl Settings {
     /// Default keyframe interval.
     const KEY_FRAME_INTERVAL: u64 = 12;
 
-    /// This is the assumed FPS for the encoder to use. Note that this does not need to be correct
-    /// exactly.
+    /// This is the assumed FPS for the encoder to use.
+    /// Note that this does not need to be correct exactly.
     const FRAME_RATE: i32 = 24;
 
     /// Default bit rate.
@@ -518,7 +535,7 @@ impl Settings {
             thread_count: 0,
             codec_name: None,
             bit_rate: Self::BIT_RATE,
-            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
+            time_base: Rational::new(1, Self::FRAME_RATE),
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             pixel_format: PixelFormat::YUV420P,
@@ -549,7 +566,7 @@ impl Settings {
             thread_count: 0,
             codec_name: None,
             bit_rate: Self::BIT_RATE,
-            time_base: Rational::new(1, Self::FRAME_RATE * 1000),
+            time_base: Rational::new(1, Self::FRAME_RATE),
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             pixel_format,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
@@ -583,7 +600,7 @@ impl Settings {
 
     /// Set the frame rate.
     pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
-        self.time_base = Rational::new(1, frame_rate * 1000);
+        self.time_base = Rational::new(1, frame_rate);
         self.frame_rate = Rational::new(frame_rate, 1);
         self
     }

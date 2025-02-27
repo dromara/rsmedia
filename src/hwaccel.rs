@@ -1,11 +1,9 @@
 use crate::pixel::PixelFormat;
 
 use anyhow::{Context, Error, Result};
-use std::ops::DerefMut;
-use std::ptr::NonNull;
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
+use rsmpeg::avutil::{AVBufferRef, AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
 use rsmpeg::{UnsafeDerefMut, ffi};
 
 /// 硬件加速设备配置
@@ -57,13 +55,13 @@ impl HWDeviceConfig {
 pub struct HWContext {
     config: HWDeviceConfig,
     device_ctx: AVHWDeviceContext,
-    _buffer_ref: NonNull<ffi::AVBufferRef>,
+    _buffer_ref: AVBufferRef,
 }
 
 impl HWContext {
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
         let device_path = config.device_path.as_deref();
-        let mut device_ctx = AVHWDeviceContext::create(
+        let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
             device_path.map(std::ffi::CString::new).transpose().unwrap().as_deref(),
             None,
@@ -71,8 +69,7 @@ impl HWContext {
         )
         .context("Failed to create hardware device context")?;
 
-        let buffer_ref = NonNull::new(device_ctx.deref_mut().as_mut_ptr()).unwrap();
-
+        let buffer_ref = device_ctx.clone();
         log::info!("Created hardware device context successfully: {:?}", config);
 
         Ok(Self {
@@ -339,13 +336,6 @@ impl HWContext {
         } else {
             self.config.sw_pixel_format.into_raw()
         }
-    }
-}
-
-impl Drop for HWContext {
-    fn drop(&mut self) {
-        // 注意：不需要在这里释放 _buffer_ref，因为它会在结构体销毁时自动处理
-        // ffmpeg 的引用计数机制会处理实际的资源释放
     }
 }
 

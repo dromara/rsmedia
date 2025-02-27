@@ -652,6 +652,9 @@ impl Drop for DecoderSplit {
                 }
             }
         }
+
+        // explicitly drop the hw_context to release the hardware resources
+        self.hw_context.take();
     }
 }
 

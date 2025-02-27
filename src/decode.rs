@@ -542,8 +542,7 @@ impl DecoderSplit {
 
     pub fn flush(&mut self) {
         unsafe {
-            // TODO: double free error in: `avcodec_free_context`
-            // ffi::avcodec_flush_buffers(self.decoder.as_mut_ptr());
+            ffi::avcodec_flush_buffers(self.decoder.as_mut_ptr());
         }
     }
 

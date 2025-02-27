@@ -16,8 +16,8 @@ fn main() {
         .expect("failed to create decoder");
 
     let settings = Settings::preset_h264(320, 180, false)
-        .with_keyframe_interval(12)
-        .with_frame_rate(30)
+        .with_keyframe_interval(4)
+        .with_frame_rate(24)
         .with_codec_name("h264_nvenc".to_string());
 
     let mut encoder = EncoderBuilder::new(Path::new("/tmp/output.mp4"), settings)

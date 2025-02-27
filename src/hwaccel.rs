@@ -3,7 +3,7 @@ use crate::pixel::PixelFormat;
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVBufferRef, AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
+use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
 use rsmpeg::{UnsafeDerefMut, ffi};
 
 /// 硬件加速设备配置
@@ -70,10 +70,7 @@ impl HWContext {
 
         log::info!("Created hardware device context successfully: {:?}", config);
 
-        Ok(Self {
-            config,
-            device_ctx,
-        })
+        Ok(Self { config, device_ctx })
     }
 
     /// 设置编解码器的硬件帧上下文

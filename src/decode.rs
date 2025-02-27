@@ -531,7 +531,8 @@ impl DecoderSplit {
     /// Sends a NULL packet to the decoder to signal end of stream and enter
     /// draining mode.
     fn send_eof(&mut self) -> Result<()> {
-        Ok(self.decoder.send_packet(None)?)
+        self.decoder.send_packet(None)?;
+        Ok(())
     }
 
     /// Reset the decoder to be used again after draining.
@@ -635,9 +636,21 @@ impl Drop for DecoderSplit {
 
         // We need to drain the items still in the decoders queue.
         if let Ok(()) = self.send_eof() {
-            for _ in 0..MAX_DRAIN_ITERATIONS {
-                if self.decoder_receive_frame().is_err() {
-                    break;
+            for i in 0..MAX_DRAIN_ITERATIONS {
+                match self.decoder_receive_frame() {
+                    Ok(Some(_)) => {
+                        // If receive a frame, we continue to drain the queue.
+                        log::debug!("continue draining decoder, try:{}", i);
+                        continue;
+                    }
+                    Ok(None) => {
+                        log::debug!("Drained decoder.");
+                        break;
+                    }
+                    Err(err) => {
+                        log::error!("Failed to drain decoder: {}", err);
+                        break;
+                    }
                 }
             }
         }

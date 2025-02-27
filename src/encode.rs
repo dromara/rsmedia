@@ -134,13 +134,13 @@ impl<'a> EncoderBuilder<'a> {
 ///     );
 /// ```
 pub struct Encoder {
+    hw_context: Option<HWContext>,
+    encoder: AVCodecContext,
     writer: Writer,
     writer_stream_index: usize,
-    encoder: AVCodecContext,
-    hw_context: Option<HWContext>,
-    keyframe_interval: u64,
     interleaved: bool,
     frame_count: u64,
+    keyframe_interval: u64,
     have_written_header: bool,
     have_written_trailer: bool,
 }
@@ -207,13 +207,13 @@ impl Encoder {
         log::info!("{}", stream_info);
 
         Ok(Self {
+            hw_context,
+            encoder: encode_ctx,
             writer,
             writer_stream_index,
-            encoder: encode_ctx,
-            hw_context,
-            keyframe_interval: settings.keyframe_interval,
             interleaved,
             frame_count: 0,
+            keyframe_interval: settings.keyframe_interval,
             have_written_header: false,
             have_written_trailer: false,
         })

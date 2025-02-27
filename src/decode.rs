@@ -362,8 +362,8 @@ impl Decoder {
 /// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
 pub struct DecoderSplit {
-    decoder: AVCodecContext,
     hw_context: Option<HWContext>,
+    decode_ctx: AVCodecContext,
     time_base: Rational,
     size: (u32, u32),
     size_out: (u32, u32),
@@ -427,8 +427,8 @@ impl DecoderSplit {
         };
 
         Ok(Self {
-            decoder: decode_ctx,
             hw_context,
+            decode_ctx,
             time_base: reader_stream.time_base.into(),
             size: (width as u32, height as u32),
             size_out: (resize_width, resize_height),
@@ -529,7 +529,7 @@ impl DecoderSplit {
     /// Sends a NULL packet to the decoder to signal end of stream and enter
     /// draining mode.
     fn send_eof(&mut self) -> Result<()> {
-        self.decoder.send_packet(None)?;
+        self.decode_ctx.send_packet(None)?;
         Ok(())
     }
 
@@ -541,7 +541,7 @@ impl DecoderSplit {
 
     pub fn flush(&mut self) {
         unsafe {
-            ffi::avcodec_flush_buffers(self.decoder.deref_mut());
+            ffi::avcodec_flush_buffers(self.decode_ctx.as_mut_ptr());
         }
     }
 
@@ -550,7 +550,7 @@ impl DecoderSplit {
         let (mut packet, packet_time_base) = packet.into_inner_parts();
         packet.rescale_ts(packet_time_base.into(), self.time_base().into());
 
-        self.decoder.send_packet(Some(&packet))?;
+        self.decode_ctx.send_packet(Some(&packet))?;
 
         Ok(())
     }
@@ -564,7 +564,7 @@ impl DecoderSplit {
 
         let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
             if hw_ctx.is_hw_frame(frame.clone()) {
-                match hw_ctx.download_frame(&mut self.decoder, &frame) {
+                match hw_ctx.download_frame(&mut self.decode_ctx, &frame) {
                     Ok(sw_frame) => sw_frame,
                     Err(e) => {
                         log::error!("Failed to download frame from hw_device: {}", e);
@@ -586,7 +586,7 @@ impl DecoderSplit {
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
     /// the decoder signals `EAGAIN`.
     fn decoder_receive_frame(&mut self) -> Result<Option<RawFrame>> {
-        let decode_result = self.decoder.receive_frame();
+        let decode_result = self.decode_ctx.receive_frame();
         match decode_result {
             Ok(frame) => Ok(Some(frame)),
             Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => Ok(None),
@@ -653,8 +653,7 @@ impl Drop for DecoderSplit {
             }
         }
 
-        // explicitly drop the hw_context to release the hardware resources
-        self.hw_context.take();
+
     }
 }
 

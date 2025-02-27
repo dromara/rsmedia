@@ -55,7 +55,6 @@ impl HWDeviceConfig {
 pub struct HWContext {
     config: HWDeviceConfig,
     device_ctx: AVHWDeviceContext,
-    _buffer_ref: AVBufferRef,
 }
 
 impl HWContext {
@@ -69,13 +68,11 @@ impl HWContext {
         )
         .context("Failed to create hardware device context")?;
 
-        let buffer_ref = device_ctx.clone();
         log::info!("Created hardware device context successfully: {:?}", config);
 
         Ok(Self {
             config,
             device_ctx,
-            _buffer_ref: buffer_ref,
         })
     }
 
@@ -108,7 +105,7 @@ impl HWContext {
                 let ctx_mut_ptr = codec_ctx.deref_mut();
                 ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into_raw();
                 ctx_mut_ptr.opaque = self.config.hw_pixel_format.into_raw() as _;
-                ctx_mut_ptr.hw_device_ctx = ffi::av_buffer_ref(self._buffer_ref.as_ptr());
+                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
                 ctx_mut_ptr.get_format = Some(hwaccel_get_format);
                 // (*codec_ctx).hwaccel
                 // (*codec_ctx).hwaccel_context

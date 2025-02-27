@@ -11,7 +11,7 @@ use crate::{PixelFormat, Rational, RawFrame, utils};
 use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::error::RsmpegError;
-use rsmpeg::{UnsafeDerefMut, ffi};
+use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
@@ -652,8 +652,6 @@ impl Drop for DecoderSplit {
                 }
             }
         }
-
-
     }
 }
 

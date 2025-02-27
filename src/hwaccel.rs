@@ -4,7 +4,7 @@ use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
-use rsmpeg::ffi;
+use rsmpeg::{UnsafeDerefMut, ffi};
 
 /// 硬件加速设备配置
 /// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
@@ -90,11 +90,11 @@ impl HWContext {
         codec_ctx.set_hw_frames_ctx(hw_frames_ref);
         codec_ctx.set_pix_fmt(self.get_format(true));
         unsafe {
-            let ctx_mut_ptr = codec_ctx.as_mut_ptr();
-            (*ctx_mut_ptr).sw_pix_fmt = self.config.sw_pixel_format.into_raw();
-            (*ctx_mut_ptr).opaque = self.config.hw_pixel_format.into_raw() as _;
-            (*ctx_mut_ptr).get_format = Some(hwaccel_get_format);
-            // (*ctx_mut_ptr).hw_device_ctx = self.device_ctx.as_mut_ptr();
+            let ctx_mut_ptr = codec_ctx.deref_mut();
+            ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into_raw();
+            ctx_mut_ptr.opaque = self.config.hw_pixel_format.into_raw() as _;
+            ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
+            ctx_mut_ptr.get_format = Some(hwaccel_get_format);
             // (*codec_ctx).hwaccel
             // (*codec_ctx).hwaccel_context
         }
@@ -131,7 +131,7 @@ impl HWContext {
         }
 
         unsafe {
-            if decoder.hw_frames_ctx_mut().is_none() {
+            if decoder.hw_frames_ctx().is_none() {
                 log::debug!("decoder hw_frames_ctx is null, is_hwaccel:{}", decoder.is_hwaccel());
                 decoder.set_hw_frames_ctx(AVHWFramesContext::from_raw(
                     std::ptr::NonNull::new(hw_frame.hw_frames_ctx).unwrap(),
@@ -223,8 +223,8 @@ impl HWContext {
         hw_frame.set_format(self.get_format(true));
         unsafe {
             // 使用相同的对齐方式
-            let hw_frame_ptr = hw_frame.as_mut_ptr();
-            (*hw_frame_ptr).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
+            let hw_frame_ptr = hw_frame.deref_mut();
+            hw_frame_ptr.hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
         }
 
         // 分配硬件缓冲区

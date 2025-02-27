@@ -362,8 +362,8 @@ impl Decoder {
 /// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
 pub struct DecoderSplit {
-    hw_context: Option<HWContext>,
     decoder: AVCodecContext,
+    hw_context: Option<HWContext>,
     time_base: Rational,
     size: (u32, u32),
     size_out: (u32, u32),
@@ -426,15 +426,12 @@ impl DecoderSplit {
             None => (width as u32, height as u32),
         };
 
-        let size = (width as u32, height as u32);
-        let size_out = (resize_width, resize_height);
-
         Ok(Self {
             decoder: decode_ctx,
-            time_base: reader_stream.time_base.into(),
             hw_context,
-            size,
-            size_out,
+            time_base: reader_stream.time_base.into(),
+            size: (width as u32, height as u32),
+            size_out: (resize_width, resize_height),
             draining: false,
         })
     }
@@ -654,6 +651,11 @@ impl Drop for DecoderSplit {
                     }
                 }
             }
+        }
+
+        if let Some(hw_context) = self.hw_context.take() {
+            // 手动清理 hw_context
+            drop(hw_context);
         }
     }
 }

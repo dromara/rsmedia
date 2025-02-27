@@ -186,7 +186,7 @@ impl Encoder {
             Some(device_type) => {
                 let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
                     .context("Hardware acceleration context initialization failed.")?;
-                hw_ctx.setup_hw_frames(&mut encode_ctx, width, height)?;
+                hw_ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;
                 Some(hw_ctx)
             }
             None => None,

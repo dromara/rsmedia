@@ -1,6 +1,8 @@
 use crate::pixel::PixelFormat;
 
 use anyhow::{Context, Error, Result};
+use std::ops::DerefMut;
+use std::ptr::NonNull;
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
@@ -53,14 +55,15 @@ impl HWDeviceConfig {
 }
 
 pub struct HWContext {
-    device_ctx: AVHWDeviceContext,
     config: HWDeviceConfig,
+    device_ctx: AVHWDeviceContext,
+    _buffer_ref: NonNull<ffi::AVBufferRef>,
 }
 
 impl HWContext {
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
         let device_path = config.device_path.as_deref();
-        let device_ctx = AVHWDeviceContext::create(
+        let mut device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
             device_path.map(std::ffi::CString::new).transpose().unwrap().as_deref(),
             None,
@@ -68,9 +71,15 @@ impl HWContext {
         )
         .context("Failed to create hardware device context")?;
 
+        let buffer_ref = NonNull::new(device_ctx.deref_mut().as_mut_ptr()).unwrap();
+
         log::info!("Created hardware device context successfully: {:?}", config);
 
-        Ok(Self { device_ctx, config })
+        Ok(Self {
+            config,
+            device_ctx,
+            _buffer_ref: buffer_ref,
+        })
     }
 
     /// 设置编解码器的硬件帧上下文
@@ -102,7 +111,7 @@ impl HWContext {
                 let ctx_mut_ptr = codec_ctx.deref_mut();
                 ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into_raw();
                 ctx_mut_ptr.opaque = self.config.hw_pixel_format.into_raw() as _;
-                ctx_mut_ptr.hw_device_ctx = ffi::av_buffer_ref(self.device_ctx.as_ptr());
+                ctx_mut_ptr.hw_device_ctx = ffi::av_buffer_ref(self._buffer_ref.as_ptr());
                 ctx_mut_ptr.get_format = Some(hwaccel_get_format);
                 // (*codec_ctx).hwaccel
                 // (*codec_ctx).hwaccel_context
@@ -330,6 +339,13 @@ impl HWContext {
         } else {
             self.config.sw_pixel_format.into_raw()
         }
+    }
+}
+
+impl Drop for HWContext {
+    fn drop(&mut self) {
+        // 注意：不需要在这里释放 _buffer_ref，因为它会在结构体销毁时自动处理
+        // ffmpeg 的引用计数机制会处理实际的资源释放
     }
 }
 

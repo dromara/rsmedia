@@ -652,11 +652,6 @@ impl Drop for DecoderSplit {
                 }
             }
         }
-
-        if let Some(hw_context) = self.hw_context.take() {
-            // 手动清理 hw_context
-            drop(hw_context);
-        }
     }
 }
 

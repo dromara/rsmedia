@@ -292,7 +292,7 @@ impl Encoder {
         }
         frame.set_time_base(self.time_base().into());
 
-        log::debug!("send frame to encoder: {:?}", frame);
+        log::debug!("send frame to encoder time_base:{:?}, frame: {:?}", frame.time_base, frame);
 
         // 发送帧到编码器
         match self.hw_context.as_ref() {

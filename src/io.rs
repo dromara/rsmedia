@@ -5,7 +5,7 @@ use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
 use crate::utils;
 
-use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextURL, AVOutputFormat};
+use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextURL};
 use rsmpeg::avformat::{AVFormatContextOutput, AVInputFormat};
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
@@ -329,15 +329,17 @@ impl<'a> WriterBuilder<'a> {
     pub fn output_as<P: AsRef<Path> + ?Sized>(path: &P, format: &str) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
-        let ofmt = AVOutputFormat::guess_format(None, Some(&format), None);
         let ofctx = unsafe {
             let mut output_format_context = ptr::null_mut();
-            ffi::avformat_alloc_output_context2(
+            let res = ffi::avformat_alloc_output_context2(
                 &mut output_format_context,
-                ofmt.map(|x| x.as_ptr()).unwrap_or_else(ptr::null),
                 ptr::null_mut(),
-                path.as_c_str().as_ptr(),
+                format.as_ptr(),
+                path.as_ptr(),
             );
+            if res < 0 {
+                return Err(Error::new(RsmpegError::from(res)));
+            }
 
             let mut output_format_context =
                 AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());
@@ -358,15 +360,17 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
-        let ofmt = AVOutputFormat::guess_format(None, Some(&format), None);
         let ofctx = unsafe {
             let mut output_format_context = ptr::null_mut();
-            ffi::avformat_alloc_output_context2(
+            let res = ffi::avformat_alloc_output_context2(
                 &mut output_format_context,
-                ofmt.map(|x| x.as_ptr()).unwrap_or_else(ptr::null),
                 ptr::null_mut(),
-                path.as_c_str().as_ptr(),
+                format.as_ptr(),
+                path.as_ptr(),
             );
+            if res < 0 {
+                return Err(Error::new(RsmpegError::from(res)));
+            }
 
             let mut output_format_context =
                 AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());

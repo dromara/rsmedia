@@ -64,45 +64,82 @@ impl Options {
 
     /// Default options for a libx264 encoder.
     pub fn preset_h264() -> Self {
-        // Set libx264 encoder to the medium preset.
-        // - ultrafast,superfast,veryfast,faster,fast,medium,slow,slower,veryslow
-        let opts = AVDictionary::new(&utils::from_str("preset"), &utils::from_str("medium"), 0);
+        let mut opts = HashMap::new();
+        // ultrafast,superfast,veryfast,faster,fast,medium,slow,slower,veryslow,placebo
+        opts.insert("preset".to_string(), "medium".to_string());
+        // baseline,main,high
+        opts.insert("profile:v".to_string(), "high".to_string());
 
-        Self(opts)
+        // HashMap<String, String> -> Options
+        opts.into()
     }
 
     /// Options for a libx264 encoder that are tuned for low-latency encoding such as for real-time streaming.
     pub fn preset_h264_realtime() -> Self {
-        // Set H264 encoder to the medium preset.
-        let opts = AVDictionary::new(&utils::from_str("preset"), &utils::from_str("medium"), 0)
-            .set(&utils::from_str("profile"), &utils::from_str("high"), 0)
-            .set(&utils::from_str("tune"), &utils::from_str("zerolatency"), 0);
+        let mut opts = HashMap::new();
+        // ultrafast,superfast,veryfast,faster,fast,medium,slow,slower,veryslow,placebo
+        opts.insert("preset".to_string(), "medium".to_string());
+        // baseline,main,high
+        opts.insert("profile:v".to_string(), "main".to_string());
+        // crf, vbr, cbr, abr
+        opts.insert("rc".to_string(), "cbr".to_string());
+        // 场景切换敏感度
+        opts.insert("scenecut".to_string(), "0".to_string());
+        // 周期内部刷新替代关键帧
+        opts.insert("intra-refresh".to_string(), "1".to_string());
+        // 参考帧数量
+        opts.insert("ref".to_string(), "3".to_string());
+        // GOP=60（2秒@30fps）
+        opts.insert("g".to_string(), "60".to_string());
+        // 禁用 B 帧
+        opts.insert("bf".to_string(), "0".to_string());
+        // 最小量化参数
+        opts.insert("qmin".to_string(), "4".to_string());
+        // 最大量化参数
+        opts.insert("qmax".to_string(), "51".to_string());
+        // 启用中等强度去块滤波
+        opts.insert("deblock".to_string(), "1:1".to_string());
+        // film,animation,grain,stillimage,psnr,ssim,fastdecode,zerolatency
+        opts.insert("tune".to_string(), "fastdecode".to_string());
+        // 自适应量化模式
+        opts.insert("aq-mode".to_string(), "2".to_string());
+        // 量化优化, 0: 禁用, 1: 仅用于最终编码, 2: 用于所有模式决策
+        opts.insert("trellis".to_string(), "1".to_string());
+        opts.insert("threads".to_string(), "auto".to_string());
+        // 使用所有可用的分区模式
+        opts.insert("partitions".to_string(), "all".to_string());
 
-        Self(opts)
+        // HashMap<String, String> -> Options
+        opts.into()
     }
 
     /// h264_nvenc options only
     pub fn preset_h264_nvenc() -> Self {
-        // p1-p7:
-        // default: p4
-        // slow, medium, fast, hp, hq, bd
-        let opts = AVDictionary::new(&utils::from_str("preset"), &utils::from_str("p7"), 0)
-            // baseline, main, high, high444p, high10, high422
-            .set(&utils::from_str("profile"), &utils::from_str("high"), 0)
-            // ll, ull, lossless, film, animation, grain, fastdecode, zerolatency, hq
-            .set(&utils::from_str("tune"), &utils::from_str("ll"), 0)
-            // constqp, vbr, cbr, vbr_hq, cbr_hq, vbr_minqp, ll_2pass_quality, ll_2pass_size, qvbr, cbr_ld_hq, cbr_ll_hq
-            .set(&utils::from_str("rc"), &utils::from_str("vbr_hq"), 0)
-            .set(&utils::from_str("qmin"), &utils::from_str("19"), 0)
-            .set(&utils::from_str("qmax"), &utils::from_str("21"), 0)
-            .set(&utils::from_str("spatial-aq"), &utils::from_str("1"), 0)
-            .set(&utils::from_str("temporal-aq"), &utils::from_str("1"), 0)
-            .set(&utils::from_str("aq-strength"), &utils::from_str("8"), 0)
-            .set(&utils::from_str("no-scenecut"), &utils::from_str("1"), 0)
-            .set(&utils::from_str("delay"), &utils::from_str("0"), 0)
-            .set(&utils::from_str("zerolatency"), &utils::from_str("1"), 0);
+        let mut opts = HashMap::new();
+        // p1-p7, default(p4), slow, medium, fast, hp, hq, bd
+        opts.insert("preset".to_string(), "p7".to_string());
+        // baseline, main, high, high444p, high10, high422
+        opts.insert("profile".to_string(), "high".to_string());
+        // ll, ull, lossless, film, animation, grain, fastdecode, zerolatency, hq
+        opts.insert("tune".to_string(), "ll".to_string());
+        // constqp, vbr, cbr, vbr_hq, cbr_hq, vbr_minqp, qvbr, cbr_ld_hq, cbr_ll_hq
+        // ll_2pass, ll_2pass_quality, ll_2pass_size,
+        opts.insert("rc".to_string(), "vbr_hq".to_string());
+        opts.insert("qmin".to_string(), "19".to_string());
+        opts.insert("qmax".to_string(), "21".to_string());
+        opts.insert("spatial-aq".to_string(), "1".to_string());
+        opts.insert("temporal-aq".to_string(), "1".to_string());
+        opts.insert("aq-strength".to_string(), "8".to_string());
+        opts.insert("2pass".to_string(), "1".to_string());
+        opts.insert("g".to_string(), "60".to_string());
+        opts.insert("bf".to_string(), "0".to_string());
+        opts.insert("b_ref_mode".to_string(), "middle".to_string());
+        opts.insert("no-scenecut".to_string(), "1".to_string());
+        opts.insert("delay".to_string(), "0".to_string());
+        opts.insert("zerolatency".to_string(), "1".to_string());
 
-        Self(opts)
+        // HashMap<String, String> -> Options
+        opts.into()
     }
 
     /// Convert back to ffmpeg native dictionary, which can be used with `ffmpeg` functions.

@@ -249,7 +249,7 @@ pub trait Write: private::Write + private::Output {}
 pub struct WriterBuilder<'a> {
     destination: Location,
     format: Option<&'a str>,
-    options: Option<Options>,
+    options: Option<&'a Options>,
 }
 
 impl<'a> WriterBuilder<'a> {
@@ -281,7 +281,7 @@ impl<'a> WriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -471,7 +471,7 @@ pub type Bufs = Vec<Buf>;
 /// Build a [`BufWriter`].
 pub struct BufWriterBuilder<'a> {
     format: &'a str,
-    options: Option<Options>,
+    options: Option<&'a Options>,
 }
 
 impl<'a> BufWriterBuilder<'a> {
@@ -489,7 +489,7 @@ impl<'a> BufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -498,7 +498,7 @@ impl<'a> BufWriterBuilder<'a> {
     pub fn build(self) -> Result<BufWriter> {
         Ok(BufWriter {
             output: output_raw(self.format)?,
-            options: self.options,
+            options: self.options.cloned(),
         })
     }
 }
@@ -552,7 +552,7 @@ unsafe impl Sync for BufWriter {}
 /// Build a [`PacketizedBufWriter`].
 pub struct PacketizedBufWriterBuilder<'a> {
     format: &'a str,
-    options: Option<Options>,
+    options: Option<&'a Options>,
 }
 
 impl<'a> PacketizedBufWriterBuilder<'a> {
@@ -570,7 +570,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -579,7 +579,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     pub fn build(self) -> Result<PacketizedBufWriter> {
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
-            options: self.options,
+            options: self.options.cloned(),
             buffers: Vec::new(),
         })
     }

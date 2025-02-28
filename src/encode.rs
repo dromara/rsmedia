@@ -17,13 +17,13 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::{UnsafeDerefMut, ffi};
 
 use anyhow::{Context, Error, Result};
-use libc::c_uint;
+use libc::{c_int, c_uint};
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
     destination: Location,
     settings: Settings,
-    options: Option<&'a Options>,
+    options: Option<Options>,
     format: Option<&'a str>,
     interleaved: bool,
     hw_device_type: Option<HWDeviceType>,
@@ -50,7 +50,7 @@ impl<'a> EncoderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - The output options.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -199,9 +199,8 @@ impl Encoder {
             None => None,
         };
 
-        // TODO: options
-        // let dict = settings.options.map(|op| op.to_dict().clone());
-        encode_ctx.open(None).context("Failed to open encode context")?;
+        let dict = settings.options().map(|op| op.to_dict());
+        encode_ctx.open(dict).context("Failed to open encode context")?;
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();
@@ -507,8 +506,7 @@ pub struct Settings {
     thread_count: i32,
     codec_name: Option<String>,
     pixel_format: PixelFormat,
-    // dict
-    pub options: Option<Options>,
+    options: Option<Options>,
 }
 
 impl Settings {
@@ -545,7 +543,7 @@ impl Settings {
         Self {
             width,
             height,
-            gop_size: 10,
+            gop_size: Self::FRAME_RATE * 2,
             max_b_frames: 1,
             thread_count: 0,
             codec_name: None,
@@ -576,7 +574,7 @@ impl Settings {
         Self {
             width,
             height,
-            gop_size: 10,
+            gop_size: Self::FRAME_RATE * 2,
             max_b_frames: 1,
             thread_count: 0,
             codec_name: None,
@@ -638,6 +636,11 @@ impl Settings {
         self
     }
 
+    /// Get encoder options.
+    pub fn options(&self) -> Option<Options> {
+        self.options.clone()
+    }
+
     /// Get codec, or Try to use the default codec libx264 if none specified.
     pub fn codec(&self) -> AVCodecRef {
         let codec_name = if let Some(codec_name) = &self.codec_name {
@@ -667,10 +670,12 @@ impl Settings {
         encoder.set_max_b_frames(self.max_b_frames);
         encoder.set_framerate(self.frame_rate.into());
         encoder.set_time_base(self.time_base.into());
+        encoder.set_pkt_timebase(self.time_base.into());
         encoder.set_pix_fmt(self.pixel_format.into_raw());
         encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         unsafe {
             encoder.deref_mut().thread_count = self.thread_count;
+            encoder.deref_mut().flags2 = ffi::AV_CODEC_FLAG2_FAST as c_int;
         }
     }
 }

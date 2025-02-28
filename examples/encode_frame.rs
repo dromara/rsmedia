@@ -1,19 +1,21 @@
 use rsmedia::encode::Settings;
 use rsmedia::hwaccel::HWDeviceType;
 use rsmedia::time::Time;
-use rsmedia::{EncoderBuilder, FrameArray};
+use rsmedia::{EncoderBuilder, FrameArray, Options};
 use std::path::Path;
 
 fn main() {
     rsmedia::init().unwrap();
 
     let settings = Settings::preset_h264(1280, 720, false)
+        .with_bit_rate(6000000)
     // libx264, h264_nvenc, h264_vaapi, h264_videotoolbox
     .with_codec_name("h264_nvenc".to_string());
 
     let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), settings)
         .with_format("mp4")
         .with_hardware_device(HWDeviceType::CUDA)
+        .with_options(Options::preset_h264())
         .build()
         .expect("failed to create encoder");
 

@@ -14,15 +14,15 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
-pub struct DecoderBuilder<'a> {
+pub struct DecoderBuilder {
     source: Location,
     resize: Option<Resize>,
     codec_name: Option<String>,
-    options: Option<&'a Options>,
+    options: Option<Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
-impl<'a> DecoderBuilder<'a> {
+impl DecoderBuilder {
     /// Create a decoder with the specified source.
     ///
     /// * `source` - Source to decode.
@@ -46,7 +46,7 @@ impl<'a> DecoderBuilder<'a> {
     /// Set custom options. Options are applied to the input.
     ///
     /// * `options` - Custom options.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -70,8 +70,8 @@ impl<'a> DecoderBuilder<'a> {
     /// Build [`Decoder`].
     pub fn build(self) -> Result<Decoder> {
         let mut reader_builder = ReaderBuilder::new(self.source);
-        if let Some(options) = self.options {
-            reader_builder = reader_builder.with_options(options);
+        if let Some(ref options) = self.options {
+            reader_builder = reader_builder.with_options(options.clone());
         }
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
@@ -381,7 +381,7 @@ impl DecoderSplit {
         reader: &Reader,
         stream_index: usize,
         codec: AVCodecRef,
-        _options: Option<&Options>, // TODO: options
+        options: Option<Options>,
         resize: Option<Resize>,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
@@ -412,9 +412,8 @@ impl DecoderSplit {
             None => None,
         };
 
-        // TODO: options
-        // let dict = options.map(|options| options.to_dict().clone());
-        decode_ctx.open(None).context("Failed to open decoder for stream")?;
+        let dict = options.map(|options| options.to_dict());
+        decode_ctx.open(dict).context("Failed to open decoder for stream")?;
 
         let stream_info = reader.stream_info(stream_index)?;
         log::info!("{}", stream_info);

@@ -62,34 +62,45 @@ impl Options {
         Self(opts)
     }
 
-    /// Default options for a H264 encoder.
+    /// Default options for a libx264 encoder.
     pub fn preset_h264() -> Self {
-        // Set H264 encoder to the medium preset.
-        // preset: 预设编码配置,控制编码速度和质量的平衡
-        // - ultrafast,superfast,veryfast,faster,fast
-        // - medium (默认)
-        // - slow,slower,veryslow
+        // Set libx264 encoder to the medium preset.
+        // - ultrafast,superfast,veryfast,faster,fast,medium,slow,slower,veryslow
         let opts = AVDictionary::new(&utils::from_str("preset"), &utils::from_str("medium"), 0);
 
         Self(opts)
     }
 
-    /// Options for a H264 encoder that are tuned for low-latency encoding such as for real-time
-    /// streaming.
+    /// Options for a libx264 encoder that are tuned for low-latency encoding such as for real-time streaming.
     pub fn preset_h264_realtime() -> Self {
         // Set H264 encoder to the medium preset.
-        // preset: 预设编码配置,控制编码速度和质量的平衡
-        // - slow: 更高质量,但编码速度较慢
-        // - medium: 默认设置,平衡质量和速度
-        // - fast: 更快编码速度,但质量可能略降
         let opts = AVDictionary::new(&utils::from_str("preset"), &utils::from_str("medium"), 0)
-            // quality: NVENC特定的质量控制模式
-            // - high: 质量优先模式,产生最佳画质但占用更多GPU资源
-            // - speed: 性能优先模式,平衡质量和编码速度
-            // - fast: 低延迟优先模式,最快编码速度但质量较低
-            .set(&utils::from_str("quality"), &utils::from_str("fast"), 0)
-            // Tune for low latency
+            .set(&utils::from_str("profile"), &utils::from_str("high"), 0)
             .set(&utils::from_str("tune"), &utils::from_str("zerolatency"), 0);
+
+        Self(opts)
+    }
+
+    /// h264_nvenc options only
+    pub fn preset_h264_nvenc() -> Self {
+        // p1-p7:
+        // default: p4
+        // slow, medium, fast, hp, hq, bd
+        let opts = AVDictionary::new(&utils::from_str("preset"), &utils::from_str("p7"), 0)
+            // baseline, main, high, high444p, high10, high422
+            .set(&utils::from_str("profile"), &utils::from_str("high"), 0)
+            // ll, ull, lossless, film, animation, grain, fastdecode, zerolatency, hq
+            .set(&utils::from_str("tune"), &utils::from_str("ll"), 0)
+            // constqp, vbr, cbr, vbr_hq, cbr_hq, vbr_minqp, ll_2pass_quality, ll_2pass_size, qvbr, cbr_ld_hq, cbr_ll_hq
+            .set(&utils::from_str("rc"), &utils::from_str("vbr_hq"), 0)
+            .set(&utils::from_str("qmin"), &utils::from_str("19"), 0)
+            .set(&utils::from_str("qmax"), &utils::from_str("21"), 0)
+            .set(&utils::from_str("spatial-aq"), &utils::from_str("1"), 0)
+            .set(&utils::from_str("temporal-aq"), &utils::from_str("1"), 0)
+            .set(&utils::from_str("aq-strength"), &utils::from_str("8"), 0)
+            .set(&utils::from_str("no-scenecut"), &utils::from_str("1"), 0)
+            .set(&utils::from_str("delay"), &utils::from_str("0"), 0)
+            .set(&utils::from_str("zerolatency"), &utils::from_str("1"), 0);
 
         Self(opts)
     }

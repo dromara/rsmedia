@@ -21,28 +21,121 @@ use libc::{c_int, c_uint};
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
-    destination: Location,
-    settings: Settings,
-    options: Option<Options>,
-    format: Option<&'a str>,
+    width: i32,
+    height: i32,
+    bit_rate: i64,
+    gop_size: i32,
     interleaved: bool,
+    time_base: Rational,
+    frame_rate: Rational,
+    max_b_frames: i32,
+    thread_count: i32,
+    keyframe_interval: u64,
+    pixel_format: PixelFormat,
+    destination: Location,
+    /// container format
+    format: Option<&'a str>,
+    codec_name: Option<String>,
+    options: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
 impl<'a> EncoderBuilder<'a> {
+    /// Default keyframe interval.
+    const KEY_FRAME_INTERVAL: u64 = 12;
+
+    /// This is the assumed FPS for the encoder to use.
+    /// Note that this does not need to be correct exactly.
+    const FRAME_RATE: i32 = 24;
+
+    /// Default bit rate.
+    /// 分辨率(width, height) + 推荐比特率（单位：bps）
+    /// * 标清 Sd_480p:          (640, 480)   => 1_000_000,   // 1 Mbps
+    /// * 高清 Hd_720p:          (1280, 720)  => 2_500_000,   // 2.5 Mbps
+    /// * 全高清 FullHd(1080p):  (1920, 1080) => 5_000_000,   // 5 Mbps
+    /// * 超高清 FullHd_2k:      (2560, 1440) => 8_000_000,   // 8 Mbps
+    /// * 超高清 UltraHd_4K:     (3840, 2160) => 20_000_000,  // 20 Mbps
+    /// * 超高清 FullUltraHd_8K: (7680, 4320) => 60_000_000,  // 60 Mbps
+    const BIT_RATE: i64 = 1_000_000;
+
+    /// default codec
+    const CODEC_NAME: &'static str = "libx264";
+
     /// Create an encoder with the specified destination and settings.
     ///
     /// * `destination` - Where to encode to.
-    /// * `settings` - Encoding settings.
-    pub fn new(destination: impl Into<Location>, settings: Settings) -> Self {
+    /// * `width` - The width of the video stream.
+    /// * `height` - The height of the video stream.
+    /// * `pixel_format` - The desired pixel format for the video stream.
+    /// * `options` - Custom H264 encoding options.
+    pub fn new(destination: impl Into<Location>, width: i32, height: i32) -> Self {
         Self {
-            destination: destination.into(),
-            settings,
+            width,
+            height,
+            max_b_frames: 0,
+            thread_count: 0,
+            codec_name: None,
+            bit_rate: Self::BIT_RATE,
+            gop_size: Self::FRAME_RATE * 2,
+            time_base: Rational::new(1, Self::FRAME_RATE),
+            frame_rate: Rational::new(Self::FRAME_RATE, 1),
+            keyframe_interval: Self::KEY_FRAME_INTERVAL,
+            pixel_format: PixelFormat::YUV420P,
             options: None,
-            format: None,
             interleaved: false,
+            destination: destination.into(),
+            format: None,
             hw_device_type: None,
         }
+    }
+
+    /// Set the codec name.
+    pub fn with_codec_name(mut self, codec_name: String) -> Self {
+        self.codec_name = Some(codec_name);
+        self
+    }
+
+    /// Set the keyframe interval.
+    pub fn with_keyframe_interval(mut self, keyframe_interval: u64) -> Self {
+        self.keyframe_interval = keyframe_interval;
+        self
+    }
+
+    /// set the thread count.
+    pub fn with_thread_count(mut self, thread_count: i32) -> Self {
+        self.thread_count = thread_count;
+        self
+    }
+
+    /// Set the bit rate.
+    pub fn with_bit_rate(mut self, bit_rate: i64) -> Self {
+        self.bit_rate = bit_rate;
+        self
+    }
+
+    /// Set the frame rate.
+    pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
+        self.time_base = Rational::new(1, frame_rate);
+        self.frame_rate = Rational::new(frame_rate, 1);
+        self
+    }
+
+    /// Set the GOP size.
+    pub fn with_gop_size(mut self, gop_size: i32) -> Self {
+        self.gop_size = gop_size;
+        self
+    }
+
+    /// Set the maximum number of B-frames.
+    pub fn with_max_b_frames(mut self, max_b_frames: i32) -> Self {
+        self.max_b_frames = max_b_frames;
+        self
+    }
+
+    /// Set the pixel format.
+    pub fn with_pixel_format(mut self, pixel_format: PixelFormat) -> Self {
+        self.pixel_format = pixel_format;
+        self
     }
 
     /// Set the output options for the encoder.
@@ -50,7 +143,7 @@ impl<'a> EncoderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - The output options.
-    pub fn with_options(mut self, options: Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -95,21 +188,119 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
+    /// Create an encoder from a `FileWriter` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer` - [`Writer`] to create encoder from.
+    /// * `interleaved` - Whether or not to use interleaved write.
+    /// * `settings` - Encoder settings to use.
+    pub fn build_from_writer(self, mut writer: Writer) -> Result<Encoder> {
+        let global_header = AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
+            .contains(AvFormatFlags::GLOBAL_HEADER);
+
+        let codec = self.codec();
+        let mut encode_ctx = AVCodecContext::new(&codec);
+
+        // Some formats require this flag to be set or the output will
+        // not be playable by dumb players.
+        if global_header {
+            encode_ctx.set_flags(AvCodecFlags::GLOBAL_HEADER.bits() as i32);
+        }
+
+        self.apply_to(&mut encode_ctx);
+        let (width, height) = (encode_ctx.width, encode_ctx.height);
+
+        let hw_context = match self.hw_device_type {
+            Some(device_type) => {
+                if device_type.find_hw_pixel_format_with_codec(&codec).is_none() {
+                    return Err(Error::msg(format!(
+                        "HW acceleration encoder not supported for codec: {}",
+                        utils::to_string(codec.name())
+                    )));
+                }
+                let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
+                    .context("Hardware acceleration context initialization failed.")?;
+                hw_ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;
+                Some(hw_ctx)
+            }
+            None => None,
+        };
+
+        let dict = self.options.map(|options| options.to_dict());
+        encode_ctx.open(dict).context("Failed to open encode context")?;
+
+        let writer_stream_index = {
+            let mut out_stream = writer.output.new_stream();
+            out_stream.set_codecpar(encode_ctx.extract_codecpar());
+            out_stream.set_time_base(encode_ctx.time_base);
+            out_stream.index as usize
+        };
+
+        let stream_info = writer.stream_info(writer_stream_index)?;
+        log::info!("{}", stream_info);
+
+        Ok(Encoder {
+            hw_context,
+            encode_ctx,
+            writer,
+            writer_stream_index,
+            frame_count: 0,
+            interleaved: self.interleaved,
+            keyframe_interval: self.keyframe_interval,
+            have_written_header: false,
+            have_written_trailer: false,
+        })
+    }
+
+    /// Get codec, or Try to use the default codec libx264 if none specified.
+    pub fn codec(&self) -> AVCodecRef {
+        let codec_name = if let Some(codec_name) = &self.codec_name {
+            codec_name.as_ref()
+        } else {
+            Self::CODEC_NAME
+        };
+        AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
+            .context(format!("Failed to find encoder for codec: '{}'", codec_name))
+            .unwrap()
+    }
+
+    /// Apply the settings to an encoder.
+    ///
+    /// # Arguments
+    ///
+    /// * `encoder` - Encoder to apply settings to.
+    ///
+    /// # Return value
+    ///
+    /// New encoder with settings applied.
+    fn apply_to(&self, encoder: &mut AVCodecContext) {
+        encoder.set_width(self.width);
+        encoder.set_height(self.height);
+        encoder.set_bit_rate(self.bit_rate);
+        encoder.set_gop_size(self.gop_size);
+        encoder.set_max_b_frames(self.max_b_frames);
+        encoder.set_framerate(self.frame_rate.into());
+        encoder.set_time_base(self.time_base.into());
+        encoder.set_pkt_timebase(self.time_base.into());
+        encoder.set_pix_fmt(self.pixel_format.into_raw());
+        encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
+        unsafe {
+            encoder.deref_mut().thread_count = self.thread_count;
+            encoder.deref_mut().flags2 = ffi::AV_CODEC_FLAG2_FAST as c_int;
+        }
+    }
+
     /// Build an [`Encoder`].
     pub fn build(self) -> Result<Encoder> {
-        let mut writer_builder = WriterBuilder::new(self.destination);
+        let mut writer_builder = WriterBuilder::new(self.destination.clone());
         if let Some(options) = self.options {
             writer_builder = writer_builder.with_options(options);
         }
         if let Some(format) = self.format {
             writer_builder = writer_builder.with_format(format);
         }
-        Encoder::from_writer(
-            writer_builder.build()?,
-            self.interleaved,
-            self.settings,
-            self.hw_device_type,
-        )
+        self.build_from_writer(writer_builder.build()?)
     }
 }
 
@@ -151,78 +342,8 @@ impl Encoder {
     /// * `destination` - Where to encode to.
     /// * `settings` - Encoding settings.
     #[inline]
-    pub fn new(destination: impl Into<Location>, settings: Settings) -> Result<Self> {
-        EncoderBuilder::new(destination, settings).build()
-    }
-
-    /// Create an encoder from a `FileWriter` instance.
-    ///
-    /// # Arguments
-    ///
-    /// * `writer` - [`Writer`] to create encoder from.
-    /// * `interleaved` - Whether or not to use interleaved write.
-    /// * `settings` - Encoder settings to use.
-    fn from_writer(
-        mut writer: Writer,
-        interleaved: bool,
-        settings: Settings,
-        hw_device_type: Option<HWDeviceType>,
-    ) -> Result<Self> {
-        let global_header = AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
-            .contains(AvFormatFlags::GLOBAL_HEADER);
-
-        let codec = settings.codec();
-        let mut encode_ctx = AVCodecContext::new(&codec);
-
-        // Some formats require this flag to be set or the output will
-        // not be playable by dumb players.
-        if global_header {
-            encode_ctx.set_flags(AvCodecFlags::GLOBAL_HEADER.bits() as i32);
-        }
-
-        settings.apply_to(&mut encode_ctx);
-        let (width, height) = (encode_ctx.width, encode_ctx.height);
-
-        let hw_context = match hw_device_type {
-            Some(device_type) => {
-                if device_type.find_hw_pixel_format_with_codec(&codec).is_none() {
-                    return Err(Error::msg(format!(
-                        "HW acceleration encoder not supported for codec: {}",
-                        utils::to_string(codec.name())
-                    )));
-                }
-                let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
-                    .context("Hardware acceleration context initialization failed.")?;
-                hw_ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;
-                Some(hw_ctx)
-            }
-            None => None,
-        };
-
-        let dict = settings.options().map(|options| options.to_dict());
-        encode_ctx.open(dict).context("Failed to open encode context")?;
-
-        let writer_stream_index = {
-            let mut out_stream = writer.output.new_stream();
-            out_stream.set_codecpar(encode_ctx.extract_codecpar());
-            out_stream.set_time_base(encode_ctx.time_base);
-            out_stream.index as usize
-        };
-
-        let stream_info = writer.stream_info(writer_stream_index)?;
-        log::info!("{}", stream_info);
-
-        Ok(Self {
-            hw_context,
-            encode_ctx,
-            writer,
-            writer_stream_index,
-            interleaved,
-            frame_count: 0,
-            keyframe_interval: settings.keyframe_interval,
-            have_written_header: false,
-            have_written_trailer: false,
-        })
+    pub fn new(destination: impl Into<Location>, width: i32, height: i32) -> Result<Self> {
+        EncoderBuilder::new(destination, width, height).build()
     }
 
     /// Encode a single `ndarray` frame.
@@ -337,22 +458,6 @@ impl Encoder {
         Ok(())
     }
 
-    /// Signal to the encoder that writing has finished. This will cause any packets in the encoder
-    /// to be flushed and a trailer to be written if the container format has one.
-    ///
-    /// Note: If you don't call this function before dropping the encoder, it will be called
-    /// automatically. This will block the caller thread. Any errors cannot be propagated in this
-    /// case.
-    pub fn finish(&mut self) -> Result<()> {
-        if self.have_written_header && !self.have_written_trailer {
-            self.have_written_trailer = true;
-            self.flush().unwrap();
-            self.writer.write_trailer()?;
-        }
-
-        Ok(())
-    }
-
     /// Get encoder time base.
     #[inline]
     pub fn time_base(&self) -> Rational {
@@ -377,6 +482,22 @@ impl Encoder {
     #[inline]
     pub fn pix_fmt(&self) -> AVPixelFormat {
         self.encode_ctx.pix_fmt
+    }
+
+    /// Signal to the encoder that writing has finished. This will cause any packets in the encoder
+    /// to be flushed and a trailer to be written if the container format has one.
+    ///
+    /// Note: If you don't call this function before dropping the encoder, it will be called
+    /// automatically. This will block the caller thread. Any errors cannot be propagated in this
+    /// case.
+    pub fn finish(&mut self) -> Result<()> {
+        if self.have_written_header && !self.have_written_trailer {
+            self.have_written_trailer = true;
+            self.flush().unwrap();
+            self.writer.write_trailer()?;
+        }
+
+        Ok(())
     }
 
     /// calculate key frame and pts
@@ -491,191 +612,3 @@ impl Drop for Encoder {
 
 unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
-
-/// Holds a logical combination of encoder settings.
-#[derive(Clone)]
-pub struct Settings {
-    width: i32,
-    height: i32,
-    bit_rate: i64,
-    gop_size: i32,
-    frame_rate: Rational,
-    time_base: Rational,
-    max_b_frames: i32,
-    keyframe_interval: u64,
-    thread_count: i32,
-    codec_name: Option<String>,
-    pixel_format: PixelFormat,
-    options: Option<Options>,
-}
-
-impl Settings {
-    /// Default keyframe interval.
-    const KEY_FRAME_INTERVAL: u64 = 12;
-
-    /// This is the assumed FPS for the encoder to use.
-    /// Note that this does not need to be correct exactly.
-    const FRAME_RATE: i32 = 24;
-
-    /// Default bit rate.
-    /// 分辨率(width, height) + 推荐比特率（单位：bps）
-    /// * 标清 Sd_480p:          (640, 480)   => 1_000_000,   // 1 Mbps
-    /// * 高清 Hd_720p:          (1280, 720)  => 2_500_000,   // 2.5 Mbps
-    /// * 全高清 FullHd(1080p):  (1920, 1080) => 5_000_000,   // 5 Mbps
-    /// * 超高清 FullHd_2k:      (2560, 1440) => 8_000_000,   // 8 Mbps
-    /// * 超高清 UltraHd_4K:     (3840, 2160) => 20_000_000,  // 20 Mbps
-    /// * 超高清 FullUltraHd_8K: (7680, 4320) => 60_000_000,  // 60 Mbps
-    const BIT_RATE: i64 = 1_000_000;
-
-    /// default codec
-    const CODEC_NAME: &'static str = "libx264";
-
-    /// Create encoder settings for an H264 stream with YUV420p pixel format. This will encode to
-    /// arguably the most widely compatible video file since H264 is a common codec and YUV420p is
-    /// the most commonly used pixel format.
-    pub fn preset_h264(width: i32, height: i32, realtime: bool) -> Settings {
-        let options = if realtime {
-            Options::preset_h264_realtime()
-        } else {
-            Options::preset_h264()
-        };
-
-        Self {
-            width,
-            height,
-            gop_size: Self::FRAME_RATE * 2,
-            max_b_frames: 0,
-            thread_count: 0,
-            codec_name: None,
-            bit_rate: Self::BIT_RATE,
-            time_base: Rational::new(1, Self::FRAME_RATE),
-            frame_rate: Rational::new(Self::FRAME_RATE, 1),
-            keyframe_interval: Self::KEY_FRAME_INTERVAL,
-            pixel_format: PixelFormat::YUV420P,
-            options: Some(options),
-        }
-    }
-
-    /// Create encoder settings for an H264 stream with a custom pixel format and options.
-    /// This allows for greater flexibility in encoding settings, enabling specific requirements
-    /// or optimizations to be set depending on the use case.
-    ///
-    /// # Arguments
-    ///
-    /// * `width` - The width of the video stream.
-    /// * `height` - The height of the video stream.
-    /// * `pixel_format` - The desired pixel format for the video stream.
-    /// * `options` - Custom H264 encoding options.
-    ///
-    /// # Return value
-    ///
-    /// A `Settings` instance with the specified configuration.+
-    pub fn preset_h264_custom(width: i32, height: i32, pixel_format: PixelFormat, options: Options) -> Settings {
-        Self {
-            width,
-            height,
-            gop_size: Self::FRAME_RATE * 2,
-            max_b_frames: 0,
-            thread_count: 0,
-            codec_name: None,
-            bit_rate: Self::BIT_RATE,
-            time_base: Rational::new(1, Self::FRAME_RATE),
-            frame_rate: Rational::new(Self::FRAME_RATE, 1),
-            pixel_format,
-            keyframe_interval: Self::KEY_FRAME_INTERVAL,
-            options: Some(options),
-        }
-    }
-
-    /// Set the codec name.
-    pub fn with_codec_name(mut self, codec_name: String) -> Self {
-        self.codec_name = Some(codec_name);
-        self
-    }
-
-    /// Set the keyframe interval.
-    pub fn with_keyframe_interval(mut self, keyframe_interval: u64) -> Self {
-        self.keyframe_interval = keyframe_interval;
-        self
-    }
-
-    /// set the thread count.
-    pub fn with_thread_count(mut self, thread_count: i32) -> Self {
-        self.thread_count = thread_count;
-        self
-    }
-
-    /// Set the bit rate.
-    pub fn with_bit_rate(mut self, bit_rate: i64) -> Self {
-        self.bit_rate = bit_rate;
-        self
-    }
-
-    /// Set the frame rate.
-    pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
-        self.time_base = Rational::new(1, frame_rate);
-        self.frame_rate = Rational::new(frame_rate, 1);
-        self
-    }
-
-    /// Set the GOP size.
-    pub fn with_gop_size(mut self, gop_size: i32) -> Self {
-        self.gop_size = gop_size;
-        self
-    }
-
-    /// Set the maximum number of B-frames.
-    pub fn with_max_b_frames(mut self, max_b_frames: i32) -> Self {
-        self.max_b_frames = max_b_frames;
-        self
-    }
-
-    /// Set the pixel format.
-    pub fn with_pixel_format(mut self, pixel_format: PixelFormat) -> Self {
-        self.pixel_format = pixel_format;
-        self
-    }
-
-    /// Get encoder options.
-    pub fn options(&self) -> Option<Options> {
-        self.options.clone()
-    }
-
-    /// Get codec, or Try to use the default codec libx264 if none specified.
-    pub fn codec(&self) -> AVCodecRef {
-        let codec_name = if let Some(codec_name) = &self.codec_name {
-            codec_name.as_ref()
-        } else {
-            Self::CODEC_NAME
-        };
-        AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
-            .context(format!("Failed to find encoder for codec {}", codec_name))
-            .unwrap()
-    }
-
-    /// Apply the settings to an encoder.
-    ///
-    /// # Arguments
-    ///
-    /// * `encoder` - Encoder to apply settings to.
-    ///
-    /// # Return value
-    ///
-    /// New encoder with settings applied.
-    fn apply_to(&self, encoder: &mut AVCodecContext) {
-        encoder.set_width(self.width);
-        encoder.set_height(self.height);
-        encoder.set_bit_rate(self.bit_rate);
-        encoder.set_gop_size(self.gop_size);
-        encoder.set_max_b_frames(self.max_b_frames);
-        encoder.set_framerate(self.frame_rate.into());
-        encoder.set_time_base(self.time_base.into());
-        encoder.set_pkt_timebase(self.time_base.into());
-        encoder.set_pix_fmt(self.pixel_format.into_raw());
-        encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
-        unsafe {
-            encoder.deref_mut().thread_count = self.thread_count;
-            encoder.deref_mut().flags2 = ffi::AV_CODEC_FLAG2_FAST as c_int;
-        }
-    }
-}

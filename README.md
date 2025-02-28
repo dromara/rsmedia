@@ -8,6 +8,11 @@ Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rs
 
 ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
 
+## Wiki
+
+- [Home](https://github.com/phial3/rsmedia/wiki/rsmedia-Home)
+- [hardware-acceleration](https://github.com/phial3/rsmedia/wiki/rsmedia-Home#hardware-acceleration)
+
 ## FFmpeg Documentation
 
 - [Official Documentation](https://ffmpeg.org/documentation.html)

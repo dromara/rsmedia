@@ -12,6 +12,7 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::{UnsafeDerefMut, ffi};
 
 use anyhow::{Context, Error, Result};
+use libc::c_int;
 use std::ops::Bound;
 use std::path::Path;
 use std::ptr;
@@ -31,12 +32,12 @@ use std::ptr;
 /// .with_options(&options.into())
 /// .unwrap();
 /// ```
-pub struct ReaderBuilder<'a> {
+pub struct ReaderBuilder {
     source: Location,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
-impl<'a> ReaderBuilder<'a> {
+impl ReaderBuilder {
     /// Create a new reader with the specified locator.
     ///
     /// # Arguments
@@ -54,7 +55,7 @@ impl<'a> ReaderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to input.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -66,9 +67,8 @@ impl<'a> ReaderBuilder<'a> {
                 input: Self::input(&self.source.as_path())?,
                 source: self.source,
             }),
-            // TODO: options
-            Some(_options) => Ok(Reader {
-                input: Self::input_with_dictionary(&self.source.as_path(), &mut None)?,
+            Some(options) => Ok(Reader {
+                input: Self::input_with_dictionary(&self.source.as_path(), &mut Some(options.to_dict()))?,
                 source: self.source,
             }),
         }
@@ -249,7 +249,7 @@ pub trait Write: private::Write + private::Output {}
 pub struct WriterBuilder<'a> {
     destination: Location,
     format: Option<&'a str>,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> WriterBuilder<'a> {
@@ -281,7 +281,7 @@ impl<'a> WriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -297,14 +297,12 @@ impl<'a> WriterBuilder<'a> {
                 output: Self::output_as(&self.destination.as_path(), format)?,
                 destination: self.destination,
             }),
-            (None, Some(_options)) => Ok(Writer {
-                // TODO: options
-                output: Self::output_with(&self.destination.as_path(), None)?,
+            (None, Some(options)) => Ok(Writer {
+                output: Self::output_with(&self.destination.as_path(), Some(options.to_dict()))?,
                 destination: self.destination,
             }),
-            (Some(format), Some(_options)) => Ok(Writer {
-                // TODO: options
-                output: Self::output_as_with(&self.destination.as_path(), format, None)?,
+            (Some(format), Some(options)) => Ok(Writer {
+                output: Self::output_as_with(&self.destination.as_path(), format, Some(options.to_dict()))?,
                 destination: self.destination,
             }),
         }
@@ -316,13 +314,38 @@ impl<'a> WriterBuilder<'a> {
         Ok(ofctx)
     }
 
-    /// TODO: options
     pub fn output_with<P: AsRef<Path> + ?Sized>(
         path: &P,
-        _options: Option<AVDictionary>,
+        options: Option<AVDictionary>,
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
-        let ofctx = AVFormatContextOutput::create(&path, None).unwrap();
+        let ofctx = unsafe {
+            let mut output_format_context = ptr::null_mut();
+            let res = ffi::avformat_alloc_output_context2(
+                &mut output_format_context,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                path.as_ptr(),
+            );
+            if res != 0 {
+                return Err(Error::new(RsmpegError::from(res)));
+            }
+
+            let mut opts = options.map_or(ptr::null_mut(), |dict| dict.into_raw().as_ptr());
+            let res = ffi::avio_open2(
+                &mut (*output_format_context).pb,
+                path.as_ptr(),
+                ffi::AVIO_FLAG_WRITE as c_int,
+                ptr::null(),
+                &mut opts,
+            );
+            if res != 0 {
+                return Err(Error::new(RsmpegError::from(res)));
+            }
+
+            AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap())
+        };
+
         Ok(ofctx)
     }
 
@@ -337,7 +360,7 @@ impl<'a> WriterBuilder<'a> {
                 format.as_ptr(),
                 path.as_ptr(),
             );
-            if res < 0 {
+            if res != 0 {
                 return Err(Error::new(RsmpegError::from(res)));
             }
 
@@ -352,11 +375,10 @@ impl<'a> WriterBuilder<'a> {
         Ok(ofctx)
     }
 
-    /// TODO: options
     pub fn output_as_with<P: AsRef<Path> + ?Sized>(
         path: &P,
         format: &str,
-        _options: Option<AVDictionary>,
+        options: Option<AVDictionary>,
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
@@ -368,16 +390,23 @@ impl<'a> WriterBuilder<'a> {
                 format.as_ptr(),
                 path.as_ptr(),
             );
-            if res < 0 {
+            if res != 0 {
                 return Err(Error::new(RsmpegError::from(res)));
             }
 
-            let mut output_format_context =
-                AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());
-            let mut io_ctx = AVIOContextURL::open(&path, ffi::AVIO_FLAG_WRITE).unwrap();
-            output_format_context.deref_mut().pb = io_ctx.as_mut_ptr();
-            output_format_context.io_context = Some(AVIOContextContainer::Url(io_ctx));
-            output_format_context
+            let mut opts = options.map_or(ptr::null_mut(), |dict| dict.into_raw().as_ptr());
+            let res = ffi::avio_open2(
+                &mut (*output_format_context).pb,
+                path.as_ptr(),
+                ffi::AVIO_FLAG_WRITE as c_int,
+                ptr::null(),
+                &mut opts,
+            );
+            if res != 0 {
+                return Err(Error::new(RsmpegError::from(res)));
+            }
+
+            AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap())
         };
 
         Ok(ofctx)
@@ -442,7 +471,7 @@ pub type Bufs = Vec<Buf>;
 /// Build a [`BufWriter`].
 pub struct BufWriterBuilder<'a> {
     format: &'a str,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> BufWriterBuilder<'a> {
@@ -460,7 +489,7 @@ impl<'a> BufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -469,7 +498,7 @@ impl<'a> BufWriterBuilder<'a> {
     pub fn build(self) -> Result<BufWriter> {
         Ok(BufWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned().unwrap(),
+            options: self.options,
         })
     }
 }
@@ -484,8 +513,7 @@ impl<'a> BufWriterBuilder<'a> {
 /// ```
 pub struct BufWriter {
     pub(crate) output: AVFormatContextOutput,
-    #[allow(unused)]
-    options: Options,
+    options: Option<Options>,
 }
 
 impl BufWriter {
@@ -524,7 +552,7 @@ unsafe impl Sync for BufWriter {}
 /// Build a [`PacketizedBufWriter`].
 pub struct PacketizedBufWriterBuilder<'a> {
     format: &'a str,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> PacketizedBufWriterBuilder<'a> {
@@ -542,7 +570,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -551,7 +579,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     pub fn build(self) -> Result<PacketizedBufWriter> {
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned().unwrap(),
+            options: self.options,
             buffers: Vec::new(),
         })
     }
@@ -568,8 +596,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 /// ```
 pub struct PacketizedBufWriter {
     pub(crate) output: AVFormatContextOutput,
-    #[allow(unused)]
-    options: Options,
+    options: Option<Options>,
     buffers: Bufs,
 }
 
@@ -678,8 +705,8 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            // TODO: options
-            self.output.write_header(&mut None)?;
+            let mut dict = self.options.clone().map(|options| options.to_dict());
+            self.output.write_header(&mut dict)?;
             Ok(self.end_write())
         }
 
@@ -709,8 +736,8 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            // TODO: options
-            self.output.write_header(&mut None)?;
+            let mut dict = self.options.clone().map(|options| options.to_dict());
+            self.output.write_header(&mut dict)?;
             self.end_write();
             Ok(self.take_buffers())
         }

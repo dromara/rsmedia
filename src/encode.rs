@@ -199,7 +199,7 @@ impl Encoder {
             None => None,
         };
 
-        let dict = settings.options().map(|op| op.to_dict());
+        let dict = settings.options().map(|options| options.to_dict());
         encode_ctx.open(dict).context("Failed to open encode context")?;
 
         let writer_stream_index = {

@@ -1,4 +1,3 @@
-use rsmedia::encode::Settings;
 use rsmedia::hwaccel::HWDeviceType;
 use rsmedia::{DecoderBuilder, EncoderBuilder, Options, Resize};
 use std::path::Path;
@@ -8,22 +7,18 @@ fn main() {
 
     let source = Path::new("/tmp/bear.mp4");
     let mut decoder = DecoderBuilder::new(source)
-        .with_resize(Resize::Exact(320, 180))
-        .with_options(Options::preset_h264())
         .with_codec_name("h264_cuvid".to_string())
         .with_hardware_device(HWDeviceType::CUDA)
+        .with_resize(Resize::Exact(320, 180))
         .build()
         .expect("failed to create decoder");
 
-    let settings = Settings::preset_h264(320, 180, false)
-        .with_keyframe_interval(4)
-        .with_frame_rate(24)
-        .with_codec_name("h264_nvenc".to_string());
-
-    let mut encoder = EncoderBuilder::new(Path::new("/tmp/output.mp4"), settings)
+    let mut encoder = EncoderBuilder::new(Path::new("/tmp/output.mp4"), 320, 180)
         .with_format("mp4")
-        .with_interleaved()
+        .with_frame_rate(24)
+        .with_codec_name("h264_nvenc".to_string())
         .with_hardware_device(HWDeviceType::CUDA)
+        .with_options(&Options::preset_h264_nvenc())
         .build()
         .expect("failed to create encoder");
 

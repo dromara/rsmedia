@@ -9,7 +9,7 @@ fn main() {
     let source = Path::new("/tmp/bear.mp4");
     let mut decoder = DecoderBuilder::new(source)
         .with_resize(Resize::Exact(320, 180))
-        .with_options(&Options::preset_h264())
+        .with_options(Options::preset_h264())
         .with_codec_name("h264_cuvid".to_string())
         .with_hardware_device(HWDeviceType::CUDA)
         .build()

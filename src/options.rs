@@ -122,8 +122,8 @@ impl Options {
         opts.insert("profile".to_string(), "high".to_string());
         // ll, ull, lossless, film, animation, grain, fastdecode, zerolatency, hq
         opts.insert("tune".to_string(), "ll".to_string());
-        // constqp, vbr, cbr, vbr_hq, cbr_hq, vbr_minqp, qvbr, cbr_ld_hq, cbr_ll_hq
-        // ll_2pass, ll_2pass_quality, ll_2pass_size,
+        // constqp, vbr, cbr, vbr_hq, cbr_hq, qvbr, vbr_minqp, cbr_ld_hq
+        // vbr_2pass, ll_2pass_quality, ll_2pass_size,
         opts.insert("rc".to_string(), "vbr_hq".to_string());
         opts.insert("qmin".to_string(), "19".to_string());
         opts.insert("qmax".to_string(), "21".to_string());

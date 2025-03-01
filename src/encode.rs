@@ -68,24 +68,24 @@ impl<'a> EncoderBuilder<'a> {
     /// * `height` - The height of the video stream.
     /// * `pixel_format` - The desired pixel format for the video stream.
     /// * `options` - Custom H264 encoding options.
-    pub fn new(destination: impl Into<Location>, width: i32, height: i32) -> Self {
+    pub fn new(destination: impl Into<Location>, width: u32, height: u32) -> Self {
         Self {
-            width,
-            height,
+            width: width as i32,
+            height: height as i32,
+            destination: destination.into(),
+            pixel_format: PixelFormat::YUV420P,
+            format: None,
+            options: None,
+            codec_name: None,
+            hw_device_type: None,
             max_b_frames: 0,
             thread_count: 0,
-            codec_name: None,
+            interleaved: false,
             bit_rate: Self::BIT_RATE,
             gop_size: Self::FRAME_RATE * 2,
+            keyframe_interval: Self::KEY_FRAME_INTERVAL,
             time_base: Rational::new(1, Self::FRAME_RATE),
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
-            keyframe_interval: Self::KEY_FRAME_INTERVAL,
-            pixel_format: PixelFormat::YUV420P,
-            options: None,
-            interleaved: false,
-            destination: destination.into(),
-            format: None,
-            hw_device_type: None,
         }
     }
 
@@ -342,7 +342,7 @@ impl Encoder {
     /// * `destination` - Where to encode to.
     /// * `settings` - Encoding settings.
     #[inline]
-    pub fn new(destination: impl Into<Location>, width: i32, height: i32) -> Result<Self> {
+    pub fn new(destination: impl Into<Location>, width: u32, height: u32) -> Result<Self> {
         EncoderBuilder::new(destination, width, height).build()
     }
 

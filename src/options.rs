@@ -114,17 +114,25 @@ impl Options {
     }
 
     /// h264_nvenc options only
+    ///
+    /// FFMpeg with NVENC:
+    /// <https://superuser.com/questions/1296374/best-settings-for-ffmpeg-with-nvenc>
+    ///
+    /// NVENC Preset Migration Guide:
+    /// <https://docs.nvidia.com/video-technologies/video-codec-sdk/12.1/nvenc-preset-migration-guide/index.html>
+    ///
     pub fn preset_h264_nvenc() -> Self {
         let mut opts = HashMap::new();
-        // p1-p7, default(p4), slow, medium, fast, hp, hq, bd
-        opts.insert("preset".to_string(), "p7".to_string());
+        // p1-p7, default(p4), slow, medium, fast, hp, hq, bd, ll, llhq, llhp, lossless
+        opts.insert("preset".to_string(), "p5".to_string());
         // baseline, main, high, high444p, high10, high422
         opts.insert("profile".to_string(), "high".to_string());
         // ll, ull, lossless, film, animation, grain, fastdecode, zerolatency, hq
         opts.insert("tune".to_string(), "ll".to_string());
-        // constqp, vbr, cbr, vbr_hq, cbr_hq, qvbr, vbr_minqp, cbr_ld_hq
-        // vbr_2pass, ll_2pass_quality, ll_2pass_size,
-        opts.insert("rc".to_string(), "vbr_hq".to_string());
+        // constqp, ll_2pass_size, ll_2pass_quality
+        // vbr, vbr_hq, vbr_minqp, vbr_2pass
+        // cbr, cbr_hq, cbr_ld_hq
+        opts.insert("rc".to_string(), "cbr".to_string());
         opts.insert("qmin".to_string(), "19".to_string());
         opts.insert("qmax".to_string(), "21".to_string());
         opts.insert("spatial-aq".to_string(), "1".to_string());

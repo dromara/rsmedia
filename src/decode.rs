@@ -601,7 +601,7 @@ impl DecoderSplit {
             .map_or(frame.format, |ctx| ctx.get_format(false));
 
         let (resize_width, resize_height) = self.size_out();
-        let is_scale_needed = !(input_format == PixelFormat::YUV420P.into_raw()
+        let is_scale_needed = !(input_format == PixelFormat::YUV420P.into()
             && frame.width as u32 == resize_width
             && frame.height as u32 == resize_height);
 

@@ -283,7 +283,7 @@ impl<'a> EncoderBuilder<'a> {
         encoder.set_framerate(self.frame_rate.into());
         encoder.set_time_base(self.time_base.into());
         encoder.set_pkt_timebase(self.time_base.into());
-        encoder.set_pix_fmt(self.pixel_format.into_raw());
+        encoder.set_pix_fmt(self.pixel_format.into());
         encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         unsafe {
             encoder.deref_mut().thread_count = self.thread_count;
@@ -382,7 +382,7 @@ impl Encoder {
         if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
             return Err(anyhow::anyhow!(
                 "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
-                PixelFormat::from_raw(raw_frame.format)?,
+                PixelFormat::from(raw_frame.format),
                 self.encode_ctx.width,
                 self.encode_ctx.height,
                 raw_frame.width,
@@ -400,14 +400,14 @@ impl Encoder {
         let target_format = if self.hw_context.is_some() {
             self.encode_ctx
                 .hw_frames_ctx_mut()
-                .map(|mut ctx| PixelFormat::from_raw(ctx.data().sw_format).unwrap())
+                .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
                 .unwrap_or(PixelFormat::YUV420P)
         } else {
             PixelFormat::YUV420P
         };
 
         // Reformat frame to target pixel format if need
-        let mut frame = if raw_frame.format != target_format.into_raw() {
+        let mut frame = if raw_frame.format != target_format.into() {
             frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, target_format)?
         } else {
             raw_frame.clone()

@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Error, Result, anyhow};
 use image::DynamicImage;
+use rsmedia::{PixelFormat, frame};
 
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext, AVPacket},
@@ -75,12 +76,8 @@ impl Decoder {
 
                 while let Ok(yuv_frame) = self.codec_context.receive_frame() {
                     // 注意这里的 frame 编码格式为 YUV420P，需要转换为 RGB24
-                    let rgb_frame = crate::misc::av_convert::avframe_convert(
-                        &yuv_frame,
-                        yuv_frame.width,
-                        yuv_frame.height,
-                        ffi::AV_PIX_FMT_RGB24,
-                    )?;
+                    let rgb_frame =
+                        frame::convert_avframe(&yuv_frame, yuv_frame.width, yuv_frame.height, PixelFormat::RGB24)?;
                     println!(
                         "convert frame from yuv420p to rgb24 pts: {}, time_base: {:?}",
                         rgb_frame.pts, rgb_frame.time_base
@@ -328,22 +325,23 @@ pub fn pgm_save(frame: &AVFrame, filename: &str) -> Result<()> {
 
 pub fn save_avframe_to_image(yuv_frame: &AVFrame, output_file_name: &str) -> Result<()> {
     // 转换为 RGB24 格式
-    let rgb_frame =
-        crate::misc::av_convert::avframe_convert(&yuv_frame, yuv_frame.width, yuv_frame.height, ffi::AV_PIX_FMT_RGB24)?;
+    let rgb_frame = frame::convert_avframe(&yuv_frame, yuv_frame.width, yuv_frame.height, PixelFormat::RGB24)?;
 
     // 保存图像
-    save_image_avframe_rgb24(&rgb_frame, output_file_name).expect("save_image_avframe_rgb24 failed.");
+    save_avframe_rgb24(&rgb_frame, output_file_name).expect("save_image_avframe_rgb24 failed.");
 
     Ok(())
 }
 
-pub fn save_image_avframe_rgb24(rgb_frame: &AVFrame, output_file_name: &str) -> Result<()> {
-    if rgb_frame.format != ffi::AV_PIX_FMT_RGB24 {
-        return Err(Error::msg("Unsupported pixel format"));
-    }
+pub fn save_avframe_rgb24(frame: &AVFrame, output_file_name: &str) -> Result<()> {
+    let rgb_frame = if frame.format != ffi::AV_PIX_FMT_RGB24 {
+        frame::convert_avframe(frame, frame.width, frame.height, PixelFormat::RGB24)?
+    } else {
+        frame.clone()
+    };
 
     // 转换为图像
-    let rgb_image = crate::misc::av_convert::avframe_rgb24_to_image_rgb(rgb_frame)?;
+    let rgb_image = crate::misc::av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
 
     // 确定输出格式并写入文件
     let path = Path::new(output_file_name);
@@ -356,6 +354,9 @@ pub fn save_image_avframe_rgb24(rgb_frame: &AVFrame, output_file_name: &str) -> 
     match extension.to_lowercase().as_str() {
         "png" => rgb_image.save_with_format(path, image::ImageFormat::Png)?,
         "jpg" | "jpeg" => rgb_image.save_with_format(path, image::ImageFormat::Jpeg)?,
+        "webp" => rgb_image.save_with_format(path, image::ImageFormat::WebP)?,
+        "pnm" => rgb_image.save_with_format(path, image::ImageFormat::Pnm)?,
+        "gif" => rgb_image.save_with_format(path, image::ImageFormat::Gif)?,
         _ => {
             return Err(Error::msg(format!("Unsupported image format: {}", extension)));
         }

@@ -130,7 +130,7 @@ impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
             #[allow(clippy::missing_transmute_annotations)]
-            utils::from_cstr(ffi::avcodec_get_name(std::intrinsics::transmute(self.codec as i32)))
+            utils::from_cstr(ffi::avcodec_get_name(std::mem::transmute(self.codec as i32)))
         };
         let pix_fmt = unsafe {
             if self.stream_type.eq_ignore_ascii_case("video") {

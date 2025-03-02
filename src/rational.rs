@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
-use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
+use anyhow::Result;
 use libc::c_int;
 use rsmpeg::ffi;
 
@@ -26,18 +26,16 @@ impl Rational {
 
     #[inline]
     pub fn reduce(&self) -> Rational {
-        match self.reduce_with_limit(i32::MAX) {
-            Ok(r) => r,
-            Err(r) => r,
-        }
+        self.reduce_with_limit(i32::MAX)
     }
 
     #[inline]
-    pub fn reduce_with_limit(&self, max: i32) -> Result<Rational, Rational> {
+    pub fn reduce_with_limit(&self, max: i32) -> Rational {
         unsafe {
             let mut dst_num: c_int = 0;
             let mut dst_den: c_int = 0;
 
+            // This is useful for framerate calculations.
             let exact = ffi::av_reduce(
                 &mut dst_num,
                 &mut dst_den,
@@ -46,11 +44,12 @@ impl Rational {
                 i64::from(max),
             );
 
-            if exact == 1 {
-                Ok(Rational(dst_num, dst_den))
-            } else {
-                Err(Rational(dst_num, dst_den))
+            if exact != 1 {
+                // 1 if the operation is exact, 0 otherwise
+                log::error!("Failed to reduce rational with limit {}", max);
             }
+
+            Rational(dst_num, dst_den)
         }
     }
 
@@ -171,14 +170,14 @@ impl Div for Rational {
     }
 }
 
-impl fmt::Display for Rational {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl std::fmt::Display for Rational {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         f.write_str(&format!("{}/{}", self.numerator(), self.denominator()))
     }
 }
 
-impl fmt::Debug for Rational {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl std::fmt::Debug for Rational {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         f.write_str(&format!("Rational({}/{})", self.numerator(), self.denominator()))
     }
 }

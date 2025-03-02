@@ -25,23 +25,11 @@ impl Options {
     /// This sets the `rtsp_transport` to `tcp` in ffmpeg options, it also sets `rw_timeout` to
     /// lower (more sane) values.
     pub fn preset_rtsp_transport_tcp_and_sane_timeouts() -> Self {
-        let opts = AVDictionary::new(
-            &utils::from_str("rtsp_transport"),
-            &utils::from_str("tcp"),
-            0,
-        )
-        // These can't be too low because ffmpeg takes its sweet time when connecting to RTSP
-        // sources sometimes.
-        .set(
-            &utils::from_str("rw_timeout"),
-            &utils::from_str("16000000"),
-            0,
-        )
-        .set(
-            &utils::from_str("stimeout"),
-            &utils::from_str("16000000"),
-            0,
-        );
+        let opts = AVDictionary::new(&utils::from_str("rtsp_transport"), &utils::from_str("tcp"), 0)
+            // These can't be too low because ffmpeg takes its sweet time when connecting to RTSP
+            // sources sometimes.
+            .set(&utils::from_str("rw_timeout"), &utils::from_str("16000000"), 0)
+            .set(&utils::from_str("stimeout"), &utils::from_str("16000000"), 0);
 
         Self(opts)
     }

@@ -28,11 +28,6 @@ ndarray = { version = "0.16", optional = true }
 rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", features = [
     "ffmpeg7", "link_system_ffmpeg"
 ] }
-opencv = { version = "0.94", optional = true, features = [
-    "imgproc",
-    "imgcodecs",
-    "clang-runtime",
-] }
 
 [dev-dependencies]
 cstr = "0.2"

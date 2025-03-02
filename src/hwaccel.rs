@@ -3,17 +3,18 @@ use crate::pixel::PixelFormat;
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext, AVHWFramesContextMut, AVPixelFormat};
+use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext, AVPixelFormat};
 use rsmpeg::{UnsafeDerefMut, ffi};
 
 /// 硬件加速设备配置
 /// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HWDeviceConfig {
     device_type: HWDeviceType,    // 硬件加速设备的具体路径或标识符
     hw_pixel_format: PixelFormat, // GPU 硬件设备在内存中的像素格式, eg: CUDA,VAAPI,VDPAU
     sw_pixel_format: PixelFormat, // CPU 内存中使用的像素格式, eg: NV12,YUV420P,RGB24
     device_path: Option<String>,
+    options: Option<AVDictionary>,
 }
 
 impl HWDeviceConfig {
@@ -22,33 +23,41 @@ impl HWDeviceConfig {
         hw_pixel_format: PixelFormat,
         sw_pixel_format: PixelFormat,
         device_path: Option<String>,
+        options: Option<AVDictionary>,
     ) -> Self {
         Self {
             device_type,
             hw_pixel_format,
             sw_pixel_format,
             device_path,
+            options,
         }
     }
 
     /// 创建NVIDIA配置
     pub fn cuda() -> Self {
-        Self::new(HWDeviceType::CUDA, PixelFormat::CUDA, PixelFormat::NV12, None)
+        Self::new(HWDeviceType::CUDA, PixelFormat::CUDA, PixelFormat::NV12, None, None)
     }
 
     /// 创建VAAPI配置
     pub fn vaapi(device_path: Option<String>) -> Self {
-        Self::new(HWDeviceType::VAAPI, PixelFormat::VAAPI, PixelFormat::NV12, device_path)
+        Self::new(
+            HWDeviceType::VAAPI,
+            PixelFormat::VAAPI,
+            PixelFormat::NV12,
+            device_path,
+            None,
+        )
     }
 
     /// 创建VDPAU配置
     pub fn vdpau() -> Self {
-        Self::new(HWDeviceType::VDPAU, PixelFormat::VDPAU, PixelFormat::NV12, None)
+        Self::new(HWDeviceType::VDPAU, PixelFormat::VDPAU, PixelFormat::NV12, None, None)
     }
 
     /// 创建Vulkan配置
     pub fn vulkan() -> Self {
-        Self::new(HWDeviceType::VULKAN, PixelFormat::VULKAN, PixelFormat::NV12, None)
+        Self::new(HWDeviceType::VULKAN, PixelFormat::VULKAN, PixelFormat::NV12, None, None)
     }
 }
 
@@ -63,12 +72,20 @@ impl HWContext {
         let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
             device_path.map(std::ffi::CString::new).transpose().unwrap().as_deref(),
-            None,
+            config.options.as_ref(),
             0,
         )
         .context("Failed to create hardware device context")?;
 
-        log::info!("Created hardware device context successfully: {:?}", config);
+        log::info!("Created hardware device context successfully.");
+        log::debug!(
+            "config: device_type: {:?}, hw_pixel: {:?}, sw_pixel: {:?}, device_path: {:?}, options: {:?}",
+            config.device_type,
+            config.hw_pixel_format,
+            config.sw_pixel_format,
+            device_path,
+            config.options.is_some()
+        );
 
         Ok(Self { config, device_ctx })
     }
@@ -232,9 +249,7 @@ impl HWContext {
         hw_frame.set_height(sw_frame.height);
         hw_frame.set_format(self.get_format(true));
         unsafe {
-            // 使用相同的对齐方式
-            let hw_frame_ptr = hw_frame.deref_mut();
-            hw_frame_ptr.hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
+            hw_frame.deref_mut().hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
         }
 
         // 分配硬件缓冲区
@@ -391,6 +406,7 @@ impl HWDeviceType {
                 self.default_hw_pixel_format(),
                 self.default_sw_pixel_format(),
                 None,
+                None,
             ))
         } else {
             let devices = self.list_available();
@@ -402,6 +418,7 @@ impl HWDeviceType {
                 device,
                 device.default_hw_pixel_format(),
                 device.default_sw_pixel_format(),
+                None,
                 None,
             ))
         }
@@ -514,49 +531,4 @@ unsafe extern "C" fn hwaccel_get_format(
         p = p.add(1);
     }
     ffi::AV_PIX_FMT_NONE
-}
-
-fn pix_formats_to_vec(formats: *const ffi::AVPixelFormat) -> Vec<PixelFormat> {
-    let mut ret = Vec::new();
-    unsafe {
-        let mut ptr = formats;
-        while *ptr != ffi::AV_PIX_FMT_NONE {
-            ret.push(PixelFormat::from_raw(*ptr).unwrap());
-            ptr = ptr.offset(1);
-        }
-    }
-    ret
-}
-
-pub fn get_transfer_formats_from_gpu(hw_frame_ctx: &mut AVHWFramesContextMut) -> Vec<PixelFormat> {
-    let mut formats = std::ptr::null_mut();
-    unsafe {
-        ffi::av_hwframe_transfer_get_formats(
-            hw_frame_ctx.as_mut_ptr(),
-            ffi::AV_HWFRAME_TRANSFER_DIRECTION_FROM,
-            &mut formats,
-            0,
-        );
-    }
-    if formats.is_null() {
-        Vec::new()
-    } else {
-        pix_formats_to_vec(formats)
-    }
-}
-pub fn get_transfer_formats_to_gpu(hw_frame_ctx: &mut AVHWFramesContextMut) -> Vec<PixelFormat> {
-    let mut formats = std::ptr::null_mut();
-    unsafe {
-        ffi::av_hwframe_transfer_get_formats(
-            hw_frame_ctx.as_mut_ptr(),
-            ffi::AV_HWFRAME_TRANSFER_DIRECTION_TO,
-            &mut formats,
-            0,
-        );
-    }
-    if formats.is_null() {
-        Vec::new()
-    } else {
-        pix_formats_to_vec(formats)
-    }
 }

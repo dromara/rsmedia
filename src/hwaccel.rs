@@ -342,6 +342,8 @@ impl HWContext {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HWDeviceType {
+    /// ffi definition NONE: 0
+    NONE,
     /// Video Decode and Presentation API for Unix (VDPAU)
     VDPAU,
     /// NVIDIA CUDA
@@ -383,7 +385,7 @@ impl HWDeviceType {
         unsafe {
             let mut hwdevice_type = ffi::av_hwdevice_iterate_types(ffi::AV_HWDEVICE_TYPE_NONE);
             while hwdevice_type != ffi::AV_HWDEVICE_TYPE_NONE {
-                hw_device_types.push(HWDeviceType::from(hwdevice_type).unwrap());
+                hw_device_types.push(HWDeviceType::from(hwdevice_type));
                 hwdevice_type = ffi::av_hwdevice_iterate_types(hwdevice_type);
             }
             hw_device_types
@@ -419,6 +421,7 @@ impl HWDeviceType {
     /// 获取硬件设备对应的像素格式
     pub fn default_hw_pixel_format(&self) -> PixelFormat {
         match self {
+            HWDeviceType::NONE => PixelFormat::NONE,
             HWDeviceType::VDPAU => PixelFormat::VDPAU,
             HWDeviceType::CUDA => PixelFormat::CUDA,
             HWDeviceType::VAAPI => PixelFormat::VAAPI,
@@ -465,26 +468,26 @@ impl HWDeviceType {
     }
 }
 
-impl HWDeviceType {
-    pub fn from(value: ffi::AVHWDeviceType) -> Option<HWDeviceType> {
+impl From<ffi::AVHWDeviceType> for HWDeviceType {
+    fn from(value: ffi::AVHWDeviceType) -> Self {
         match value {
-            ffi::AV_HWDEVICE_TYPE_NONE => None,
-            ffi::AV_HWDEVICE_TYPE_VDPAU => Some(Self::VDPAU),
-            ffi::AV_HWDEVICE_TYPE_CUDA => Some(Self::CUDA),
-            ffi::AV_HWDEVICE_TYPE_VAAPI => Some(Self::VAAPI),
-            ffi::AV_HWDEVICE_TYPE_DXVA2 => Some(Self::DXVA2),
-            ffi::AV_HWDEVICE_TYPE_QSV => Some(Self::QSV),
-            ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX => Some(Self::VIDEOTOOLBOX),
-            ffi::AV_HWDEVICE_TYPE_D3D11VA => Some(Self::D3D11VA),
-            ffi::AV_HWDEVICE_TYPE_DRM => Some(Self::DRM),
-            ffi::AV_HWDEVICE_TYPE_OPENCL => Some(Self::OPENCL),
-            ffi::AV_HWDEVICE_TYPE_MEDIACODEC => Some(Self::MEDIACODEC),
-            ffi::AV_HWDEVICE_TYPE_VULKAN => Some(Self::VULKAN),
+            ffi::AV_HWDEVICE_TYPE_NONE => HWDeviceType::NONE,
+            ffi::AV_HWDEVICE_TYPE_VDPAU => HWDeviceType::VDPAU,
+            ffi::AV_HWDEVICE_TYPE_CUDA => HWDeviceType::CUDA,
+            ffi::AV_HWDEVICE_TYPE_VAAPI => HWDeviceType::VAAPI,
+            ffi::AV_HWDEVICE_TYPE_DXVA2 => HWDeviceType::DXVA2,
+            ffi::AV_HWDEVICE_TYPE_QSV => HWDeviceType::QSV,
+            ffi::AV_HWDEVICE_TYPE_VIDEOTOOLBOX => HWDeviceType::VIDEOTOOLBOX,
+            ffi::AV_HWDEVICE_TYPE_D3D11VA => HWDeviceType::D3D11VA,
+            ffi::AV_HWDEVICE_TYPE_DRM => HWDeviceType::DRM,
+            ffi::AV_HWDEVICE_TYPE_OPENCL => HWDeviceType::OPENCL,
+            ffi::AV_HWDEVICE_TYPE_MEDIACODEC => HWDeviceType::MEDIACODEC,
+            ffi::AV_HWDEVICE_TYPE_VULKAN => HWDeviceType::VULKAN,
             #[cfg(feature = "ffmpeg7")]
-            ffi::AV_HWDEVICE_TYPE_D3D12VA => Some(Self::D3D12VA),
+            ffi::AV_HWDEVICE_TYPE_D3D12VA => HWDeviceType::D3D12VA,
 
             #[allow(unreachable_patterns)]
-            _ => unimplemented!(),
+            _ => panic!("Unknown HWDeviceType"),
         }
     }
 }
@@ -492,6 +495,7 @@ impl HWDeviceType {
 impl From<HWDeviceType> for ffi::AVHWDeviceType {
     fn from(value: HWDeviceType) -> Self {
         match value {
+            HWDeviceType::NONE => ffi::AV_HWDEVICE_TYPE_NONE,
             HWDeviceType::VDPAU => ffi::AV_HWDEVICE_TYPE_VDPAU,
             HWDeviceType::CUDA => ffi::AV_HWDEVICE_TYPE_CUDA,
             HWDeviceType::VAAPI => ffi::AV_HWDEVICE_TYPE_VAAPI,

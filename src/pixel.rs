@@ -752,8 +752,8 @@ pub enum PixelFormat {
 }
 
 /// Convert from FFmpeg's AV_PIX_FMT_* constants
-impl From<i32> for PixelFormat {
-    fn from(value: i32) -> Self {
+impl From<ffi::AVPixelFormat> for PixelFormat {
+    fn from(value: ffi::AVPixelFormat) -> Self {
         match value {
             ffi::AV_PIX_FMT_NONE => Self::NONE,
             ffi::AV_PIX_FMT_YUV420P => Self::YUV420P,
@@ -997,8 +997,8 @@ impl From<i32> for PixelFormat {
 }
 
 /// Convert to FFmpeg's AV_PIX_FMT_* constants
-impl From<PixelFormat> for i32 {
-    fn from(pix: PixelFormat) -> i32 {
+impl From<PixelFormat> for ffi::AVPixelFormat {
+    fn from(pix: PixelFormat) -> ffi::AVPixelFormat {
         match pix {
             PixelFormat::NONE => ffi::AV_PIX_FMT_NONE,
             PixelFormat::YUV420P => ffi::AV_PIX_FMT_YUV420P,

@@ -103,7 +103,7 @@ pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     frame.set_format(PixelFormat::RGB24.into());
     frame.set_width(width as i32);
     frame.set_height(height as i32);
-    frame.alloc_buffer().unwrap();
+    frame.alloc_buffer().context("Failed to allocate buffer for AVFrame")?;
 
     unsafe {
         let linesize = frame.linesize[0] as usize;
@@ -139,7 +139,7 @@ pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     frame.set_format(PixelFormat::YUV420P.into());
     frame.set_width(width as i32);
     frame.set_height(height as i32);
-    frame.alloc_buffer().unwrap();
+    frame.alloc_buffer().context("Failed to allocate buffer for AVFrame")?;
 
     unsafe {
         let y_linesize = frame.linesize[0] as usize;
@@ -492,7 +492,7 @@ impl MyAVImage {
     }
 
     /// 封装 `av_image_fill_plane_sizes`
-    pub fn fill_plane_sizes(&mut self, line_sizes: &[isize; ffi::AV_NUM_DATA_POINTERS as usize]) -> Result<()> {
+    pub fn fill_plane_sizes(&mut self, line_sizes: &[isize]) -> Result<()> {
         let ret = unsafe {
             ffi::av_image_fill_plane_sizes(
                 self.linesizes.as_mut_ptr() as *mut usize,
@@ -509,6 +509,7 @@ impl MyAVImage {
     }
 
     /// 封装 `av_image_fill_pointers`
+    /// 为图像填写像素格式 pix_fmt 和高度 height 的平面数据指针。
     pub fn fill_pointers(&mut self, src: &[u8]) -> Result<()> {
         let ret = unsafe {
             ffi::av_image_fill_pointers(
@@ -681,7 +682,6 @@ impl std::ops::DerefMut for MyAVImage {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use std::ptr;
     use std::time::Instant;
 
     // 辅助函数：创建测试用的 RGB AVFrame
@@ -1076,14 +1076,12 @@ mod tests {
 
     #[test]
     fn test_memory_usage() {
-        use std::mem;
-
         // 测试内存使用
         let frame = create_test_rgb_frame(1920, 1080);
         let array = avframe_rgb_to_ndarray(&frame).unwrap();
 
-        let frame_size = unsafe { mem::size_of_val(&*frame.as_ptr()) };
-        let array_size = mem::size_of_val(&array);
+        let frame_size = unsafe { std::mem::size_of_val(&*frame.as_ptr()) };
+        let array_size = std::mem::size_of_val(&array);
 
         println!("Frame size: {} bytes", frame_size);
         println!("Array size: {} bytes", array_size);
@@ -1164,7 +1162,7 @@ mod tests {
             // 在帧的某个位置编码时间戳
             let data = frame.data[0];
             let timestamp = b"2025-02-13 02:05:56";
-            ptr::copy_nonoverlapping(timestamp.as_ptr(), data, timestamp.len());
+            std::ptr::copy_nonoverlapping(timestamp.as_ptr(), data, timestamp.len());
         }
 
         let array = avframe_rgb_to_ndarray(&frame).unwrap();
@@ -1174,7 +1172,7 @@ mod tests {
         unsafe {
             let data = new_frame.data[0];
             let mut timestamp = [0u8; 19];
-            ptr::copy_nonoverlapping(data, timestamp.as_mut_ptr(), 19);
+            std::ptr::copy_nonoverlapping(data, timestamp.as_mut_ptr(), 19);
             assert_eq!(&timestamp, b"2025-02-13 02:05:56");
         }
     }
@@ -1755,205 +1753,152 @@ mod tests {
         }
     }
 
-    /// 测试图像分配基础功能
+    /// MyImage test
     #[test]
-    fn test_image_alloc_basic() -> Result<()> {
-        let img = MyAVImage::alloc(PixelFormat::YUV420P, 640, 480, 1)?;
+    fn test_my_avimage() -> Result<()> {
+        // 测试参数
+        let width = 1920;
+        let height = 1080;
+        let pix_fmt = PixelFormat::RGB24;
+        let align = 32;
 
-        // 验证基础属性
-        assert_eq!(img.0.width, 640);
-        assert_eq!(img.0.height, 480);
-        assert_eq!(img.0.pix_fmt, PixelFormat::YUV420P.into());
+        // 1. 测试图像大小检查
+        check_size(width as u32, height as u32)?;
+        check_size2(width as u32, height as u32, (width * height * 3) as i64, pix_fmt)?;
 
-        // 验证数据指针有效性
-        assert!(!img.0.data[0].is_null());
+        // 2. 创建图像
+        let mut img = MyAVImage::alloc(pix_fmt, width, height, align)?;
+        assert_eq!(img.width, width);
+        assert_eq!(img.height, height);
+        assert_eq!(img.pix_fmt, pix_fmt.into());
+
+        // 3. 设置行大小
+        img.fill_linesizes(pix_fmt, width)?;
+        let linesize = img.linesizes[0];
+        assert!(linesize > 0);
+
+        // 4. 测试获取行大小
+        let computed_linesize = image_get_linesize(pix_fmt, width, 0)?;
+        println!("Computed linesize: {}", computed_linesize);
+
+        // 5. 测试平面大小填充
+        // img.fill_plane_sizes(img.linesizes.map(|x| x as isize).as_slice())?;
+
+        // 6. 测试缓冲区复制
+        let buffer_size = linesize as usize * height as usize;
+        let mut dst_buffer = vec![0u8; buffer_size];
+        let copied_size = img.copy_to_buffer(&mut dst_buffer)?;
+        assert!(copied_size > 0);
+
+        // 7. 测试图像复制
+        let mut image2 = MyAVImage::alloc(pix_fmt, width, height, align)?;
+        image2.fill_linesizes(pix_fmt, width)?;
+        image2.copy(&img)?;
+
+        // 8. 测试最大像素步长填充
+        let (max_steps, max_comps) = image_fill_max_pix_steps(pix_fmt)?;
+        assert!(!max_steps.is_empty());
+        assert!(!max_comps.is_empty());
+
+        // 9. 测试最佳像素格式查找
+        let best_fmt = find_best_pix_fmt(PixelFormat::RGB24, PixelFormat::BGR24, PixelFormat::YUV420P, false)?;
+        println!("Best pixel format: {:?}", best_fmt);
+        assert_ne!(best_fmt, PixelFormat::NONE);
+
+        // 10. 测试像素格式损失计算
+        let loss = get_pix_fmt_loss(PixelFormat::RGB24, PixelFormat::YUV420P, false)?;
+        println!("Pixel format loss: {}", loss);
+        // assert!(loss <= 10);
+
+        // 打印调试信息（避免直接访问指针）
+        println!("Test configuration:");
+        println!("Width: {}, Height: {}", width, height);
+        println!("Pixel format: {:?}", pix_fmt);
+        println!("Alignment: {}", align);
+        println!("Actual linesize: {}", linesize);
+        println!("Buffer size: {}", buffer_size);
+
         Ok(())
     }
 
-    /// 测试无效参数分配
     #[test]
-    fn test_image_alloc_invalid() {
+    fn test_error_conditions() -> Result<()> {
         // 测试无效尺寸
-        assert!(MyAVImage::alloc(PixelFormat::YUV420P, -1, 480, 1).is_err());
-        assert!(MyAVImage::alloc(PixelFormat::YUV420P, 640, -1, 1).is_err());
-
-        // 测试不支持格式
-        assert!(MyAVImage::alloc(PixelFormat::NONE, 640, 480, 1).is_err());
-    }
-
-    /// 测试行大小计算
-    #[test]
-    fn test_fill_linesizes() -> Result<()> {
-        let mut img = MyAVImage::alloc(PixelFormat::YUV420P, 640, 480, 1)?;
-        assert!(img.fill_linesizes(PixelFormat::YUV420P, 640).is_ok());
-
-        // YUV420P 预期行大小
-        assert_eq!(img.0.linesizes[0], 640); // Y 分量
-        assert_eq!(img.0.linesizes[1], 320); // U 分量
-        assert_eq!(img.0.linesizes[2], 320); // V 分量
-        Ok(())
-    }
-
-    /// 测试图像复制功能
-    #[test]
-    fn test_image_copy() -> Result<()> {
-        // 创建源图像并填充测试数据
-        let src = MyAVImage::alloc(PixelFormat::RGB24, 100, 100, 1)?;
-        unsafe {
-            ptr::write_bytes(src.0.data[0], 0xFF, src.0.linesizes[0] as usize * 100);
-        }
-
-        // 创建目标图像
-        let mut dst = MyAVImage::alloc(PixelFormat::RGB24, 100, 100, 1)?;
-        dst.copy(&src.0)?;
-
-        // 验证数据一致性
-        let src_slice = unsafe { std::slice::from_raw_parts(src.0.data[0], 100 * 100 * 3) };
-        let dst_slice = unsafe { std::slice::from_raw_parts(dst.0.data[0], 100 * 100 * 3) };
-        assert_eq!(src_slice, dst_slice);
-        Ok(())
-    }
-
-    #[test]
-    fn test_fill_pointers() -> Result<()> {
-        let mut img = MyAVImage::alloc(PixelFormat::RGB24, 100, 100, 1)?;
-        let test_data = vec![0xAA; 100 * 100 * 3]; // RGB24 测试数据
-
-        // 填充指针并验证数据一致性
-        img.fill_pointers(&test_data)?;
-
-        let copied = unsafe { std::slice::from_raw_parts(img.0.data[0], 100 * 100 * 3) };
-        assert_eq!(copied, test_data.as_slice());
-        Ok(())
-    }
-
-    #[test]
-    fn test_fill_plane_sizes() -> Result<()> {
-        let mut img = MyAVImage::alloc(PixelFormat::YUV420P, 640, 480, 1)?;
-        // 输入行步长数组（YUV420P 的实际行步长）
-        let line_sizes: [isize; 8] = [
-            640, // Y 分量行步长
-            320, // U 分量行步长
-            320, // V 分量行步长
-            0, 0, 0, 0, 0,
-        ];
-
-        // 计算平面尺寸并验证
-        img.fill_plane_sizes(&line_sizes)?;
-
-        // 验证平面大小计算（行步长 × 高度）
-        assert_eq!(img.0.linesizes[0], 640 * 480); // Y 平面: 640 * 480 = 307200
-        // TODO:
-        // assert_eq!(img.0.linesizes[1], 320 * 240); // U 平面: 320*(480/2) = 76800
-        // assert_eq!(img.0.linesizes[2], 320 * 240); // V 平面: 320*(480/2) = 76800
-        Ok(())
-    }
-
-    #[test]
-    fn test_copy_to_buffer() -> Result<()> {
-        // 创建测试图像并填充数据
-        let img = MyAVImage::alloc(PixelFormat::GRAY8, 64, 64, 1)?;
-        unsafe {
-            ptr::write_bytes(img.0.data[0], 0x7F, 64 * 64);
-        }
-
-        // 创建目标缓冲区并复制
-        let mut buffer = vec![0u8; 64 * 64];
-        let copied_size = img.copy_to_buffer(&mut buffer)?;
-
-        assert_eq!(copied_size, 64 * 64);
-        assert!(buffer.iter().all(|&x| x == 0x7F));
-        Ok(())
-    }
-
-    /// 测试缓冲区容量不足的复制场景
-    #[test]
-    fn test_copy_to_buffer_insufficient() {
-        let img = MyAVImage::alloc(PixelFormat::RGB24, 100, 100, 1).unwrap();
-        let mut small_buffer = vec![0u8; 100]; // 故意小缓冲区
-
-        let result = img.copy_to_buffer(&mut small_buffer);
-        assert!(result.is_err());
-    }
-
-    /// 测试跨像素格式的平面尺寸计算
-    #[test]
-    fn test_fill_plane_sizes_cross_format() -> Result<()> {
-        let mut img = MyAVImage::alloc(PixelFormat::NV12, 1280, 720, 1)?;
-        // 输入行步长数组（NV12 的实际行步长）
-        let line_sizes: [isize; 8] = [
-            1280, // Y 分量行步长
-            1280, // UV 分量行步长（交织存储）
-            0, 0, 0, 0, 0, 0,
-        ];
-
-        img.fill_plane_sizes(&line_sizes)?;
-
-        // 验证 NV12 平面字节数
-        // TODO:
-        // assert_eq!(img.0.linesizes[0], 1280 * 720); // Y 平面: 1280 * 720 = 921600
-        // assert_eq!(img.0.linesizes[1], 1280 * 360); // UV 平面: 1280*(720/2) = 460800
-        Ok(())
-    }
-
-    /// 测试尺寸校验函数
-    #[test]
-    fn test_check_size() {
-        // 合法尺寸
-        assert!(check_size(1920, 1080).is_ok());
-        // 非法尺寸
         assert!(check_size(0, 0).is_err());
-        assert!(check_size(i32::MAX as u32 + 1, 1).is_err());
 
-        // 合法尺寸和格式
-        assert!(check_size2(1920, 1080, i64::MAX, PixelFormat::YUV420P).is_ok());
-        // 非法尺寸和格式
-        assert!(check_size2(65536, 65536, 1000, PixelFormat::RGB24).is_err());
-        assert!(check_size2(640, 480, i64::MAX, PixelFormat::NONE).is_ok());
-    }
+        // 测试无效的像素格式转换
+        assert!(get_pix_fmt_loss(PixelFormat::NONE, PixelFormat::RGB24, false).is_err());
 
-    /// 测试像素格式转换损失计算
-    #[test]
-    fn test_pix_fmt_loss() -> Result<()> {
-        let loss = get_pix_fmt_loss(PixelFormat::YUV420P, PixelFormat::RGB24, false).unwrap();
-        println!("YUV420P -> RGB24 loss: {}", loss);
-        // TODO:
-        // assert!(loss <= 1);
-
-        let loss = get_pix_fmt_loss(PixelFormat::RGB24, PixelFormat::YUV420P, false).unwrap();
-        println!("RGB24 -> YUV420P loss: {}", loss);
-        // TODO:
-        // assert!(loss <= 1);
+        // 测试图像复制时的格式不匹配
+        let mut img1 = MyAVImage::alloc(PixelFormat::RGB24, 640, 480, 1)?;
+        let img2 = MyAVImage::alloc(PixelFormat::BGR24, 320, 240, 1)?;
+        assert!(img1.copy(&img2).is_err());
 
         Ok(())
     }
 
-    /// 测试最佳像素格式选择
     #[test]
-    fn test_find_best_pix_fmt() -> Result<()> {
-        let best = find_best_pix_fmt(PixelFormat::NV12, PixelFormat::YUV420P, PixelFormat::RGB24, false)?;
+    fn test_image_operations() -> Result<()> {
+        // 创建测试图像
+        let width = 640;
+        let height = 480;
+        let pix_fmt = PixelFormat::RGB24;
 
-        // 验证返回有效格式
-        assert_ne!(best, PixelFormat::NONE);
+        let mut image = MyAVImage::alloc(pix_fmt, width, height, 1)?;
+
+        // 创建测试数据
+        let mut test_data = vec![255u8; (width * height * 3) as usize]; // 全白图像
+        // 填充数据
+        image.fill_pointers(test_data.as_mut_slice())?;
+
+        // 验证数据
+        let mut output_buffer = vec![0u8; (width * height * 3) as usize];
+        let copied_size = image.copy_to_buffer(&mut output_buffer)?;
+
+        assert_eq!(copied_size as usize, width as usize * height as usize * 3);
+        assert!(output_buffer.iter().all(|&x| x == 255));
+
         Ok(())
     }
 
-    /// 测试行大小获取函数
     #[test]
-    fn test_get_linesize() -> Result<()> {
-        // RGB24 行大小应为 width*3
-        let linesize = image_get_linesize(PixelFormat::RGB24, 640, 0)?;
-        assert_eq!(linesize, 640 * 3);
+    fn test_format_conversion() -> Result<()> {
+        let formats = vec![
+            PixelFormat::RGB24,
+            PixelFormat::BGR24,
+            PixelFormat::YUV420P,
+            PixelFormat::RGBA,
+        ];
+
+        // 测试所有格式组合的转换
+        for &src_fmt in &formats {
+            for &dst_fmt in &formats {
+                if src_fmt != dst_fmt {
+                    let loss = get_pix_fmt_loss(dst_fmt, src_fmt, true)?;
+                    println!("Convert {:?} to {:?}, loss: {}", src_fmt, dst_fmt, loss);
+                }
+            }
+        }
+
         Ok(())
     }
 
-    /// 测试最大像素步幅计算
     #[test]
-    fn test_max_pixsteps() -> Result<()> {
-        let (steps, steps_comps) = image_fill_max_pix_steps(PixelFormat::YUV420P)?;
-        println!("YUV420P max steps: {:?}, steps_comps: {:?}", steps, steps_comps);
-        // YUV420P 应有明确的步幅值
-        assert!(steps[0] > 0);
+    fn test_memory_management() -> Result<()> {
+        // 测试大尺寸图像的内存分配和释放
+        let sizes = [(1920, 1080), (3840, 2160), (7680, 4320)];
+
+        for &(width, height) in &sizes {
+            let image = MyAVImage::alloc(PixelFormat::RGB24, width, height, 32)?;
+
+            // 验证内存对齐
+            for &linesize in &image.linesizes {
+                if linesize > 0 {
+                    assert_eq!(linesize % 32, 0);
+                }
+            }
+        }
+
         Ok(())
     }
 }

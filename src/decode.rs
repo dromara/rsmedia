@@ -406,7 +406,7 @@ impl DecoderSplit {
                     )));
                 }
                 let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap())?;
-                hw_ctx.setup_hw_frames(true, &mut decode_ctx, width, height)?;
+                hw_ctx.setup_hw_frames(&mut decode_ctx, width, height)?;
                 Some(hw_ctx)
             }
             None => None,

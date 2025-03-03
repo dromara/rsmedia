@@ -91,13 +91,7 @@ impl HWContext {
     }
 
     /// 设置编解码器的硬件帧上下文
-    pub fn setup_hw_frames(
-        &mut self,
-        is_decoder: bool,
-        codec_ctx: &mut AVCodecContext,
-        width: i32,
-        height: i32,
-    ) -> Result<()> {
+    pub fn setup_hw_frames(&mut self, codec_ctx: &mut AVCodecContext, width: i32, height: i32) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
         hw_frames_ref.data().format = self.config.hw_pixel_format.into();
@@ -114,16 +108,14 @@ impl HWContext {
         codec_ctx.set_pix_fmt(self.get_format(true));
 
         // only used by decoders
-        if is_decoder {
-            unsafe {
-                let ctx_mut_ptr = codec_ctx.deref_mut();
-                ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
-                ctx_mut_ptr.opaque = i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
-                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
-                ctx_mut_ptr.get_format = Some(hwaccel_get_format);
-                // (*codec_ctx).hwaccel
-                // (*codec_ctx).hwaccel_context
-            }
+        unsafe {
+            let ctx_mut_ptr = codec_ctx.deref_mut();
+            ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
+            ctx_mut_ptr.opaque = i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
+            ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
+            ctx_mut_ptr.get_format = Some(hwaccel_get_format);
+            // (*codec_ctx).hwaccel
+            // (*codec_ctx).hwaccel_context
         }
 
         Ok(())

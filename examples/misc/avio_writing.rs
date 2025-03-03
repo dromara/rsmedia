@@ -2,9 +2,8 @@ use super::avio;
 /// Simplified transcoding test, select the first video stream in given video file
 /// and transcode it. Store the output in memory.
 use anyhow::{Context, Result, bail};
-use rsmpeg::{
-    self, avcodec::AVCodecContext, avformat::AVFormatContextOutput, avutil::AVFrame, error::RsmpegError, ffi,
-};
+use rsmpeg::ffi;
+use rsmpeg::{avcodec::AVCodecContext, avformat::AVFormatContextOutput, avutil::AVFrame, error::RsmpegError};
 use std::ffi::CStr;
 
 /// encode -> write_frame
@@ -195,6 +194,7 @@ mod tests {
     use cstr::cstr;
 
     #[test]
+    #[ignore = "avio_writing_test0 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test0() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
@@ -205,6 +205,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "avio_writing_test1 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test1() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
@@ -215,6 +216,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "avio_writing_test2 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test2() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
@@ -225,6 +227,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "avio_writing_test3 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test3() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
@@ -235,6 +238,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "avio_writing_test4 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test4() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
@@ -245,6 +249,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "avio_writing_test5 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test5() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
@@ -255,13 +260,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "avio_writing_test6 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test6() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         clip_video(
             cstr!("http://172.24.82.2/video/final_134_raw_2024-09-12-05-04_3980.mp4"),
             cstr!("tests/output/avio_writing/clip_video.mp4"),
-            0 as f64,
-            1 as f64,
+            0.0,
+            1.0,
         )
         .unwrap();
     }

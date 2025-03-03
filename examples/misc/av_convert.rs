@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use image::RgbImage;
 use rsmedia::{PixelFormat, frame};
 use rsmpeg::{avutil::AVFrame, ffi};
@@ -84,6 +84,7 @@ pub fn avframe_yuv420p_to_image_rgb(frame: &AVFrame) -> Result<RgbImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Context;
 
     /// create RgbImage
     fn create_rgb_image() -> RgbImage {

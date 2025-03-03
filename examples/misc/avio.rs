@@ -9,12 +9,14 @@ use anyhow::{Context, Error, Result, anyhow};
 use image::DynamicImage;
 use rsmedia::{PixelFormat, frame};
 
+use rsmpeg::ffi;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext, AVPacket},
     avformat::{AVFormatContextInput, AVFormatContextOutput, AVIOContextContainer, AVIOContextCustom},
     avutil::{self, AVFrame, AVMem, AVRational},
-    ffi,
 };
+
+use super::av_convert;
 
 /// multimedia file input decoding
 pub struct Decoder {
@@ -83,7 +85,7 @@ impl Decoder {
                         rgb_frame.pts, rgb_frame.time_base
                     );
 
-                    let img = crate::misc::av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
+                    let img = av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
                     return Ok(Some((yuv_frame.pts, DynamicImage::ImageRgb8(img))));
                 }
             } else {
@@ -341,7 +343,7 @@ pub fn save_avframe_rgb24(frame: &AVFrame, output_file_name: &str) -> Result<()>
     };
 
     // 转换为图像
-    let rgb_image = crate::misc::av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
+    let rgb_image = av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
 
     // 确定输出格式并写入文件
     let path = Path::new(output_file_name);
@@ -356,6 +358,7 @@ pub fn save_avframe_rgb24(frame: &AVFrame, output_file_name: &str) -> Result<()>
         "jpg" | "jpeg" => rgb_image.save_with_format(path, image::ImageFormat::Jpeg)?,
         "webp" => rgb_image.save_with_format(path, image::ImageFormat::WebP)?,
         "pnm" => rgb_image.save_with_format(path, image::ImageFormat::Pnm)?,
+        "bmp" => rgb_image.save_with_format(path, image::ImageFormat::Bmp)?,
         "gif" => rgb_image.save_with_format(path, image::ImageFormat::Gif)?,
         _ => {
             return Err(Error::msg(format!("Unsupported image format: {}", extension)));

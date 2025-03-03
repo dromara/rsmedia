@@ -48,37 +48,44 @@ pub fn metadata(file: &str) -> Result<Vec<(String, String)>> {
     Ok(result)
 }
 
-#[test]
-fn metadata_test0() {
-    assert_eq!(
-        metadata("tests/assets/vids/bear.mp4").unwrap(),
-        vec![
-            ("image_path".into(), "tests/assets/vids/bear.mp4".into()),
-            ("duration".into(), "1068118".into()),
-            ("bit_rate".into(), "307823".into()),
-            ("major_brand".into(), "isom".into()),
-            ("minor_version".into(), "1".into()),
-            ("compatible_brands".into(), "isomavc1".into()),
-            ("creation_time".into(), "2009-07-09T17:29:47.000000Z".into()),
-            ("frame_rate".into(), "29.97002997002997".into()),
-            ("width".into(), "320".into()),
-            ("height".into(), "180".into()),
-        ]
-    );
-}
+#[cfg(test)]
+mod tests {
+    use super::metadata;
 
-#[test]
-fn metadata_test1() {
-    assert_eq!(
-        metadata("tests/assets/vids/vp8.mp4").unwrap(),
-        vec![
-            ("image_path".into(), "tests/assets/vids/vp8.mp4".into()),
-            ("duration".into(), "17600000".into()),
-            ("bit_rate".into(), "242823".into()),
-            ("encoder".into(), "whammy".into()),
-            ("frame_rate".into(), "5".into()),
-            ("width".into(), "604".into()),
-            ("height".into(), "604".into()),
-        ]
-    );
+    #[test]
+    #[ignore = "metadata_test0 测试运行依赖测试文件，暂时忽略"]
+    fn metadata_test0() {
+        assert_eq!(
+            metadata("tests/assets/vids/bear.mp4").unwrap(),
+            vec![
+                ("image_path".into(), "tests/assets/vids/bear.mp4".into()),
+                ("duration".into(), "1068118".into()),
+                ("bit_rate".into(), "307823".into()),
+                ("major_brand".into(), "isom".into()),
+                ("minor_version".into(), "1".into()),
+                ("compatible_brands".into(), "isomavc1".into()),
+                ("creation_time".into(), "2009-07-09T17:29:47.000000Z".into()),
+                ("frame_rate".into(), "29.97002997002997".into()),
+                ("width".into(), "320".into()),
+                ("height".into(), "180".into()),
+            ]
+        );
+    }
+
+    #[test]
+    #[ignore = "metadata_test1 测试运行依赖测试文件，暂时忽略"]
+    fn metadata_test1() {
+        assert_eq!(
+            metadata("tests/assets/vids/vp8.mp4").unwrap(),
+            vec![
+                ("image_path".into(), "tests/assets/vids/vp8.mp4".into()),
+                ("duration".into(), "17600000".into()),
+                ("bit_rate".into(), "242823".into()),
+                ("encoder".into(), "whammy".into()),
+                ("frame_rate".into(), "5".into()),
+                ("width".into(), "604".into()),
+                ("height".into(), "604".into()),
+            ]
+        );
+    }
 }

@@ -21,7 +21,7 @@ use std::ptr;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```rust,ignore
 /// let mut options = HashMap::new();
 /// options.insert(
 ///     "rtsp_transport".to_string(),
@@ -29,15 +29,16 @@ use std::ptr;
 /// );
 ///
 /// let mut reader = ReaderBuilder::new(Path::new("my_file.mp4"))
-/// .with_options(&options.into())
-/// .unwrap();
+///    .with_options(&options.into())
+///    .build()
+///    .unwrap();
 /// ```
-pub struct ReaderBuilder {
+pub struct ReaderBuilder<'a> {
     source: Location,
-    options: Option<Options>,
+    options: Option<&'a Options>,
 }
 
-impl ReaderBuilder {
+impl<'a> ReaderBuilder<'a> {
     /// Create a new reader with the specified locator.
     ///
     /// # Arguments
@@ -55,7 +56,7 @@ impl ReaderBuilder {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to input.
-    pub fn with_options(mut self, options: Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -427,8 +428,9 @@ impl<'a> WriterBuilder<'a> {
 /// );
 ///
 /// let mut writer = WriterBuilder::new(Path::new("my_file.mp4"))
-/// .with_options(&options.into())
-/// .unwrap();
+///     .with_options(&options.into())
+///     .build()
+///     .unwrap();
 /// ```
 pub struct Writer {
     pub destination: Location,

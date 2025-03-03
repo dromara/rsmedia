@@ -188,7 +188,7 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
-    /// Create an encoder from a `FileWriter` instance.
+    /// Create an encoder from a [`Writer`].
     ///
     /// # Arguments
     ///

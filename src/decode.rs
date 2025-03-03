@@ -14,15 +14,15 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
-pub struct DecoderBuilder {
+pub struct DecoderBuilder<'a> {
     source: Location,
     resize: Option<Resize>,
     codec_name: Option<String>,
-    options: Option<Options>,
+    options: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
-impl DecoderBuilder {
+impl<'a> DecoderBuilder<'a> {
     /// Create a decoder with the specified source.
     ///
     /// * `source` - Source to decode.
@@ -46,7 +46,7 @@ impl DecoderBuilder {
     /// Set custom options. Options are applied to the input.
     ///
     /// * `options` - Custom options.
-    pub fn with_options(mut self, options: Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -70,8 +70,8 @@ impl DecoderBuilder {
     /// Build [`Decoder`].
     pub fn build(self) -> Result<Decoder> {
         let mut reader_builder = ReaderBuilder::new(self.source);
-        if let Some(ref options) = self.options {
-            reader_builder = reader_builder.with_options(options.clone());
+        if let Some(opts) = self.options {
+            reader_builder = reader_builder.with_options(opts);
         }
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
@@ -381,7 +381,7 @@ impl DecoderSplit {
         reader: &Reader,
         stream_index: usize,
         codec: AVCodecRef,
-        options: Option<Options>,
+        options: Option<&Options>,
         resize: Option<Resize>,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {

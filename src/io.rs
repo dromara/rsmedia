@@ -78,7 +78,12 @@ impl<'a> ReaderBuilder<'a> {
     pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
         let format_opt = AVInputFormat::find(&path);
-        Ok(AVFormatContextInput::open(&path, format_opt.as_deref(), &mut None).unwrap())
+        let mut avformat_ctx_input = AVFormatContextInput::open(&path, format_opt.as_deref(), &mut None)
+            .context("Create input format context failed.")?;
+        avformat_ctx_input
+            .dump(0, &path)
+            .context("Dump input format context failed.")?;
+        Ok(avformat_ctx_input)
     }
 
     pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
@@ -87,7 +92,12 @@ impl<'a> ReaderBuilder<'a> {
     ) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
         let format_opt = AVInputFormat::find(&path);
-        Ok(AVFormatContextInput::open(&path, format_opt.as_deref(), options).unwrap())
+        let mut avformat_ctx_input = AVFormatContextInput::open(&path, format_opt.as_deref(), options)
+            .context("Create input format context failed.")?;
+        avformat_ctx_input
+            .dump(0, &path)
+            .context("Dump input format context failed.")?;
+        Ok(avformat_ctx_input)
     }
 }
 
@@ -311,8 +321,9 @@ impl<'a> WriterBuilder<'a> {
 
     pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
-        let ofctx = AVFormatContextOutput::create(&path, None).unwrap();
-        Ok(ofctx)
+        let avformat_ctx_output =
+            AVFormatContextOutput::create(&path, None).context("Create output format context failed.")?;
+        Ok(avformat_ctx_output)
     }
 
     pub fn output_with<P: AsRef<Path> + ?Sized>(

@@ -120,7 +120,13 @@ impl StreamInfo {
     /// Turn information back into parts for usage.
     ///
     /// Note: Consumes stream information object.
-    #[allow(unused)]
+    ///
+    /// # Return value
+    ///
+    /// A tuple consisting of:
+    /// * The stream index.
+    /// * Codec parameters.
+    /// * Original stream time base.
     pub(crate) fn into_parts(self) -> (usize, *mut ffi::AVCodecParameters, Rational) {
         (self.index, self.codec_parameters, self.time_base)
     }

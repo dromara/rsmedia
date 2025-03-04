@@ -19,6 +19,7 @@ ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
 [dependencies]
 url = "2"
 libc = "0.2"
+image = "0.25"
 anyhow = "1.0"
 bitflags = "2.8"
 log = "0.4"
@@ -31,9 +32,11 @@ rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", featu
 
 [dev-dependencies]
 cstr = "0.2"
-image = "0.25"
 camino = "1.1"
 chrono = "0.4"
+pix = "0.13"
+yuvutils-rs = "0.7"
+colorutils-rs = "0.7"
 tokio = { version = "1", features = ["full"] }
 
 [package.metadata.docs.rs]

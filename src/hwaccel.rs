@@ -135,10 +135,12 @@ impl HWContext {
     /// # Example
     /// ```rust,ignore
     /// let hw_frame = // ... frame from decoder
-    /// let sw_frame = hw_context.download_frame(&hw_frame)?;
+    /// let sw_frame = hw_context.hw_download(&hw_frame)?;
     /// // Now sw_frame contains the data in CPU memory
     /// ```
-    pub fn download_frame(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
+    pub fn hw_download(&self, decoder: &mut AVCodecContext, hw_frame: &AVFrame) -> Result<AVFrame> {
+        let hw_down_start = std::time::Instant::now();
+
         // Check if input frame is actually in hardware memory
         if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into() {
             return Err(Error::msg(format!(
@@ -175,7 +177,7 @@ impl HWContext {
             .alloc_buffer()
             .context("Failed to allocate software frame buffer")?;
 
-        // 分配缓冲区
+        // 分配硬件帧缓冲区，这里是从硬件帧转换为软件帧，所以需要分配软件帧缓冲区
         // hw_frames_ctx
         //     .get_buffer(&mut sw_frame)
         //     .context("Failed to allocate software frame buffer")?;
@@ -189,13 +191,13 @@ impl HWContext {
         self.copy_frame_props(&mut sw_frame, hw_frame);
 
         log::debug!(
-            "Downloaded frame from GPU: format={} (NV12={}), size={}x{}, linesize=[{}, {}]",
-            sw_frame.format,
-            ffi::AV_PIX_FMT_NV12,
+            "Downloaded from GPU: format={:?}, size={}x{}, linesize=[{}, {}], cost={:?}ms",
+            PixelFormat::from(sw_frame.format),
             sw_frame.width,
             sw_frame.height,
             sw_frame.linesize[0],
             sw_frame.linesize[1],
+            hw_down_start.elapsed()
         );
 
         Ok(sw_frame)
@@ -215,10 +217,12 @@ impl HWContext {
     /// # Example
     /// ```rust,ignore
     /// let sw_frame = // ... frame in system memory
-    /// let hw_frame = hw_context.upload_frame(&sw_frame)?;
+    /// let hw_frame = hw_context.hw_upload(&sw_frame)?;
     /// // Now hw_frame contains the data in GPU memory
     /// ```
-    pub fn upload_frame(&self, encoder: &mut AVCodecContext, sw_frame: &AVFrame) -> Result<AVFrame> {
+    pub fn hw_upload(&self, encoder: &mut AVCodecContext, sw_frame: &AVFrame) -> Result<AVFrame> {
+        let hw_up_start = std::time::Instant::now();
+
         // Check if input frame format matches our software format
         if sw_frame.format != self.config.sw_pixel_format.into() {
             return Err(Error::msg(format!(
@@ -258,13 +262,13 @@ impl HWContext {
         self.copy_frame_props(&mut hw_frame, sw_frame);
 
         log::debug!(
-            "Uploaded frame to GPU: format={}, (CUDA={}), size={}x{}, linesize=[{}, {}]",
-            hw_frame.format,
-            ffi::AV_PIX_FMT_CUDA,
+            "Uploaded to GPU: format={:?}, size={}x{}, linesize=[{}, {}], cost={:?}ms",
+            PixelFormat::from(hw_frame.format),
             hw_frame.width,
             hw_frame.height,
             hw_frame.linesize[0],
-            hw_frame.linesize[1]
+            hw_frame.linesize[1],
+            hw_up_start.elapsed()
         );
 
         Ok(hw_frame)

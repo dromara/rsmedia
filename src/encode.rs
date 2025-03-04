@@ -378,7 +378,7 @@ impl Encoder {
     ///
     /// * `frame` - Frame to encode.
     pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
-        log::info!("encode_raw raw_frame: {:?}", raw_frame);
+        log::info!("raw_frame: {:?}", raw_frame);
         if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
             return Err(anyhow::anyhow!(
                 "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
@@ -423,7 +423,7 @@ impl Encoder {
                 let hw_frame = {
                     if hw_ctx.is_sw_frame(frame.clone()) {
                         hw_ctx
-                            .upload_frame(&mut self.encode_ctx, &frame)
+                            .hw_upload(&mut self.encode_ctx, &frame)
                             .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?
                     } else {
                         frame
@@ -556,7 +556,6 @@ impl Encoder {
     /// * `packet` - Encoded packet.
     fn write(&mut self, mut packet: Packet) -> Result<()> {
         packet.set_pos(-1);
-        packet.set_pts(packet.dts());
         packet.set_stream_index(self.writer_stream_index);
         packet.rescale_ts(self.time_base(), self.stream_time_base());
         if self.interleaved {

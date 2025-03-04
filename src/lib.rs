@@ -4,6 +4,7 @@ pub mod encode;
 pub mod frame;
 #[cfg(feature = "ndarray")]
 pub use frame::FrameArray;
+pub mod colors;
 mod flags;
 pub mod hwaccel;
 pub mod init;

@@ -385,6 +385,9 @@ pub fn convert_avframe(
     // 考虑性能和质量平衡
     let flags = ffi::SWS_BICUBIC | ffi::SWS_FULL_CHR_H_INT | ffi::SWS_ACCURATE_RND | ffi::SWS_BITEXACT;
 
+    // 计算缩放时间
+    let scale_start = std::time::Instant::now();
+
     // 创建转换上下文
     let mut sws_ctx = SwsContext::get_context(
         src_frame.width,
@@ -425,7 +428,7 @@ pub fn convert_avframe(
         ))?;
 
     log::debug!(
-        "scale_frame src:[fmt:{}, pts:{}, size:{}x{}], dst:[fmt:{}, pts:{}, size:{}x{}]",
+        "scale_frame src:[fmt:{}, pts:{}, size:{}x{}], dst:[fmt:{}, pts:{}, size:{}x{}], cost:{:?}",
         src_frame.format,
         src_frame.pts,
         src_frame.width,
@@ -434,6 +437,7 @@ pub fn convert_avframe(
         dst_frame.pts,
         dst_frame.width,
         dst_frame.height,
+        scale_start.elapsed()
     );
 
     Ok(dst_frame)

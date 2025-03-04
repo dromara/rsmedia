@@ -563,7 +563,7 @@ impl DecoderSplit {
 
         let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
             if hw_ctx.is_hw_frame(frame.clone()) {
-                match hw_ctx.download_frame(&mut self.decode_ctx, &frame) {
+                match hw_ctx.hw_download(&mut self.decode_ctx, &frame) {
                     Ok(sw_frame) => sw_frame,
                     Err(e) => {
                         log::error!("Failed to download frame from hw_device: {}", e);
@@ -579,7 +579,7 @@ impl DecoderSplit {
         };
 
         // handle scaling frame if needed (if not, size_out is the same as size)
-        Ok(Some(self.rescale_frame(&processed_frame)?))
+        Ok(Some(self.rescale_frame(processed_frame)?))
     }
 
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
@@ -594,7 +594,7 @@ impl DecoderSplit {
     }
 
     /// Rescale frame if needed.
-    fn rescale_frame(&self, frame: &RawFrame) -> Result<RawFrame> {
+    fn rescale_frame(&self, frame: RawFrame) -> Result<RawFrame> {
         let input_format = self
             .hw_context
             .as_ref()
@@ -606,10 +606,10 @@ impl DecoderSplit {
             && frame.height as u32 == resize_height);
 
         if is_scale_needed {
-            return frame::convert_avframe(frame, resize_width as i32, resize_height as i32, PixelFormat::YUV420P);
+            return frame::convert_avframe(&frame, resize_width as i32, resize_height as i32, PixelFormat::YUV420P);
         }
 
-        Ok(frame.clone())
+        Ok(frame)
     }
 
     #[cfg(feature = "ndarray")]

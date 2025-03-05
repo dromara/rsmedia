@@ -212,8 +212,8 @@ struct StreamDescription {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::{BufWriterBuilder, PacketizedBufWriterBuilder, Writer};
-    use crate::{io, Time};
+    use crate::io::{self, BufWriterBuilder, PacketizedBufWriterBuilder, Writer};
+    use crate::Time;
     use std::collections::HashMap;
     use std::path::Path;
 

@@ -222,8 +222,8 @@ mod tests {
     #[test]
     #[ignore = "test_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_muxer() {
-        let mut reader = Reader::new(Path::new("/tmp/download22.mp4")).unwrap();
-        let writer = Writer::new(Path::new("/tmp/download22.mov")).unwrap();
+        let mut reader = Reader::new(Path::new("/tmp/bear.mp4")).unwrap();
+        let writer = Writer::new(Path::new("/tmp/bear.mov")).unwrap();
 
         let mut muxer = MuxerBuilder::new(writer)
             .with_streams(&reader)
@@ -282,16 +282,17 @@ mod tests {
     fn test_buf_muxer() {
         // only have stream 0
         let mut reader = Reader::new(Path::new("/tmp/trim.mp4")).unwrap();
+        let writer = BufWriterBuilder::new("mp4").build().unwrap();
 
-        let mut rtp_muxer = MuxerBuilder::new(BufWriterBuilder::new("mp4").build().unwrap())
+        let mut buf_muxer = MuxerBuilder::new(writer)
             .with_streams(&reader)
             .unwrap()
             .build();
 
         while let Ok(packet) = reader.read_any() {
-            let bufs = rtp_muxer.mux(packet).unwrap();
-            println!("buf_muxer len:{}", bufs.len())
+            let buf = buf_muxer.mux(packet).unwrap();
+            println!("buf_muxer len:{}", buf.len())
         }
-        rtp_muxer.finish().unwrap();
+        buf_muxer.finish().unwrap();
     }
 }

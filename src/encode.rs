@@ -237,10 +237,10 @@ impl<'a> EncoderBuilder<'a> {
             .context("Failed to open encode context")?;
 
         let writer_stream_index = {
-            let mut out_stream = writer.output.new_stream();
-            out_stream.set_codecpar(encode_ctx.extract_codecpar());
-            out_stream.set_time_base(encode_ctx.time_base);
-            out_stream.index as usize
+            let mut av_stream = writer.output.new_stream();
+            av_stream.set_codecpar(encode_ctx.extract_codecpar());
+            av_stream.set_time_base(encode_ctx.time_base);
+            av_stream.index as usize
         };
 
         let stream_info = writer.stream_info(writer_stream_index)?;

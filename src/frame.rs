@@ -1954,7 +1954,7 @@ mod tests {
         println!("Pixel format: {:?}", pix_fmt);
         println!("Alignment: {}", align);
         println!("Actual linesize: {}", linesize);
-        println!("Buffer size: {}", buffer_size);
+        println!("line_size * height size: {}", buffer_size);
 
         Ok(())
     }

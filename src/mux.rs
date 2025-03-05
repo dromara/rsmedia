@@ -212,11 +212,13 @@ struct StreamDescription {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::Writer;
+    use crate::io::{BufWriterBuilder, PacketizedBufWriterBuilder, Writer};
+    use crate::{io, Time};
+    use std::collections::HashMap;
     use std::path::Path;
 
     #[test]
-    #[ignore = "muxer convert mp4, mov, avi to mkv, requires a file to be present"]
+    #[ignore = "test_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_muxer() {
         let mut reader = Reader::new(Path::new("/tmp/download22.mp4")).unwrap();
         let writer = Writer::new(Path::new("/tmp/download22.mov")).unwrap();
@@ -229,5 +231,65 @@ mod tests {
             muxer.mux(packet).unwrap();
         }
         muxer.finish().unwrap();
+    }
+
+    #[test]
+    #[ignore = "test_rtp_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
+    fn test_rtp_muxer() {
+        // only have stream 0
+        let mut reader = Reader::new(Path::new("/tmp/trim.mp4")).unwrap();
+
+        let mut opts = HashMap::<String, String>::new();
+        opts.insert("strict".to_string(), "experimental".to_string());
+        opts.insert("rtsp_transport".to_string(), "tcp".to_string());
+        opts.insert("an".to_string(), "".to_string());
+
+        // RTP 只支持单流
+        // WARNING! [rtp @ 0x15ae04e50] Only one stream supported in the RTP muxer
+        let mut rtp_muxer = MuxerBuilder::new(
+            PacketizedBufWriterBuilder::new("rtp")
+                .with_options(&opts.into())
+                .build()
+                .unwrap(),
+        )
+        .with_streams(&reader)
+        .unwrap()
+        .build();
+
+        let sdp = io::sdp(&rtp_muxer.writer.output).unwrap();
+        println!("sdp: {}", sdp);
+        let (seq, timestamp) = io::rtp_seq_and_timestamp(&rtp_muxer.writer.output);
+        println!("seq: {}, timestamp: {}", seq, timestamp);
+        let rtp_h264_mode = io::rtp_h264_mode_0(&rtp_muxer.writer.output);
+        println!("rtp_h264_mode: {}", rtp_h264_mode);
+
+        let duration = Time::from_nth_of_a_second(24);
+        while let Ok(mut packet) = reader.read(0) {
+            packet.set_pos(-1);
+            packet.set_pts(duration);
+            packet.set_dts(duration);
+            packet.set_time_base(Rational::new(1, 24));
+            let bufs = rtp_muxer.mux(packet).unwrap();
+            println!("rtp_muxer len:{}", bufs.len())
+        }
+        rtp_muxer.finish().unwrap();
+    }
+
+    #[test]
+    #[ignore = "test_buf_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
+    fn test_buf_muxer() {
+        // only have stream 0
+        let mut reader = Reader::new(Path::new("/tmp/trim.mp4")).unwrap();
+
+        let mut rtp_muxer = MuxerBuilder::new(BufWriterBuilder::new("mp4").build().unwrap())
+            .with_streams(&reader)
+            .unwrap()
+            .build();
+
+        while let Ok(packet) = reader.read_any() {
+            let bufs = rtp_muxer.mux(packet).unwrap();
+            println!("buf_muxer len:{}", bufs.len())
+        }
+        rtp_muxer.finish().unwrap();
     }
 }

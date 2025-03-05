@@ -14,7 +14,7 @@ use crate::{utils, Rational, RawFrame};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::avutil::{self, AVPixelFormat};
 use rsmpeg::error::RsmpegError;
-use rsmpeg::{ffi, UnsafeDerefMut};
+use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
 use libc::{c_int, c_uint};
@@ -295,8 +295,8 @@ impl<'a> EncoderBuilder<'a> {
         encoder.set_pix_fmt(self.pixel_format.into());
         encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         unsafe {
-            encoder.deref_mut().thread_count = self.thread_count;
-            encoder.deref_mut().flags2 = ffi::AV_CODEC_FLAG2_FAST as c_int;
+            (*encoder.as_mut_ptr()).thread_count = self.thread_count;
+            (*encoder.as_mut_ptr()).flags2 = ffi::AV_CODEC_FLAG2_FAST as c_int;
         }
     }
 

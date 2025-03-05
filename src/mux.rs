@@ -2,6 +2,8 @@ use crate::io::{Reader, Write};
 use crate::stream::StreamInfo;
 use crate::{Packet, Rational};
 
+use rsmpeg::avcodec::AVCodecParameters;
+
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 
@@ -34,9 +36,9 @@ impl<W: Write> MuxerBuilder<W> {
     ///   [`Reader::stream_info()`].
     pub fn with_stream(mut self, stream_info: StreamInfo) -> Result<Self> {
         let (index, codec_parameters, reader_stream_time_base) = stream_info.into_parts();
-        let writer_stream_index = {
+        let writer_stream_index = unsafe {
             let mut av_stream = self.writer.output_mut().new_stream();
-            av_stream.set_codecpar(codec_parameters);
+            av_stream.set_codecpar(AVCodecParameters::from_raw(codec_parameters));
             av_stream.set_time_base(reader_stream_time_base.into());
             av_stream.index
         };

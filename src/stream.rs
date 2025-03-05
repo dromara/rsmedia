@@ -3,7 +3,6 @@ use crate::io::Reader;
 use crate::packet::Packet;
 use crate::{utils, Rational, Writer};
 
-use rsmpeg::avcodec::AVCodecParameters;
 use rsmpeg::avformat::{AVFormatContextInput, AVStreamRef};
 use rsmpeg::avutil::{AVDictionary, AVMediaType};
 use rsmpeg::ffi;
@@ -12,6 +11,7 @@ use anyhow::{Error, Result};
 use libc::{c_int, c_uint};
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::ptr::NonNull;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
@@ -42,7 +42,7 @@ pub struct StreamInfo {
     /// Video frame rate
     pub frame_rate: f32,
     /// Codec parameters
-    pub codec_parameters: AVCodecParameters,
+    pub codec_parameters: NonNull<ffi::AVCodecParameters>,
 }
 
 impl StreamInfo {
@@ -118,9 +118,7 @@ impl StreamInfo {
                 sample_rate: sample_rate as isize,
                 avg_frame_rate: avg_frame_rate as f32,
                 frame_rate: framerate as f32,
-                codec_parameters: AVCodecParameters::from_raw(
-                    std::ptr::NonNull::new(stream.codecpar).unwrap(),
-                ),
+                codec_parameters: NonNull::new(stream.codecpar).unwrap(),
             })
         }
     }
@@ -135,7 +133,7 @@ impl StreamInfo {
     /// * The stream index.
     /// * Codec parameters.
     /// * Original stream time base.
-    pub fn into_parts(self) -> (usize, AVCodecParameters, Rational) {
+    pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, Rational) {
         (self.index, self.codec_parameters, self.time_base)
     }
 }

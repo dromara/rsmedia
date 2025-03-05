@@ -8,6 +8,7 @@ use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::time::Time;
 use crate::{utils, PixelFormat, Rational, RawFrame};
+
 use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::error::RsmpegError;

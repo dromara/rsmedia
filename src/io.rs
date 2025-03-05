@@ -5,8 +5,7 @@ use crate::stream::StreamInfo;
 use crate::utils;
 use crate::Packet;
 
-use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextURL};
-use rsmpeg::avformat::{AVFormatContextOutput, AVInputFormat};
+use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput, AVInputFormat};
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -355,10 +354,10 @@ impl<'a> WriterBuilder<'a> {
         options: Option<AVDictionary>,
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
-        let ofctx = unsafe {
-            let mut output_format_context = ptr::null_mut();
+        let out_fmt_ctx = unsafe {
+            let mut out_fmt_ctx_ptr = ptr::null_mut();
             let res = ffi::avformat_alloc_output_context2(
-                &mut output_format_context,
+                &mut out_fmt_ctx_ptr,
                 ptr::null_mut(),
                 ptr::null_mut(),
                 path.as_ptr(),
@@ -369,7 +368,7 @@ impl<'a> WriterBuilder<'a> {
 
             let mut opts = options.map_or(ptr::null_mut(), |dict| dict.into_raw().as_ptr());
             let res = ffi::avio_open2(
-                &mut (*output_format_context).pb,
+                &mut (*out_fmt_ctx_ptr).pb,
                 path.as_ptr(),
                 ffi::AVIO_FLAG_WRITE as c_int,
                 ptr::null(),
@@ -379,10 +378,10 @@ impl<'a> WriterBuilder<'a> {
                 return Err(Error::new(RsmpegError::from(res)));
             }
 
-            AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap())
+            AVFormatContextOutput::from_raw(ptr::NonNull::new(out_fmt_ctx_ptr).unwrap())
         };
 
-        Ok(ofctx)
+        Ok(out_fmt_ctx)
     }
 
     pub fn output_as<P: AsRef<Path> + ?Sized>(
@@ -391,10 +390,10 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
-        let ofctx = unsafe {
-            let mut output_format_context = ptr::null_mut();
+        let out_fmt_ctx = unsafe {
+            let mut out_fmt_ctx_ptr = ptr::null_mut();
             let res = ffi::avformat_alloc_output_context2(
-                &mut output_format_context,
+                &mut out_fmt_ctx_ptr,
                 ptr::null_mut(),
                 format.as_ptr(),
                 path.as_ptr(),
@@ -403,15 +402,19 @@ impl<'a> WriterBuilder<'a> {
                 return Err(Error::new(RsmpegError::from(res)));
             }
 
-            let mut output_format_context =
-                AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());
-            let mut io_ctx = AVIOContextURL::open(&path, ffi::AVIO_FLAG_WRITE).unwrap();
-            (*output_format_context.as_mut_ptr()).pb = io_ctx.as_mut_ptr();
-            output_format_context.io_context = Some(AVIOContextContainer::Url(io_ctx));
-            output_format_context
+            let res = ffi::avio_open(
+                &mut (*out_fmt_ctx_ptr).pb,
+                path.as_ptr(),
+                ffi::AVIO_FLAG_WRITE as c_int,
+            );
+            if res != 0 {
+                return Err(Error::new(RsmpegError::from(res)));
+            }
+
+            AVFormatContextOutput::from_raw(ptr::NonNull::new(out_fmt_ctx_ptr).unwrap())
         };
 
-        Ok(ofctx)
+        Ok(out_fmt_ctx)
     }
 
     pub fn output_as_with<P: AsRef<Path> + ?Sized>(
@@ -421,10 +424,10 @@ impl<'a> WriterBuilder<'a> {
     ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
-        let ofctx = unsafe {
-            let mut output_format_context = ptr::null_mut();
+        let out_fmt_ctx = unsafe {
+            let mut out_fmt_ctx_ptr = ptr::null_mut();
             let res = ffi::avformat_alloc_output_context2(
-                &mut output_format_context,
+                &mut out_fmt_ctx_ptr,
                 ptr::null_mut(),
                 format.as_ptr(),
                 path.as_ptr(),
@@ -435,7 +438,7 @@ impl<'a> WriterBuilder<'a> {
 
             let mut opts = options.map_or(ptr::null_mut(), |dict| dict.into_raw().as_ptr());
             let res = ffi::avio_open2(
-                &mut (*output_format_context).pb,
+                &mut (*out_fmt_ctx_ptr).pb,
                 path.as_ptr(),
                 ffi::AVIO_FLAG_WRITE as c_int,
                 ptr::null(),
@@ -445,10 +448,10 @@ impl<'a> WriterBuilder<'a> {
                 return Err(Error::new(RsmpegError::from(res)));
             }
 
-            AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap())
+            AVFormatContextOutput::from_raw(ptr::NonNull::new(out_fmt_ctx_ptr).unwrap())
         };
 
-        Ok(ofctx)
+        Ok(out_fmt_ctx)
     }
 }
 

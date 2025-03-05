@@ -1,19 +1,19 @@
-use crate::Packet;
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::PacketIter;
 use crate::stream::StreamInfo;
 use crate::utils;
+use crate::Packet;
 
 use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextURL};
 use rsmpeg::avformat::{AVFormatContextOutput, AVInputFormat};
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
-use rsmpeg::{UnsafeDerefMut, ffi};
+use rsmpeg::{ffi, UnsafeDerefMut};
 
 use anyhow::{Context, Error, Result};
 use libc::c_int;
-use std::ops::Bound;
+use std::ops::{Bound, Deref};
 use std::path::Path;
 use std::ptr;
 
@@ -69,7 +69,10 @@ impl<'a> ReaderBuilder<'a> {
                 source: self.source,
             }),
             Some(options) => Ok(Reader {
-                input: Self::input_with_dictionary(&self.source.as_path(), &mut Some(options.to_dict()))?,
+                input: Self::input_with_dictionary(
+                    &self.source.as_path(),
+                    &mut Some(options.to_dict()),
+                )?,
                 source: self.source,
             }),
         }
@@ -78,8 +81,9 @@ impl<'a> ReaderBuilder<'a> {
     pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
         let format_opt = AVInputFormat::find(&path);
-        let mut avformat_ctx_input = AVFormatContextInput::open(&path, format_opt.as_deref(), &mut None)
-            .context("Create input format context failed.")?;
+        let mut avformat_ctx_input =
+            AVFormatContextInput::open(&path, format_opt.as_deref(), &mut None)
+                .context("Create input format context failed.")?;
         avformat_ctx_input
             .dump(0, &path)
             .context("Dump input format context failed.")?;
@@ -92,8 +96,9 @@ impl<'a> ReaderBuilder<'a> {
     ) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
         let format_opt = AVInputFormat::find(&path);
-        let mut avformat_ctx_input = AVFormatContextInput::open(&path, format_opt.as_deref(), options)
-            .context("Create input format context failed.")?;
+        let mut avformat_ctx_input =
+            AVFormatContextInput::open(&path, format_opt.as_deref(), options)
+                .context("Create input format context failed.")?;
         avformat_ctx_input
             .dump(0, &path)
             .context("Dump input format context failed.")?;
@@ -153,6 +158,19 @@ impl Reader {
         }
     }
 
+    pub fn read_any(&mut self) -> Result<Packet> {
+        match self.packets().next() {
+            Some(pkt_res) => match pkt_res {
+                Ok((stream, packet)) => Ok(Packet::new(packet, stream.time_base())),
+                Err(e) => {
+                    log::error!("Error reading packet: {}", e);
+                    Err(Error::new(e))
+                }
+            },
+            None => Err(Error::msg("No more packets")),
+        }
+    }
+
     pub fn packets(&mut self) -> PacketIter {
         PacketIter::new(&mut self.input)
     }
@@ -182,7 +200,8 @@ impl Reader {
         let timestamp = CONVERSION_FACTOR * timestamp_milliseconds;
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
 
-        self._seek(timestamp, range).context("Failed to seek in reader")?;
+        self._seek(timestamp, range)
+            .context("Failed to seek in reader")?;
 
         Ok(())
     }
@@ -204,7 +223,8 @@ impl Reader {
     /// Seek to start of reader. This function performs best effort seeking to the start of the
     /// file.
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self._seek(i64::MIN, ..).context("Failed to seek to start of reader")?;
+        self._seek(i64::MIN, ..)
+            .context("Failed to seek to start of reader")?;
         Ok(())
     }
 
@@ -313,7 +333,11 @@ impl<'a> WriterBuilder<'a> {
                 destination: self.destination,
             }),
             (Some(format), Some(options)) => Ok(Writer {
-                output: Self::output_as_with(&self.destination.as_path(), format, Some(options.to_dict()))?,
+                output: Self::output_as_with(
+                    &self.destination.as_path(),
+                    format,
+                    Some(options.to_dict()),
+                )?,
                 destination: self.destination,
             }),
         }
@@ -321,8 +345,8 @@ impl<'a> WriterBuilder<'a> {
 
     pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
-        let avformat_ctx_output =
-            AVFormatContextOutput::create(&path, None).context("Create output format context failed.")?;
+        let avformat_ctx_output = AVFormatContextOutput::create(&path, None)
+            .context("Create output format context failed.")?;
         Ok(avformat_ctx_output)
     }
 
@@ -361,7 +385,10 @@ impl<'a> WriterBuilder<'a> {
         Ok(ofctx)
     }
 
-    pub fn output_as<P: AsRef<Path> + ?Sized>(path: &P, format: &str) -> Result<AVFormatContextOutput> {
+    pub fn output_as<P: AsRef<Path> + ?Sized>(
+        path: &P,
+        format: &str,
+    ) -> Result<AVFormatContextOutput> {
         let path = utils::from_path(path);
         let format = utils::from_str(format);
         let ofctx = unsafe {
@@ -494,7 +521,10 @@ impl<'a> BufWriterBuilder<'a> {
     ///
     /// * `format` - Container format to use.
     pub fn new(format: &'a str) -> Self {
-        Self { format, options: None }
+        Self {
+            format,
+            options: None,
+        }
     }
 
     /// Specify options for the backend.
@@ -575,7 +605,10 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     ///
     /// * `format` - Container format to use.
     pub fn new(format: &'a str) -> Self {
-        Self { format, options: None }
+        Self {
+            format,
+            options: None,
+        }
     }
 
     /// Specify options for the backend.
@@ -687,7 +720,9 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            self.output.write_header(&mut None).context("Failed to write header")?;
+            self.output
+                .write_header(&mut None)
+                .context("Failed to write header")?;
             Ok(())
         }
 
@@ -708,7 +743,9 @@ pub(crate) mod private {
         }
 
         fn write_trailer(&mut self) -> Result<()> {
-            self.output.write_trailer().context("Failed to write trailer")?;
+            self.output
+                .write_trailer()
+                .context("Failed to write trailer")?;
             Ok(())
         }
     }
@@ -898,7 +935,8 @@ pub(crate) fn output_raw_buf_end(output: &mut AVFormatContextOutput) -> Vec<u8> 
         // `buffer_raw` through a ptr ptr. It also returns the size of that buffer.
         let output_pb = (*output.as_mut_ptr()).pb;
         let mut buffer_raw: *mut u8 = std::ptr::null_mut();
-        let buffer_size = ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
+        let buffer_size =
+            ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
 
         // Reset the `pb` field or `avformat_close` will try to free it!
         (*output.as_mut_ptr()).pb = std::ptr::null_mut::<ffi::AVIOContext>();
@@ -954,7 +992,9 @@ pub fn output_raw_packetized_buf_start(
             // what verion we're dealing with, this trick will convert to the either the signature
             // where the buffer argument is `*const u8` or `*mut u8`.
             #[allow(clippy::missing_transmute_annotations)]
-            Some(std::mem::transmute::<*const (), _>(output_raw_buf_start_callback as _)),
+            Some(std::mem::transmute::<*const (), _>(
+                output_raw_buf_start_callback as _,
+            )),
             // No `seek`.
             None,
         );
@@ -1012,17 +1052,13 @@ pub(crate) fn flush_output(output: &mut AVFormatContextOutput) -> Result<()> {
     }
 }
 
-/// Initialize the logging handler. This will redirect all ffmpeg logging to the Rust `tracing`
-/// crate and any subscribers to it.
-pub fn init_logging() {
-    unsafe {
-        ffi::av_log_set_callback(Some(log_callback));
-    }
-}
-
 /// Passthrough function that is passed to `libavformat` in `avio_alloc_context` and pushes buffers
 /// from a packetized stream onto the packet buffer held in `opaque`.
-extern "C" fn output_raw_buf_start_callback(opaque: *mut std::ffi::c_void, buffer: *const u8, buffer_size: i32) -> i32 {
+extern "C" fn output_raw_buf_start_callback(
+    opaque: *mut std::ffi::c_void,
+    buffer: *const u8,
+    buffer_size: i32,
+) -> i32 {
     unsafe {
         // Acquire a reference to the packet buffer transmuted from the `opaque` gotten through
         // `libavformat`.
@@ -1033,6 +1069,14 @@ extern "C" fn output_raw_buf_start_callback(opaque: *mut std::ffi::c_void, buffe
 
     // Number of bytes written.
     buffer_size
+}
+
+/// Initialize the logging handler. This will redirect all ffmpeg logging to the Rust `tracing`
+/// crate and any subscribers to it.
+pub fn init_logging() {
+    unsafe {
+        ffi::av_log_set_callback(Some(log_callback));
+    }
 }
 
 /// Internal function with C-style callback behavior that receives all log messages from ffmpeg and
@@ -1123,4 +1167,75 @@ fn log_filter_hacks(line: &str) -> bool {
     }
 
     true
+}
+
+/// Create SDP file contents for the given output. Useful for RTP muxers.
+///
+/// A media entry will be created for each stream in the output. This function will take care of all
+/// details, such as setting the correct media attributes needed by any SDP consumers.
+///
+/// # Arguments
+///
+/// * `output` - Output to generate SDP file for.
+///
+/// # Return value
+///
+/// A string with the SDP file contents.
+pub fn sdp(output_fmt_ctx: &AVFormatContextOutput) -> Result<String> {
+    const BUF_SIZE: i32 = 4096;
+    unsafe {
+        let mut buf: [std::ffi::c_char; BUF_SIZE as usize] = [0; BUF_SIZE as usize];
+        let buf_ptr = &mut buf as *mut std::ffi::c_char;
+        let mut output_fmt_ctx_ptr = output_fmt_ctx.as_ptr();
+        let output_fmt_ctx_ptr = &mut output_fmt_ctx_ptr as *mut *const ffi::AVFormatContext;
+        // WARNING! Casting from const ptr to mutable ptr here!
+        let output_fmt_ctx_ptr = output_fmt_ctx_ptr as *mut *mut ffi::AVFormatContext;
+        let ret = ffi::av_sdp_create(output_fmt_ctx_ptr, 1, buf_ptr, BUF_SIZE);
+        if ret == 0 {
+            Ok(utils::from_cstr(buf_ptr))
+        } else {
+            Err(Error::new(RsmpegError::from(ret)))
+        }
+    }
+}
+
+/// Whether or not the output format context is configured to use H.264 packetization mode 0.
+///
+/// # Arguments
+///
+/// * `output` - Output format context.
+pub fn rtp_h264_mode_0(output: &AVFormatContextOutput) -> bool {
+    unsafe {
+        ffi::av_opt_flag_is_set(
+            output.deref().priv_data,
+            "rtpflags".as_ptr() as *const std::ffi::c_char,
+            "h264_mode0".as_ptr() as *const std::ffi::c_char,
+        ) != 0
+    }
+}
+
+/// Get the current sequence number and timestamp of the RTP muxer.
+///
+/// Note: This method is only safe to use on RTP output formats.
+pub fn rtp_seq_and_timestamp(output: &AVFormatContextOutput) -> (u16, u32) {
+    unsafe {
+        let rtp_mux_context = &*(output.deref().priv_data as *const RTPMuxContext);
+        (rtp_mux_context.seq, rtp_mux_context.timestamp)
+    }
+}
+
+/// Rust version of the `RTPMuxContext` struct in `libavformat`.
+#[repr(C)]
+struct RTPMuxContext {
+    _av_class: *const ffi::AVClass,
+    _ic: *mut ffi::AVFormatContext,
+    _st: *mut ffi::AVStream,
+    pub payload_type: std::ffi::c_int,
+    pub ssrc: u32,
+    pub cname: *const std::ffi::c_char,
+    pub seq: u16,
+    pub timestamp: u32,
+    pub base_timestamp: u32,
+    pub cur_timestamp: u32,
+    pub max_payload_size: std::ffi::c_int,
 }

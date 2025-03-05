@@ -7,7 +7,7 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::time::Time;
-use crate::{PixelFormat, Rational, RawFrame, utils};
+use crate::{utils, PixelFormat, Rational, RawFrame};
 use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::error::RsmpegError;
@@ -82,8 +82,10 @@ impl<'a> DecoderBuilder<'a> {
             } else {
                 codec_name.as_str()
             };
-            AVCodec::find_decoder_by_name(&utils::from_str(codec_name))
-                .context(format!("Failed to find decoder by codec name: '{}'", codec_name))?
+            AVCodec::find_decoder_by_name(&utils::from_str(codec_name)).context(format!(
+                "Failed to find decoder by codec name: '{}'",
+                codec_name
+            ))?
         };
 
         Ok(Decoder {
@@ -141,13 +143,19 @@ impl Decoder {
     /// Duration of the decoder stream.
     #[inline]
     pub fn duration(&self) -> Result<Time> {
-        let reader_stream = self
-            .reader
-            .input
-            .streams()
-            .get(self.stream_index)
-            .ok_or(Error::msg(format!("stream: {} not found!", self.stream_index)))?;
-        Ok(Time::new(Some(reader_stream.duration), reader_stream.time_base.into()))
+        let reader_stream =
+            self.reader
+                .input
+                .streams()
+                .get(self.stream_index)
+                .ok_or(Error::msg(format!(
+                    "stream: {} not found!",
+                    self.stream_index
+                )))?;
+        Ok(Time::new(
+            Some(reader_stream.duration),
+            reader_stream.time_base.into(),
+        ))
     }
 
     /// Number of frames in the decoder stream.
@@ -158,7 +166,10 @@ impl Decoder {
             .input
             .streams()
             .get(self.stream_index)
-            .ok_or(Error::msg(format!("stream: {} not found!", self.stream_index)))?
+            .ok_or(Error::msg(format!(
+                "stream: {} not found!",
+                self.stream_index
+            )))?
             .nb_frames
             .max(0) as u64)
     }
@@ -307,7 +318,9 @@ impl Decoder {
     /// See [`Reader::seek_to_start`](crate::io::Reader::seek_to_start) for more information.
     #[inline]
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self.reader.seek_to_start().inspect(|_| self.decoder.flush())
+        self.reader
+            .seek_to_start()
+            .inspect(|_| self.decoder.flush())
     }
 
     /// Split the decoder into a decoder (of type [`DecoderSplit`]) and a [`Reader`].
@@ -399,7 +412,10 @@ impl DecoderSplit {
 
         let hw_context = match hw_device_type {
             Some(device_type) => {
-                if device_type.find_hw_pixel_format_with_codec(&codec).is_none() {
+                if device_type
+                    .find_hw_pixel_format_with_codec(&codec)
+                    .is_none()
+                {
                     return Err(Error::msg(format!(
                         "HW acceleration decoder not supported for codec: {}",
                         utils::to_string(codec.name())
@@ -413,7 +429,9 @@ impl DecoderSplit {
         };
 
         let dict = options.map(|options| options.to_dict());
-        decode_ctx.open(dict).context("Failed to open decoder for stream")?;
+        decode_ctx
+            .open(dict)
+            .context("Failed to open decoder for stream")?;
 
         let stream_info = reader.stream_info(stream_index)?;
         log::info!("{}", stream_info);
@@ -567,7 +585,10 @@ impl DecoderSplit {
                     Ok(sw_frame) => sw_frame,
                     Err(e) => {
                         log::error!("Failed to download frame from hw_device: {}", e);
-                        return Err(Error::msg(format!("Failed to download frame from hw_device: {}", e)));
+                        return Err(Error::msg(format!(
+                            "Failed to download frame from hw_device: {}",
+                            e
+                        )));
                     }
                 }
             } else {
@@ -606,7 +627,12 @@ impl DecoderSplit {
             && frame.height as u32 == resize_height);
 
         if is_scale_needed {
-            return frame::convert_avframe(&frame, resize_width as i32, resize_height as i32, PixelFormat::YUV420P);
+            return frame::convert_avframe(
+                &frame,
+                resize_width as i32,
+                resize_height as i32,
+                PixelFormat::YUV420P,
+            );
         }
 
         Ok(frame)

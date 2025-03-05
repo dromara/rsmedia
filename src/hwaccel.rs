@@ -4,7 +4,7 @@ use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext, AVPixelFormat};
-use rsmpeg::{UnsafeDerefMut, ffi};
+use rsmpeg::{ffi, UnsafeDerefMut};
 
 /// 硬件加速设备配置
 /// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
@@ -36,7 +36,13 @@ impl HWDeviceConfig {
 
     /// 创建NVIDIA配置
     pub fn cuda() -> Self {
-        Self::new(HWDeviceType::CUDA, PixelFormat::CUDA, PixelFormat::NV12, None, None)
+        Self::new(
+            HWDeviceType::CUDA,
+            PixelFormat::CUDA,
+            PixelFormat::NV12,
+            None,
+            None,
+        )
     }
 
     /// 创建VAAPI配置
@@ -52,12 +58,24 @@ impl HWDeviceConfig {
 
     /// 创建VDPAU配置
     pub fn vdpau() -> Self {
-        Self::new(HWDeviceType::VDPAU, PixelFormat::VDPAU, PixelFormat::NV12, None, None)
+        Self::new(
+            HWDeviceType::VDPAU,
+            PixelFormat::VDPAU,
+            PixelFormat::NV12,
+            None,
+            None,
+        )
     }
 
     /// 创建Vulkan配置
     pub fn vulkan() -> Self {
-        Self::new(HWDeviceType::VULKAN, PixelFormat::VULKAN, PixelFormat::NV12, None, None)
+        Self::new(
+            HWDeviceType::VULKAN,
+            PixelFormat::VULKAN,
+            PixelFormat::NV12,
+            None,
+            None,
+        )
     }
 }
 
@@ -71,7 +89,11 @@ impl HWContext {
         let device_path = config.device_path.as_deref();
         let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
-            device_path.map(std::ffi::CString::new).transpose().unwrap().as_deref(),
+            device_path
+                .map(std::ffi::CString::new)
+                .transpose()
+                .unwrap()
+                .as_deref(),
             config.options.as_ref(),
             0,
         )
@@ -91,7 +113,12 @@ impl HWContext {
     }
 
     /// 设置编解码器的硬件帧上下文
-    pub fn setup_hw_frames(&mut self, codec_ctx: &mut AVCodecContext, width: i32, height: i32) -> Result<()> {
+    pub fn setup_hw_frames(
+        &mut self,
+        codec_ctx: &mut AVCodecContext,
+        width: i32,
+        height: i32,
+    ) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
         hw_frames_ref.data().format = self.config.hw_pixel_format.into();
@@ -111,7 +138,8 @@ impl HWContext {
         unsafe {
             let ctx_mut_ptr = codec_ctx.deref_mut();
             ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
-            ctx_mut_ptr.opaque = i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
+            ctx_mut_ptr.opaque =
+                i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
             ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
             ctx_mut_ptr.get_format = Some(hwaccel_get_format);
             // (*codec_ctx).hwaccel
@@ -142,7 +170,8 @@ impl HWContext {
         let hw_down_start = std::time::Instant::now();
 
         // Check if input frame is actually in hardware memory
-        if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into() {
+        if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into()
+        {
             return Err(Error::msg(format!(
                 "Input frame is not a valid hardware frame: format={:?}, expected={:?}, hw_frames_ctx={:?}",
                 hw_frame.format,
@@ -153,7 +182,10 @@ impl HWContext {
 
         unsafe {
             if decoder.hw_frames_ctx().is_none() {
-                log::debug!("decoder hw_frames_ctx is null, is_hwaccel:{}", decoder.is_hwaccel());
+                log::debug!(
+                    "decoder hw_frames_ctx is null, is_hwaccel:{}",
+                    decoder.is_hwaccel()
+                );
                 decoder.set_hw_frames_ctx(AVHWFramesContext::from_raw(
                     std::ptr::NonNull::new(hw_frame.hw_frames_ctx).unwrap(),
                 ));
@@ -458,8 +490,9 @@ impl HWDeviceType {
             unsafe {
                 let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
                 if !hw_config.is_null() {
-                    let hw_config_supports_codec =
-                        (((*hw_config).methods) as i32 & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32) != 0;
+                    let hw_config_supports_codec = (((*hw_config).methods) as i32
+                        & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
+                        != 0;
                     if hw_config_supports_codec && (*hw_config).device_type == (*self).into() {
                         break Some((*hw_config).pix_fmt);
                     }

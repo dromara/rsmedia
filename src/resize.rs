@@ -143,7 +143,10 @@ mod tests {
                     (input_dim_zero && output_dim_zero) || (!input_dim_zero && !output_dim_zero),
                     "computed dims are never zero unless the inputs dims were",
                 );
-                assert!((out_w % 2 == 0) && (out_h % 2 == 0), "computed dims are even",);
+                assert!(
+                    (out_w % 2 == 0) && (out_h % 2 == 0),
+                    "computed dims are even",
+                );
                 assert!(
                     (out_w <= fit_w) && (out_h <= fit_h),
                     "computed dims fit inside provided dims",

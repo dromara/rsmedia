@@ -1,7 +1,7 @@
-use crate::Rational;
 use crate::flags::AvPacketFlags;
 use crate::stream::Stream;
 use crate::time::Time;
+use crate::Rational;
 
 use rsmpeg::avcodec::AVPacket;
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput};
@@ -28,8 +28,12 @@ impl Packet {
     /// Set packet PTS (presentation timestamp).
     #[inline]
     pub fn set_pts(&mut self, timestamp: Time) {
-        self.inner
-            .set_pts(timestamp.aligned_with_rational(self.time_base).into_value().unwrap());
+        self.inner.set_pts(
+            timestamp
+                .aligned_with_rational(self.time_base)
+                .into_value()
+                .unwrap(),
+        );
     }
 
     /// Get packet DTS (decoder timestamp).
@@ -41,8 +45,12 @@ impl Packet {
     /// Set packet DTS (decoder timestamp).
     #[inline]
     pub fn set_dts(&mut self, timestamp: Time) {
-        self.inner
-            .set_dts(timestamp.aligned_with_rational(self.time_base).into_value().unwrap());
+        self.inner.set_dts(
+            timestamp
+                .aligned_with_rational(self.time_base)
+                .into_value()
+                .unwrap(),
+        );
     }
 
     /// Get packet duration.
@@ -131,7 +139,11 @@ impl Packet {
         D: Into<Rational>,
     {
         unsafe {
-            ffi::av_packet_rescale_ts(self.inner.as_mut_ptr(), source.into().into(), destination.into().into());
+            ffi::av_packet_rescale_ts(
+                self.inner.as_mut_ptr(),
+                source.into().into(),
+                destination.into().into(),
+            );
         }
     }
 
@@ -146,7 +158,10 @@ impl Packet {
             if self.inner.data.is_null() {
                 None
             } else {
-                Some(std::slice::from_raw_parts(self.inner.data, self.inner.size as usize))
+                Some(std::slice::from_raw_parts(
+                    self.inner.data,
+                    self.inner.size as usize,
+                ))
             }
         }
     }
@@ -197,7 +212,10 @@ impl Packet {
                 return Err(RsmpegError::AVError(ffi::AVERROR_INVALIDDATA));
             }
 
-            match ffi::av_interleaved_write_frame(format.as_mut_ptr(), self.inner.as_ptr() as *mut _) {
+            match ffi::av_interleaved_write_frame(
+                format.as_mut_ptr(),
+                self.inner.as_ptr() as *mut _,
+            ) {
                 0 => Ok(()),
                 e => Err(RsmpegError::from(e)),
             }
@@ -274,7 +292,9 @@ impl Packet {
             ffi::av_init_packet(pkt.as_mut_ptr());
             ffi::av_new_packet(pkt.as_mut_ptr(), size as c_int);
 
-            Packet::new_with_avpacket(AVPacket::from_raw(std::ptr::NonNull::new(pkt.as_mut_ptr()).unwrap()))
+            Packet::new_with_avpacket(AVPacket::from_raw(
+                std::ptr::NonNull::new(pkt.as_mut_ptr()).unwrap(),
+            ))
         }
     }
 }
@@ -327,7 +347,11 @@ impl<'a> Iterator for PacketSideDataIter<'a> {
             None
         } else {
             self.cur += 1;
-            unsafe { Some(PacketSideData::wrap(self.pkt.side_data.offset((self.cur - 1) as isize))) }
+            unsafe {
+                Some(PacketSideData::wrap(
+                    self.pkt.side_data.offset((self.cur - 1) as isize),
+                ))
+            }
         }
     }
 
@@ -391,7 +415,10 @@ impl<'a> Iterator for PacketIter<'a> {
         match self.context.read_packet() {
             Ok(Some(pkt)) => unsafe {
                 Some(Ok((
-                    Stream::wrap(std::mem::transmute_copy(&self.context), pkt.stream_index as usize),
+                    Stream::wrap(
+                        std::mem::transmute_copy(&self.context),
+                        pkt.stream_index as usize,
+                    ),
                     Packet::new_with_avpacket(pkt),
                 )))
             },

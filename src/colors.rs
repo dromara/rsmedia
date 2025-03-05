@@ -64,7 +64,8 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
 
 /// Calculate the distance between two colors in RGB space.
 pub fn color_distance(c1: &Rgb<u8>, c2: &Rgb<u8>) -> u8 {
-    ((c1[0] as i16 - c2[0] as i16).abs() + (c1[1] as i16 - c2[1] as i16).abs() + (c1[2] as i16 - c2[2] as i16).abs())
-        as u8
+    ((c1[0] as i16 - c2[0] as i16).abs()
+        + (c1[1] as i16 - c2[1] as i16).abs()
+        + (c1[2] as i16 - c2[2] as i16).abs()) as u8
         / 3
 }

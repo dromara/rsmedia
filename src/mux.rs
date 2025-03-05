@@ -1,9 +1,8 @@
-use crate::Rational;
 use crate::io::{Reader, Write};
 use crate::stream::StreamInfo;
+use crate::{Packet, Rational};
 
 use anyhow::{Context, Result};
-use rsmpeg::avcodec::AVCodecParameters;
 use std::collections::HashMap;
 
 /// Builds a [`Muxer`].
@@ -35,11 +34,9 @@ impl<W: Write> MuxerBuilder<W> {
     ///   [`Reader::stream_info()`].
     pub fn with_stream(mut self, stream_info: StreamInfo) -> Result<Self> {
         let (index, codec_parameters, reader_stream_time_base) = stream_info.into_parts();
-        let writer_stream_index = unsafe {
+        let writer_stream_index = {
             let mut av_stream = self.writer.output_mut().new_stream();
-            av_stream.set_codecpar(AVCodecParameters::from_raw(
-                std::ptr::NonNull::new(codec_parameters).unwrap(),
-            ));
+            av_stream.set_codecpar(codec_parameters);
             av_stream.set_time_base(reader_stream_time_base.into());
             av_stream.index
         };
@@ -135,36 +132,39 @@ impl<W: Write> Muxer<W> {
     /// # Arguments
     ///
     /// * `packet` - [`Packet`] to mux.
-    pub fn mux(&mut self, reader: &mut Reader) -> Result<()> {
+    pub fn mux(&mut self, packet: Packet) -> Result<W::Out> {
         if !self.have_written_header {
             self.have_written_header = true;
             self.writer.write_header()?;
         }
 
-        for (index, stream_description) in self.mapping.iter() {
-            if let Ok(mut packet) = reader.read(*index) {
-                let destination_stream = self
-                    .writer
-                    .output()
-                    .streams()
-                    .get(stream_description.index)
-                    .context("Writer Stream not found in muxer")?;
+        let stream_description = self
+            .mapping
+            .get(&(packet.stream_index()))
+            .context("Packet stream index not found in muxer")?;
 
-                packet.set_stream_index(destination_stream.index as usize);
-                packet.rescale_ts(stream_description.source_time_base, destination_stream.time_base);
-                packet.set_pos(-1);
+        let destination_stream = self
+            .writer
+            .output()
+            .streams()
+            .get(stream_description.index)
+            .context("Writer Stream not found in muxer")?;
 
-                if self.interleaved {
-                    self.writer.write_interleaved(&mut packet)?;
-                } else {
-                    self.writer.write_frame(&mut packet)?;
-                }
-            } else {
-                log::error!("Packet not found for stream index: {}", index);
-            }
-        }
+        let mut pkt = packet;
+        pkt.set_pos(-1);
+        pkt.set_stream_index(destination_stream.index as usize);
+        pkt.rescale_ts(
+            stream_description.source_time_base,
+            destination_stream.time_base,
+        );
 
-        Ok(())
+        let out = if self.interleaved {
+            self.writer.write_interleaved(&mut pkt)?
+        } else {
+            self.writer.write_frame(&mut pkt)?
+        };
+
+        Ok(out)
     }
 
     /// Signal to the muxer that writing has finished. This will cause a trailer to be written if
@@ -216,13 +216,18 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    #[ignore = "requires a file to be present"]
+    #[ignore = "muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_muxer() {
-        let mut reader = Reader::new(Path::new("/tmp/trim.mov")).unwrap();
-        let writer = Writer::new(Path::new("/tmp/trim.mkv")).unwrap();
+        let mut reader = Reader::new(Path::new("/tmp/download22.mp4")).unwrap();
+        let writer = Writer::new(Path::new("/tmp/download22.mov")).unwrap();
 
-        let mut muxer = MuxerBuilder::new(writer).with_streams(&reader).unwrap().build();
-        muxer.mux(&mut reader).unwrap();
+        let mut muxer = MuxerBuilder::new(writer)
+            .with_streams(&reader)
+            .unwrap()
+            .build();
+        while let Ok(packet) = reader.read_any() {
+            muxer.mux(packet).unwrap();
+        }
         muxer.finish().unwrap();
     }
 }

@@ -103,7 +103,9 @@ pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     frame.set_format(PixelFormat::RGB24.into());
     frame.set_width(width as i32);
     frame.set_height(height as i32);
-    frame.alloc_buffer().context("Failed to allocate buffer for AVFrame")?;
+    frame
+        .alloc_buffer()
+        .context("Failed to allocate buffer for AVFrame")?;
 
     unsafe {
         let linesize = frame.linesize[0] as usize;
@@ -139,7 +141,9 @@ pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     frame.set_format(PixelFormat::YUV420P.into());
     frame.set_width(width as i32);
     frame.set_height(height as i32);
-    frame.alloc_buffer().context("Failed to allocate buffer for AVFrame")?;
+    frame
+        .alloc_buffer()
+        .context("Failed to allocate buffer for AVFrame")?;
 
     unsafe {
         let y_linesize = frame.linesize[0] as usize;
@@ -203,7 +207,9 @@ pub fn convert_ndarray_rgb_to_yuv(rgb: &FrameArray) -> Result<FrameArray> {
     fn compute_y(r: f64, g: f64, b: f64) -> u8 {
         // BT.601 标准:
         // Y = 0.299 * R + 0.587 * G + 0.114 * B
-        (0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0.0, 255.0) as u8
+        (0.299 * r + 0.587 * g + 0.114 * b)
+            .round()
+            .clamp(0.0, 255.0) as u8
     }
 
     // 1.2. UV分量计算 - 精确2x2块处理
@@ -212,8 +218,12 @@ pub fn convert_ndarray_rgb_to_yuv(rgb: &FrameArray) -> Result<FrameArray> {
         // BT.601 标准:
         // U = -0.169 * R - 0.331 * G + 0.500 * B + 128
         // V = 0.500 * R - 0.419 * G - 0.081 * B + 128
-        let u = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0).round().clamp(0.0, 255.0) as u8;
-        let v = (0.500 * r - 0.419 * g - 0.081 * b + 128.0).round().clamp(0.0, 255.0) as u8;
+        let u = (-0.169 * r - 0.331 * g + 0.500 * b + 128.0)
+            .round()
+            .clamp(0.0, 255.0) as u8;
+        let v = (0.500 * r - 0.419 * g - 0.081 * b + 128.0)
+            .round()
+            .clamp(0.0, 255.0) as u8;
         (u, v)
     }
 
@@ -383,7 +393,8 @@ pub fn convert_avframe(
     // SWS_BITEXACT       = 1 << 19,
 
     // 考虑性能和质量平衡
-    let flags = ffi::SWS_BICUBIC | ffi::SWS_FULL_CHR_H_INT | ffi::SWS_ACCURATE_RND | ffi::SWS_BITEXACT;
+    let flags =
+        ffi::SWS_BICUBIC | ffi::SWS_FULL_CHR_H_INT | ffi::SWS_ACCURATE_RND | ffi::SWS_BITEXACT;
 
     // 计算缩放时间
     let scale_start = std::time::Instant::now();
@@ -453,7 +464,8 @@ impl MyAVImage {
     pub fn alloc(pix_fmt: PixelFormat, width: i32, height: i32, align: i32) -> Result<Self> {
         let mut data: [*mut u8; ffi::AV_NUM_DATA_POINTERS as usize] =
             [std::ptr::null_mut(); ffi::AV_NUM_DATA_POINTERS as usize];
-        let mut line_sizes: [i32; ffi::AV_NUM_DATA_POINTERS as usize] = [0; ffi::AV_NUM_DATA_POINTERS as usize];
+        let mut line_sizes: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
+            [0; ffi::AV_NUM_DATA_POINTERS as usize];
 
         let buffer_size = unsafe {
             ffi::av_image_alloc(
@@ -471,7 +483,8 @@ impl MyAVImage {
         }
 
         // 将分配的内存转换为 Vec<u8> 管理
-        let buffer = unsafe { Vec::from_raw_parts(data[0], buffer_size as usize, buffer_size as usize) };
+        let buffer =
+            unsafe { Vec::from_raw_parts(data[0], buffer_size as usize, buffer_size as usize) };
 
         // Here we leak a vector to "pin" it.
         let linear = Box::leak(Box::new(buffer));
@@ -487,9 +500,14 @@ impl MyAVImage {
 
     /// 封装 `av_image_fill_linesizes`
     pub fn fill_linesizes(&mut self, pix_fmt: PixelFormat, width: i32) -> Result<()> {
-        let ret = unsafe { ffi::av_image_fill_linesizes(self.linesizes.as_mut_ptr(), pix_fmt.into(), width) };
+        let ret = unsafe {
+            ffi::av_image_fill_linesizes(self.linesizes.as_mut_ptr(), pix_fmt.into(), width)
+        };
         if ret < 0 {
-            return Err(Error::msg(format!("Failed to fill linesizes, ret: {}", ret)));
+            return Err(Error::msg(format!(
+                "Failed to fill linesizes, ret: {}",
+                ret
+            )));
         }
 
         Ok(())
@@ -506,7 +524,10 @@ impl MyAVImage {
             )
         };
         if ret < 0 {
-            return Err(Error::msg(format!("Failed to fill plane sizes, ret: {}", ret)));
+            return Err(Error::msg(format!(
+                "Failed to fill plane sizes, ret: {}",
+                ret
+            )));
         }
 
         Ok(())
@@ -547,7 +568,10 @@ impl MyAVImage {
         };
 
         if buffer_size < 0 {
-            return Err(Error::msg(format!("Failed to copy to buffer, ret: {}", buffer_size)));
+            return Err(Error::msg(format!(
+                "Failed to copy to buffer, ret: {}",
+                buffer_size
+            )));
         }
 
         Ok(buffer_size)
@@ -590,7 +614,16 @@ pub fn check_size(width: u32, height: u32) -> Result<()> {
 /// 封装 `av_image_check_size2`
 /// 检查图像的给定维度是否有效，这意味着具有指定pix_fmt的图像平面的所有字节都可以用带符号的int寻址。
 pub fn check_size2(width: u32, height: u32, max_pixels: i64, pix_fmt: PixelFormat) -> Result<()> {
-    let ret = unsafe { ffi::av_image_check_size2(width, height, max_pixels, pix_fmt.into(), 0, std::ptr::null_mut()) };
+    let ret = unsafe {
+        ffi::av_image_check_size2(
+            width,
+            height,
+            max_pixels,
+            pix_fmt.into(),
+            0,
+            std::ptr::null_mut(),
+        )
+    };
     if ret < 0 {
         return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
     }
@@ -614,12 +647,18 @@ pub fn image_fill_max_pix_steps(
     [i32; ffi::AV_NUM_DATA_POINTERS as usize],
 )> {
     unsafe {
-        let mut max_pix_steps: [i32; ffi::AV_NUM_DATA_POINTERS as usize] = [0; ffi::AV_NUM_DATA_POINTERS as usize];
-        let mut max_pix_step_comps: [i32; ffi::AV_NUM_DATA_POINTERS as usize] = [0; ffi::AV_NUM_DATA_POINTERS as usize];
+        let mut max_pix_steps: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
+            [0; ffi::AV_NUM_DATA_POINTERS as usize];
+        let mut max_pix_step_comps: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
+            [0; ffi::AV_NUM_DATA_POINTERS as usize];
 
         let pix_desc = ffi::av_pix_fmt_desc_get(pix_fmt.into());
 
-        ffi::av_image_fill_max_pixsteps(max_pix_steps.as_mut_ptr(), max_pix_step_comps.as_mut_ptr(), pix_desc);
+        ffi::av_image_fill_max_pixsteps(
+            max_pix_steps.as_mut_ptr(),
+            max_pix_step_comps.as_mut_ptr(),
+            pix_desc,
+        );
 
         Ok((max_pix_steps, max_pix_step_comps))
     }
@@ -658,11 +697,20 @@ pub fn find_best_pix_fmt(
 ///
 /// # 返回值
 /// 返回非负损失值，或错误
-pub fn get_pix_fmt_loss(dst_pix_fmt: PixelFormat, src_pix_fmt: PixelFormat, has_alpha: bool) -> Result<i32> {
-    let loss = unsafe { ffi::av_get_pix_fmt_loss(dst_pix_fmt.into(), src_pix_fmt.into(), has_alpha as i32) };
+pub fn get_pix_fmt_loss(
+    dst_pix_fmt: PixelFormat,
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<i32> {
+    let loss = unsafe {
+        ffi::av_get_pix_fmt_loss(dst_pix_fmt.into(), src_pix_fmt.into(), has_alpha as i32)
+    };
 
     if loss < 0 {
-        return Err(Error::msg(format!("Failed to get pix fmt loss, ret: {}", loss)));
+        return Err(Error::msg(format!(
+            "Failed to get pix fmt loss, ret: {}",
+            loss
+        )));
     }
 
     Ok(loss)
@@ -907,7 +955,11 @@ mod tests {
         // 验证帧属性
         assert_eq!(frame.width, 64, "Frame width mismatch");
         assert_eq!(frame.height, 48, "Frame height mismatch");
-        assert_eq!(frame.format, PixelFormat::YUV420P.into(), "Frame format mismatch");
+        assert_eq!(
+            frame.format,
+            PixelFormat::YUV420P.into(),
+            "Frame format mismatch"
+        );
 
         // 验证数据
         unsafe {
@@ -1005,7 +1057,10 @@ mod tests {
 
             for y in 0..48 {
                 for x in 0..64 {
-                    assert_eq!(*orig_y.add(y * y_linesize + x), *conv_y.add(y * y_linesize + x));
+                    assert_eq!(
+                        *orig_y.add(y * y_linesize + x),
+                        *conv_y.add(y * y_linesize + x)
+                    );
                 }
             }
 
@@ -1016,7 +1071,10 @@ mod tests {
 
             for y in 0..24 {
                 for x in 0..32 {
-                    assert_eq!(*orig_u.add(y * u_linesize + x), *conv_u.add(y * u_linesize + x));
+                    assert_eq!(
+                        *orig_u.add(y * u_linesize + x),
+                        *conv_u.add(y * u_linesize + x)
+                    );
                 }
             }
 
@@ -1027,7 +1085,10 @@ mod tests {
 
             for y in 0..24 {
                 for x in 0..32 {
-                    assert_eq!(*orig_v.add(y * v_linesize + x), *conv_v.add(y * v_linesize + x));
+                    assert_eq!(
+                        *orig_v.add(y * v_linesize + x),
+                        *conv_v.add(y * v_linesize + x)
+                    );
                 }
             }
         }
@@ -1248,7 +1309,11 @@ mod tests {
         let yuv = convert_ndarray_rgb_to_yuv(&rgb).unwrap();
 
         // 检查尺寸
-        assert_eq!(yuv.dim(), (4, 4, 3), "Output dimensions don't match expected size");
+        assert_eq!(
+            yuv.dim(),
+            (4, 4, 3),
+            "Output dimensions don't match expected size"
+        );
 
         // 计算预期的 YUV 值
         // 使用标准转换公式:
@@ -1355,9 +1420,27 @@ mod tests {
         // YUV(128,128,128) 应该转换为灰色
         for y in 0..4 {
             for x in 0..4 {
-                assert_eq!(rgb[[y, x, 0]], 128, "Red channel value mismatch at [{}, {}]", y, x);
-                assert_eq!(rgb[[y, x, 1]], 128, "Green channel value mismatch at [{}, {}]", y, x);
-                assert_eq!(rgb[[y, x, 2]], 128, "Blue channel value mismatch at [{}, {}]", y, x);
+                assert_eq!(
+                    rgb[[y, x, 0]],
+                    128,
+                    "Red channel value mismatch at [{}, {}]",
+                    y,
+                    x
+                );
+                assert_eq!(
+                    rgb[[y, x, 1]],
+                    128,
+                    "Green channel value mismatch at [{}, {}]",
+                    y,
+                    x
+                );
+                assert_eq!(
+                    rgb[[y, x, 2]],
+                    128,
+                    "Blue channel value mismatch at [{}, {}]",
+                    y,
+                    x
+                );
             }
         }
     }
@@ -1383,8 +1466,15 @@ mod tests {
         for y in 0..4 {
             for x in 0..4 {
                 for c in 0..3 {
-                    let diff = (original_rgb[[y, x, c]] as i16 - converted_rgb[[y, x, c]] as i16).abs();
-                    assert!(diff <= 5, "Color difference too large at [{}, {}, {}]", y, x, c);
+                    let diff =
+                        (original_rgb[[y, x, c]] as i16 - converted_rgb[[y, x, c]] as i16).abs();
+                    assert!(
+                        diff <= 5,
+                        "Color difference too large at [{}, {}, {}]",
+                        y,
+                        x,
+                        c
+                    );
                 }
             }
         }
@@ -1426,9 +1516,27 @@ mod tests {
         for y in 0..4 {
             for x in 0..4 {
                 // 检查是否为预期值
-                assert_eq!(rgb[[y, x, 0]], 200, "Red channel mismatch at [{}, {}]", y, x);
-                assert_eq!(rgb[[y, x, 1]], 150, "Green channel mismatch at [{}, {}]", y, x);
-                assert_eq!(rgb[[y, x, 2]], 100, "Blue channel mismatch at [{}, {}]", y, x);
+                assert_eq!(
+                    rgb[[y, x, 0]],
+                    200,
+                    "Red channel mismatch at [{}, {}]",
+                    y,
+                    x
+                );
+                assert_eq!(
+                    rgb[[y, x, 1]],
+                    150,
+                    "Green channel mismatch at [{}, {}]",
+                    y,
+                    x
+                );
+                assert_eq!(
+                    rgb[[y, x, 2]],
+                    100,
+                    "Blue channel mismatch at [{}, {}]",
+                    y,
+                    x
+                );
             }
         }
 
@@ -1636,7 +1744,10 @@ mod tests {
             };
 
             // 过滤有效的差异分布数据
-            let diff_distribution = diff_hist.into_iter().filter(|&(_, count)| count > 0).collect();
+            let diff_distribution = diff_hist
+                .into_iter()
+                .filter(|&(_, count)| count > 0)
+                .collect();
 
             Self {
                 psnr,
@@ -1672,7 +1783,11 @@ mod tests {
     }
 
     impl QualityReport {
-        fn new(dimensions: (usize, usize), conversion_time: std::time::Duration, metrics: ImageQualityMetrics) -> Self {
+        fn new(
+            dimensions: (usize, usize),
+            conversion_time: std::time::Duration,
+            metrics: ImageQualityMetrics,
+        ) -> Self {
             Self {
                 timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
                 user: std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
@@ -1685,12 +1800,21 @@ mod tests {
         fn generate_report(&self) -> String {
             let mut report = String::new();
 
-            report.push_str(&format!("Current Date and Time (UTC): {}\n", self.timestamp));
+            report.push_str(&format!(
+                "Current Date and Time (UTC): {}\n",
+                self.timestamp
+            ));
             report.push_str(&format!("Current User's Login: {}\n\n", self.user));
 
             report.push_str("=== 图像转换质量报告 ===\n");
-            report.push_str(&format!("图像大小: {}x{}\n", self.dimensions.0, self.dimensions.1));
-            report.push_str(&format!("转换耗时: {:.6}s\n\n", self.conversion_time.as_secs_f64()));
+            report.push_str(&format!(
+                "图像大小: {}x{}\n",
+                self.dimensions.0, self.dimensions.1
+            ));
+            report.push_str(&format!(
+                "转换耗时: {:.6}s\n\n",
+                self.conversion_time.as_secs_f64()
+            ));
 
             report.push_str("--- 质量指标 ---\n");
             report.push_str(&format!("PSNR: {:.2} dB\n", self.metrics.psnr));
@@ -1768,7 +1892,12 @@ mod tests {
 
         // 1. 测试图像大小检查
         check_size(width as u32, height as u32)?;
-        check_size2(width as u32, height as u32, (width * height * 3) as i64, pix_fmt)?;
+        check_size2(
+            width as u32,
+            height as u32,
+            (width * height * 3) as i64,
+            pix_fmt,
+        )?;
 
         // 2. 创建图像
         let mut img = MyAVImage::alloc(pix_fmt, width, height, align)?;
@@ -1805,7 +1934,12 @@ mod tests {
         assert!(!max_comps.is_empty());
 
         // 9. 测试最佳像素格式查找
-        let best_fmt = find_best_pix_fmt(PixelFormat::RGB24, PixelFormat::BGR24, PixelFormat::YUV420P, false)?;
+        let best_fmt = find_best_pix_fmt(
+            PixelFormat::RGB24,
+            PixelFormat::BGR24,
+            PixelFormat::YUV420P,
+            false,
+        )?;
         println!("Best pixel format: {:?}", best_fmt);
         assert_ne!(best_fmt, PixelFormat::NONE);
 
@@ -1852,7 +1986,7 @@ mod tests {
 
         // 创建测试数据
         let mut test_data = vec![255u8; (width * height * 3) as usize]; // 全白图像
-        // 填充数据
+                                                                        // 填充数据
         image.fill_pointers(test_data.as_mut_slice())?;
 
         // 验证数据

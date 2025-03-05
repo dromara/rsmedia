@@ -1,6 +1,6 @@
 use anyhow::Context;
 use image::{ImageBuffer, Rgb};
-use rsmedia::{DecoderBuilder, Resize, frame};
+use rsmedia::{frame, DecoderBuilder, Resize};
 use std::error::Error;
 use tokio::task;
 
@@ -73,6 +73,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task.await.expect("task failed");
     }
 
-    println!("Saved {} frames in the '{}' directory", frame_count, output_folder);
+    println!(
+        "Saved {} frames in the '{}' directory",
+        frame_count, output_folder
+    );
     Ok(())
 }

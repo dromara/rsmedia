@@ -9,12 +9,12 @@ use crate::options::Options;
 use crate::packet::Packet;
 use crate::pixel::PixelFormat;
 use crate::time::Time;
-use crate::{Rational, RawFrame, utils};
+use crate::{utils, Rational, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
 use rsmpeg::avutil::{self, AVPixelFormat};
 use rsmpeg::error::RsmpegError;
-use rsmpeg::{UnsafeDerefMut, ffi};
+use rsmpeg::{ffi, UnsafeDerefMut};
 
 use anyhow::{Context, Error, Result};
 use libc::{c_int, c_uint};
@@ -196,8 +196,9 @@ impl<'a> EncoderBuilder<'a> {
     /// * `interleaved` - Whether or not to use interleaved write.
     /// * `settings` - Encoder settings to use.
     pub fn build_from_writer(self, mut writer: Writer) -> Result<Encoder> {
-        let global_header = AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
-            .contains(AvFormatFlags::GLOBAL_HEADER);
+        let global_header =
+            AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
+                .contains(AvFormatFlags::GLOBAL_HEADER);
 
         let codec = self.codec();
         let mut encode_ctx = AVCodecContext::new(&codec);
@@ -213,7 +214,10 @@ impl<'a> EncoderBuilder<'a> {
 
         let hw_context = match self.hw_device_type {
             Some(device_type) => {
-                if device_type.find_hw_pixel_format_with_codec(&codec).is_none() {
+                if device_type
+                    .find_hw_pixel_format_with_codec(&codec)
+                    .is_none()
+                {
                     return Err(Error::msg(format!(
                         "HW acceleration encoder not supported for codec: {}",
                         utils::to_string(codec.name())
@@ -228,7 +232,9 @@ impl<'a> EncoderBuilder<'a> {
         };
 
         let dict = self.options.map(|options| options.to_dict());
-        encode_ctx.open(dict).context("Failed to open encode context")?;
+        encode_ctx
+            .open(dict)
+            .context("Failed to open encode context")?;
 
         let writer_stream_index = {
             let mut out_stream = writer.output.new_stream();
@@ -261,7 +267,10 @@ impl<'a> EncoderBuilder<'a> {
             Self::CODEC_NAME
         };
         AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
-            .context(format!("Failed to find encoder for codec: '{}'", codec_name))
+            .context(format!(
+                "Failed to find encoder for codec: '{}'",
+                codec_name
+            ))
             .unwrap()
     }
 
@@ -356,7 +365,10 @@ impl Encoder {
     #[cfg(feature = "ndarray")]
     pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<()> {
         let (height, width, channels) = frame.dim();
-        if height != self.encode_ctx.height as usize || width != self.encode_ctx.width as usize || channels != 3 {
+        if height != self.encode_ctx.height as usize
+            || width != self.encode_ctx.width as usize
+            || channels != 3
+        {
             return Err(Error::msg("Invalid frame format."));
         }
 
@@ -451,7 +463,10 @@ impl Encoder {
                 log::debug!("No packet received from encoder.")
             }
             Err(e) => {
-                return Err(anyhow::anyhow!("Failed to receive packet from encoder: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to receive packet from encoder: {}",
+                    e
+                ));
             }
         }
 
@@ -507,7 +522,8 @@ impl Encoder {
             frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
 
-        let pts_increment = self.time_base().denominator() as i64 / self.frame_rate().numerator() as i64;
+        let pts_increment =
+            self.time_base().denominator() as i64 / self.frame_rate().numerator() as i64;
         let pts = self.frame_count as i64 * pts_increment;
 
         // Update frame pts

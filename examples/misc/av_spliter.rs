@@ -26,7 +26,8 @@ fn av_spliter(file_path: &CStr, out_video: &str, out_audio: &CStr) -> Result<()>
         .position(|x| x.codecpar().codec_type().is_audio())
         .context("Cannot find audio stream!")?;
 
-    let bsf = AVBitStreamFilter::find_by_name(cstr!("h264_mp4toannexb")).context("Failed to find bit stream filter")?;
+    let bsf = AVBitStreamFilter::find_by_name(cstr!("h264_mp4toannexb"))
+        .context("Failed to find bit stream filter")?;
 
     let mut bsf_context = {
         let mut bsf_context = AVBSFContextUninit::new(&bsf);
@@ -52,10 +53,13 @@ fn av_spliter(file_path: &CStr, out_video: &str, out_audio: &CStr) -> Result<()>
             loop {
                 match bsf_context.receive_packet(&mut packet) {
                     Ok(()) => {
-                        let data = unsafe { std::slice::from_raw_parts(packet.data, packet.size as usize) };
+                        let data = unsafe {
+                            std::slice::from_raw_parts(packet.data, packet.size as usize)
+                        };
                         out_video.write_all(data)?;
                     }
-                    Err(RsmpegError::BitstreamDrainError) | Err(RsmpegError::BitstreamFlushedError) => break,
+                    Err(RsmpegError::BitstreamDrainError)
+                    | Err(RsmpegError::BitstreamFlushedError) => break,
                     Err(e) => anyhow::bail!(e),
                 }
             }

@@ -123,7 +123,9 @@ impl Time {
     pub fn aligned_with(&self, rhs: Time) -> Aligned {
         Aligned {
             lhs: self.time,
-            rhs: rhs.time.map(|rhs_time| rhs_time.rescale(rhs.time_base, self.time_base)),
+            rhs: rhs
+                .time
+                .map(|rhs_time| rhs_time.rescale(rhs.time_base, self.time_base)),
             time_base: self.time_base,
         }
     }
@@ -131,7 +133,8 @@ impl Time {
     /// Get number of seconds as floating point value.
     pub fn as_secs(&self) -> f32 {
         if let Some(time) = self.time {
-            (time as f32) * (self.time_base.numerator() as f32 / self.time_base.denominator() as f32)
+            (time as f32)
+                * (self.time_base.numerator() as f32 / self.time_base.denominator() as f32)
         } else {
             0.0
         }
@@ -140,7 +143,8 @@ impl Time {
     /// Get number of seconds as floating point value.
     pub fn as_secs_f64(&self) -> f64 {
         if let Some(time) = self.time {
-            (time as f64) * (self.time_base.numerator() as f64 / self.time_base.denominator() as f64)
+            (time as f64)
+                * (self.time_base.numerator() as f64 / self.time_base.denominator() as f64)
         } else {
             0.0
         }
@@ -166,7 +170,9 @@ impl Time {
     /// * `time_base` - Target time base.
     pub(crate) fn aligned_with_rational(&self, time_base: AvRational) -> Time {
         Time {
-            time: self.time.map(|time| time.rescale(self.time_base, time_base)),
+            time: self
+                .time
+                .map(|time| time.rescale(self.time_base, time_base)),
             time_base,
         }
     }
@@ -195,7 +201,13 @@ impl<T: Into<i64> + Clone> Rescale for T {
         S: Into<AvRational>,
         D: Into<AvRational>,
     {
-        unsafe { ffi::av_rescale_q(self.clone().into(), source.into().into(), destination.into().into()) }
+        unsafe {
+            ffi::av_rescale_q(
+                self.clone().into(),
+                source.into().into(),
+                destination.into().into(),
+            )
+        }
     }
 
     fn rescale_with<S, D>(&self, source: S, destination: D, rounding: ffi::AVRounding) -> i64
@@ -427,7 +439,10 @@ mod tests {
     fn test_apply() {
         let a = Time::from_secs(2.0);
         let b = Time::from_secs(0.25);
-        assert_eq!(a.aligned_with(b).apply(|x, y| (2 * x) + (3 * y)), Time::from_secs(4.75));
+        assert_eq!(
+            a.aligned_with(b).apply(|x, y| (2 * x) + (3 * y)),
+            Time::from_secs(4.75)
+        );
     }
 
     #[test]
@@ -435,7 +450,10 @@ mod tests {
         let a = Time::new(Some(3), AvRational::new(2, 32));
         let b = Time::from_nth_of_a_second(4);
         assert!(
-            (a.aligned_with(b).apply(|x, y| x + y).as_secs() - Time::from_secs(7.0 / 16.0).as_secs()).abs() < 0.001
+            (a.aligned_with(b).apply(|x, y| x + y).as_secs()
+                - Time::from_secs(7.0 / 16.0).as_secs())
+            .abs()
+                < 0.001
         );
     }
 

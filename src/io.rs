@@ -9,7 +9,7 @@ use rsmpeg::avformat::{AVFormatContextInput, AVIOContextContainer, AVIOContextUR
 use rsmpeg::avformat::{AVFormatContextOutput, AVInputFormat};
 use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
-use rsmpeg::{ffi, UnsafeDerefMut};
+use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
 use libc::c_int;
@@ -406,7 +406,7 @@ impl<'a> WriterBuilder<'a> {
             let mut output_format_context =
                 AVFormatContextOutput::from_raw(ptr::NonNull::new(output_format_context).unwrap());
             let mut io_ctx = AVIOContextURL::open(&path, ffi::AVIO_FLAG_WRITE).unwrap();
-            output_format_context.deref_mut().pb = io_ctx.as_mut_ptr();
+            (*output_format_context.as_mut_ptr()).pb = io_ctx.as_mut_ptr();
             output_format_context.io_context = Some(AVIOContextContainer::Url(io_ctx));
             output_format_context
         };
@@ -935,14 +935,17 @@ pub(crate) fn output_raw_buf_end(output: &mut AVFormatContextOutput) -> Vec<u8> 
         // `buffer_raw` through a ptr ptr. It also returns the size of that buffer.
         let output_pb = (*output.as_mut_ptr()).pb;
         let mut buffer_raw: *mut u8 = std::ptr::null_mut();
-        let buffer_size =
-            ffi::avio_close_dyn_buf(output_pb, (&mut buffer_raw) as *mut *mut u8) as usize;
+        let buffer_size = ffi::avio_close_dyn_buf(output_pb, &mut buffer_raw);
 
         // Reset the `pb` field or `avformat_close` will try to free it!
         (*output.as_mut_ptr()).pb = std::ptr::null_mut::<ffi::AVIOContext>();
 
         // Create a Rust `Vec` from the buffer (copying).
-        let buffer = std::slice::from_raw_parts(buffer_raw, buffer_size).to_vec();
+        let buffer = if buffer_size > 0 {
+            std::slice::from_raw_parts(buffer_raw, buffer_size as usize).to_vec()
+        } else {
+            Vec::new()
+        };
 
         // Now deallocate the original backing buffer.
         ffi::av_free(buffer_raw as *mut std::ffi::c_void);
@@ -978,7 +981,7 @@ pub fn output_raw_packetized_buf_start(
         // Create a custom IO context around our buffer.
         let io: *mut ffi::AVIOContext = ffi::avio_alloc_context(
             buffer,
-            max_packet_size.try_into().unwrap(),
+            max_packet_size as std::os::raw::c_int,
             // Set stream to WRITE.
             1,
             // Pass on a pointer *UNSAFE* to the packet buffer, assuming the packet buffer will live
@@ -1034,24 +1037,6 @@ pub fn output_raw_packetized_buf_end(output: &mut AVFormatContextOutput) {
     }
 }
 
-/// Flush the output. This can be useful in some circumstances.options
-///
-/// For example: It is used to flush fragments when outputting fragmented mp4 packets in combination
-/// with the `frag_custom` option.
-///
-/// # Arguments
-///
-/// * `output` - Output context to flush.
-pub(crate) fn flush_output(output: &mut AVFormatContextOutput) -> Result<()> {
-    unsafe {
-        match ffi::av_write_frame(output.as_mut_ptr(), std::ptr::null_mut()) {
-            0 => Ok(()),
-            1 => Ok(()),
-            e => Err(Error::new(RsmpegError::from(e))),
-        }
-    }
-}
-
 /// Passthrough function that is passed to `libavformat` in `avio_alloc_context` and pushes buffers
 /// from a packetized stream onto the packet buffer held in `opaque`.
 extern "C" fn output_raw_buf_start_callback(
@@ -1069,6 +1054,24 @@ extern "C" fn output_raw_buf_start_callback(
 
     // Number of bytes written.
     buffer_size
+}
+
+/// Flush the output. This can be useful in some circumstances.options
+///
+/// For example: It is used to flush fragments when outputting fragmented mp4 packets in combination
+/// with the `frag_custom` option.
+///
+/// # Arguments
+///
+/// * `output` - Output context to flush.
+pub(crate) fn flush_output(output: &mut AVFormatContextOutput) -> Result<()> {
+    unsafe {
+        match ffi::av_write_frame(output.as_mut_ptr(), std::ptr::null_mut()) {
+            0 => Ok(()),
+            1 => Ok(()),
+            e => Err(Error::new(RsmpegError::from(e))),
+        }
+    }
 }
 
 /// Initialize the logging handler. This will redirect all ffmpeg logging to the Rust `tracing`

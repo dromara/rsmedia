@@ -97,6 +97,16 @@ impl Packet {
         self.inner.set_flags(flag);
     }
 
+    pub fn time_base(&self) -> Rational {
+        self.time_base
+    }
+
+    pub fn set_time_base(&mut self, time_base: Rational) {
+        unsafe {
+            (*self.inner.as_mut_ptr()).time_base = time_base.into();
+        }
+    }
+
     #[inline]
     pub fn set_shrink(&mut self, size: usize) {
         unsafe {
@@ -240,10 +250,6 @@ impl Packet {
     /// Downcast to native inner type and time base.
     pub(crate) fn into_inner_parts(self) -> (AVPacket, Rational) {
         (self.inner, self.time_base)
-    }
-
-    pub fn time_base(&self) -> Rational {
-        self.time_base
     }
 
     /////////////////////

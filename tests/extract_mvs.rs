@@ -1,10 +1,10 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/extract_mvs.c
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodecContext, AVPacket},
     avformat::AVFormatContextInput,
-    avutil::{AVDictionary, get_media_type_string},
+    avutil::{get_media_type_string, AVDictionary},
     error::RsmpegError,
     ffi,
 };
@@ -58,13 +58,15 @@ fn extract_mvs(video_path: &CStr) -> Result<()> {
     let media_type = ffi::AVMEDIA_TYPE_VIDEO;
 
     let (stream_index, mut decode_context) = {
-        let (stream_index, decoder) = input_format_context.find_best_stream(media_type)?.with_context(|| {
-            anyhow!(
-                "Could not find {} stream in input file '{}'",
-                get_media_type_string(media_type).unwrap().to_string_lossy(),
-                video_path.to_string_lossy()
-            )
-        })?;
+        let (stream_index, decoder) = input_format_context
+            .find_best_stream(media_type)?
+            .with_context(|| {
+                anyhow!(
+                    "Could not find {} stream in input file '{}'",
+                    get_media_type_string(media_type).unwrap().to_string_lossy(),
+                    video_path.to_string_lossy()
+                )
+            })?;
 
         let stream = &input_format_context.streams()[stream_index];
 
@@ -90,7 +92,9 @@ fn extract_mvs(video_path: &CStr) -> Result<()> {
         .dump(0, video_path)
         .context("Input format context dump failed.")?;
 
-    println!("framenum,source,blockw,blockh,srcx,srcy,dstx,dsty,flags,motion_x,motion_y,motion_scale");
+    println!(
+        "framenum,source,blockw,blockh,srcx,srcy,dstx,dsty,flags,motion_x,motion_y,motion_scale"
+    );
 
     let mut video_frame_count = 0;
 

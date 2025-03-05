@@ -1,8 +1,9 @@
 use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::packet::Packet;
-use crate::{Rational, Writer, utils};
+use crate::{utils, Rational, Writer};
 
+use rsmpeg::avcodec::AVCodecParameters;
 use rsmpeg::avformat::{AVFormatContextInput, AVStreamRef};
 use rsmpeg::avutil::{AVDictionary, AVMediaType};
 use rsmpeg::ffi;
@@ -40,9 +41,8 @@ pub struct StreamInfo {
     pub avg_frame_rate: f32,
     /// Video frame rate
     pub frame_rate: f32,
-
     /// Codec parameters
-    pub(crate) codec_parameters: *mut ffi::AVCodecParameters,
+    pub codec_parameters: AVCodecParameters,
 }
 
 impl StreamInfo {
@@ -57,7 +57,10 @@ impl StreamInfo {
             .input
             .streams()
             .get(stream_index)
-            .ok_or(Error::msg(format!("reader stream: {} not found!", stream_index)))?;
+            .ok_or(Error::msg(format!(
+                "reader stream: {} not found!",
+                stream_index
+            )))?;
 
         Self::from_params(stream, stream_index)
     }
@@ -67,7 +70,10 @@ impl StreamInfo {
             .output
             .streams()
             .get(stream_index)
-            .ok_or(Error::msg(format!("writer stream: {} not found!", stream_index)))?;
+            .ok_or(Error::msg(format!(
+                "writer stream: {} not found!",
+                stream_index
+            )))?;
 
         Self::from_params(stream, stream_index)
     }
@@ -112,7 +118,9 @@ impl StreamInfo {
                 sample_rate: sample_rate as isize,
                 avg_frame_rate: avg_frame_rate as f32,
                 frame_rate: framerate as f32,
-                codec_parameters: stream.codecpar,
+                codec_parameters: AVCodecParameters::from_raw(
+                    std::ptr::NonNull::new(stream.codecpar).unwrap(),
+                ),
             })
         }
     }
@@ -127,7 +135,7 @@ impl StreamInfo {
     /// * The stream index.
     /// * Codec parameters.
     /// * Original stream time base.
-    pub(crate) fn into_parts(self) -> (usize, *mut ffi::AVCodecParameters, Rational) {
+    pub fn into_parts(self) -> (usize, AVCodecParameters, Rational) {
         (self.index, self.codec_parameters, self.time_base)
     }
 }
@@ -136,7 +144,9 @@ impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
             #[allow(clippy::missing_transmute_annotations)]
-            utils::from_cstr(ffi::avcodec_get_name(std::mem::transmute(self.codec as i32)))
+            utils::from_cstr(ffi::avcodec_get_name(std::mem::transmute(
+                self.codec as i32,
+            )))
         };
         let pix_fmt = unsafe {
             if self.stream_type.eq_ignore_ascii_case("video") {
@@ -144,7 +154,7 @@ impl std::fmt::Display for StreamInfo {
             } else if self.stream_type.eq_ignore_ascii_case("audio") {
                 utils::from_cstr(ffi::av_get_sample_fmt_name(self.format as c_int))
             } else {
-                "unknown"
+                "unknown".to_string()
             }
         };
         write!(
@@ -303,7 +313,9 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
             self.current += 1;
 
             Some(StreamSideData::wrap(
-                (*self.stream.as_ptr()).side_data.offset((self.current - 1) as isize),
+                (*self.stream.as_ptr())
+                    .side_data
+                    .offset((self.current - 1) as isize),
             ))
         }
     }
@@ -312,7 +324,10 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
         unsafe {
             let length = (*self.stream.as_ptr()).nb_side_data as usize;
 
-            (length - self.current as usize, Some(length - self.current as usize))
+            (
+                length - self.current as usize,
+                Some(length - self.current as usize),
+            )
         }
     }
 }

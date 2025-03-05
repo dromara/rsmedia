@@ -1,9 +1,9 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/encode_video.c
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
-    avutil::{AVFrame, opt_set, ra},
+    avutil::{opt_set, ra, AVFrame},
     error::RsmpegError,
     ffi,
 };
@@ -16,7 +16,11 @@ use std::{
 const WIDTH: usize = 352;
 const HEIGHT: usize = 288;
 
-fn encode(encode_context: &mut AVCodecContext, frame: Option<&AVFrame>, file: &mut BufWriter<File>) -> Result<()> {
+fn encode(
+    encode_context: &mut AVCodecContext,
+    frame: Option<&AVFrame>,
+    file: &mut BufWriter<File>,
+) -> Result<()> {
     encode_context.send_frame(frame)?;
     loop {
         let packet = match encode_context.receive_packet() {
@@ -31,7 +35,8 @@ fn encode(encode_context: &mut AVCodecContext, frame: Option<&AVFrame>, file: &m
 }
 
 fn encode_video(codec_name: &CStr, file_name: &str) -> Result<()> {
-    let encoder = AVCodec::find_encoder_by_name(codec_name).context("Failed to find encoder codec")?;
+    let encoder =
+        AVCodec::find_encoder_by_name(codec_name).context("Failed to find encoder codec")?;
     let mut encode_context = AVCodecContext::new(&encoder);
     encode_context.set_bit_rate(400000);
     encode_context.set_width(WIDTH as i32);
@@ -59,7 +64,9 @@ fn encode_video(codec_name: &CStr, file_name: &str) -> Result<()> {
     let mut writer = BufWriter::new(file);
 
     for i in 0..25 {
-        frame.make_writable().context("Failed to make frame writable")?;
+        frame
+            .make_writable()
+            .context("Failed to make frame writable")?;
         // prepare colorful frame
         {
             let data = frame.data;
@@ -68,8 +75,10 @@ fn encode_video(codec_name: &CStr, file_name: &str) -> Result<()> {
             let linesize_cb = linesize[1] as usize;
             let linesize_cr = linesize[2] as usize;
             let y_data = unsafe { std::slice::from_raw_parts_mut(data[0], HEIGHT * linesize_y) };
-            let cb_data = unsafe { std::slice::from_raw_parts_mut(data[1], HEIGHT / 2 * linesize_cb) };
-            let cr_data = unsafe { std::slice::from_raw_parts_mut(data[2], HEIGHT / 2 * linesize_cr) };
+            let cb_data =
+                unsafe { std::slice::from_raw_parts_mut(data[1], HEIGHT / 2 * linesize_cb) };
+            let cr_data =
+                unsafe { std::slice::from_raw_parts_mut(data[2], HEIGHT / 2 * linesize_cr) };
             // prepare a dummy image
             for y in 0..HEIGHT {
                 for x in 0..WIDTH {

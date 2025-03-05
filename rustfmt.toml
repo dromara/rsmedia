@@ -1,7 +1,0 @@
-edition = "2024"                    # Default: "2015"
-style_edition = "2024"
-max_width = 120                     # Default: 100
-tab_spaces = 4
-comment_width = 100                 # Default: 80
-## Ignore specific files
-ignore = []

@@ -178,7 +178,11 @@ impl std::fmt::Display for Rational {
 
 impl std::fmt::Debug for Rational {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        f.write_str(&format!("Rational({}/{})", self.numerator(), self.denominator()))
+        f.write_str(&format!(
+            "Rational({}/{})",
+            self.numerator(),
+            self.denominator()
+        ))
     }
 }
 

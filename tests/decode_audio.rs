@@ -1,10 +1,11 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/decode_audio.c
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use rsmpeg::{
     avcodec::{AVCodecContext, AVCodecParserContext, AVPacket},
     avformat::AVFormatContextInput,
     avutil::{
-        AVFrame, AVSampleFormat, get_bytes_per_sample, get_packed_sample_fmt, get_sample_fmt_name, sample_fmt_is_planar,
+        get_bytes_per_sample, get_packed_sample_fmt, get_sample_fmt_name, sample_fmt_is_planar,
+        AVFrame, AVSampleFormat,
     },
     error::RsmpegError,
     ffi,
@@ -43,8 +44,14 @@ fn frame_save(frame: &AVFrame, channels: usize, data_size: usize, mut file: &Fil
     Ok(())
 }
 
-fn decode(decode_context: &mut AVCodecContext, packet: Option<&AVPacket>, out_file: &File) -> Result<()> {
-    decode_context.send_packet(packet).context("Send packet failed.")?;
+fn decode(
+    decode_context: &mut AVCodecContext,
+    packet: Option<&AVPacket>,
+    out_file: &File,
+) -> Result<()> {
+    decode_context
+        .send_packet(packet)
+        .context("Send packet failed.")?;
     let channels = decode_context
         .ch_layout
         .nb_channels
@@ -69,8 +76,8 @@ fn decode_audio(audio_path: &str, out_file_path: &str) -> Result<()> {
     let (decoder, mut decode_context) = {
         // safety, &str ensures no internal null bytes.
         let audio_path = CString::new(audio_path).unwrap();
-        let mut input_format_context =
-            AVFormatContextInput::open(&audio_path, None, &mut None).context("Open audio file failed.")?;
+        let mut input_format_context = AVFormatContextInput::open(&audio_path, None, &mut None)
+            .context("Open audio file failed.")?;
         let (stream_index, decoder) = input_format_context
             .find_best_stream(ffi::AVMEDIA_TYPE_AUDIO)
             .context("Find best stream failed.")?
@@ -86,7 +93,8 @@ fn decode_audio(audio_path: &str, out_file_path: &str) -> Result<()> {
 
     let mut inbuf = [0u8; AUDIO_INBUF_SIZE + ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize];
 
-    let mut audio_file = File::open(audio_path).with_context(|| anyhow!("Could not open {}", audio_path))?;
+    let mut audio_file =
+        File::open(audio_path).with_context(|| anyhow!("Could not open {}", audio_path))?;
     fs::create_dir_all(Path::new(out_file_path).parent().unwrap()).unwrap();
     let out_file = File::create(out_file_path).context("Open out file failed.")?;
 

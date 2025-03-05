@@ -1,11 +1,13 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/transcode.c
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avfilter::{AVFilter, AVFilterContextMut, AVFilterGraph, AVFilterInOut},
     avformat::{AVFormatContextInput, AVFormatContextOutput},
-    avutil::{AVChannelLayout, AVDictionary, AVFrame, av_inv_q, av_rescale_q, get_sample_fmt_name, ra},
+    avutil::{
+        av_inv_q, av_rescale_q, get_sample_fmt_name, ra, AVChannelLayout, AVDictionary, AVFrame,
+    },
     error::RsmpegError,
     ffi,
 };
@@ -107,7 +109,10 @@ fn open_output_file(
             enc_ctx.set_sample_fmt(encoder.sample_fmts().unwrap()[0]);
             enc_ctx.set_time_base(ra(1, dec_ctx.sample_rate));
         } else {
-            bail!("Elementary stream #{} is of unknown type, cannot proceed", i);
+            bail!(
+                "Elementary stream #{} is of unknown type, cannot proceed",
+                i
+            );
         }
 
         // Some formats want stream headers to be separate.
@@ -185,7 +190,9 @@ fn init_filter<'graph>(
         let buffersink = AVFilter::get_by_name(cstr!("abuffersink")).unwrap();
 
         if dec_ctx.ch_layout.order == ffi::AV_CHANNEL_ORDER_UNSPEC {
-            dec_ctx.set_ch_layout(AVChannelLayout::from_nb_channels(dec_ctx.ch_layout.nb_channels).into_inner());
+            dec_ctx.set_ch_layout(
+                AVChannelLayout::from_nb_channels(dec_ctx.ch_layout.nb_channels).into_inner(),
+            );
         }
 
         let args = format!(
@@ -195,7 +202,9 @@ fn init_filter<'graph>(
             dec_ctx.sample_rate,
             // We can unwrap here, because we are sure that the given
             // sample_fmt is valid.
-            get_sample_fmt_name(dec_ctx.sample_fmt).unwrap().to_string_lossy(),
+            get_sample_fmt_name(dec_ctx.sample_fmt)
+                .unwrap()
+                .to_string_lossy(),
             dec_ctx.ch_layout().describe().unwrap().to_string_lossy(),
         );
         let args = &CString::new(args).unwrap();
@@ -211,7 +220,10 @@ fn init_filter<'graph>(
             .opt_set_bin(cstr!("sample_fmts"), &enc_ctx.sample_fmt)
             .context("Cannot set output sample format")?;
         buffersink_ctx
-            .opt_set(cstr!("ch_layouts"), &enc_ctx.ch_layout().describe().unwrap())
+            .opt_set(
+                cstr!("ch_layouts"),
+                &enc_ctx.ch_layout().describe().unwrap(),
+            )
             .context("Cannot set output channel layout")?;
         buffersink_ctx
             .opt_set_bin(cstr!("sample_rates"), &enc_ctx.sample_rate)
@@ -247,7 +259,8 @@ fn init_filters(
 ) -> Result<Vec<Option<FilteringContext>>> {
     let mut filter_ctx = Vec::with_capacity(stream_contexts.len());
 
-    for (filter_graph, stream_context) in filter_graphs.iter_mut().zip(stream_contexts.into_iter()) {
+    for (filter_graph, stream_context) in filter_graphs.iter_mut().zip(stream_contexts.into_iter())
+    {
         let Some(stream_context) = stream_context else {
             filter_ctx.push(None);
             continue;
@@ -292,7 +305,11 @@ fn encode_write_frame(
 ) -> Result<()> {
     if let Some(filt_frame) = filt_frame.as_mut() {
         if filt_frame.pts != ffi::AV_NOPTS_VALUE {
-            filt_frame.set_pts(av_rescale_q(filt_frame.pts, filt_frame.time_base, enc_ctx.time_base));
+            filt_frame.set_pts(av_rescale_q(
+                filt_frame.pts,
+                filt_frame.time_base,
+                enc_ctx.time_base,
+            ));
         }
     }
 
@@ -308,7 +325,10 @@ fn encode_write_frame(
         };
 
         enc_pkt.set_stream_index(stream_index as i32);
-        enc_pkt.rescale_ts(enc_ctx.time_base, ofmt_ctx.streams()[stream_index].time_base);
+        enc_pkt.rescale_ts(
+            enc_ctx.time_base,
+            ofmt_ctx.streams()[stream_index].time_base,
+        );
 
         ofmt_ctx
             .interleaved_write_frame(&mut enc_pkt)
@@ -359,10 +379,16 @@ fn flush_encoder(
 }
 
 /// Transcoding audio and video stream in a multi media file.
-pub fn transcode(input_file: &CStr, output_file: &CStr, dict: &mut Option<AVDictionary>) -> Result<()> {
+pub fn transcode(
+    input_file: &CStr,
+    output_file: &CStr,
+    dict: &mut Option<AVDictionary>,
+) -> Result<()> {
     let (dec_ctx, mut ifmt_ctx) = open_input_file(input_file)?;
     let (stream_ctx, mut ofmt_ctx) = open_output_file(output_file, dec_ctx, dict)?;
-    let mut filter_graphs: Vec<_> = (0..stream_ctx.len()).map(|_| AVFilterGraph::new()).collect();
+    let mut filter_graphs: Vec<_> = (0..stream_ctx.len())
+        .map(|_| AVFilterGraph::new())
+        .collect();
     let mut filter_ctx = init_filters(&mut filter_graphs, stream_ctx)?;
 
     loop {
@@ -427,7 +453,8 @@ pub fn transcode(input_file: &CStr, output_file: &CStr, dict: &mut Option<AVDict
                     *stream_index,
                 )
                 .context("Flushing filter failed")?;
-                flush_encoder(enc_ctx, &mut ofmt_ctx, *stream_index).context("Flushing encoder failed")?;
+                flush_encoder(enc_ctx, &mut ofmt_ctx, *stream_index)
+                    .context("Flushing encoder failed")?;
             }
             None => (),
         }

@@ -11,7 +11,8 @@ use std::ffi::CStr;
 use std::sync::atomic::{self, AtomicI32};
 
 pub fn avio_reading(file_path: &CStr) -> Result<()> {
-    let (video_stream_index, mut input_format_context, mut decode_context) = avio::open_input_file(file_path)?;
+    let (video_stream_index, mut input_format_context, mut decode_context) =
+        avio::open_input_file(file_path)?;
 
     loop {
         let packet = match input_format_context.read_packet() {
@@ -78,7 +79,8 @@ fn avio_file_reading(filename: &CStr) -> Result<()> {
         None,
     );
 
-    let mut input_format_context = AVFormatContextInput::from_io_context(AVIOContextContainer::Custom(io_context))?;
+    let mut input_format_context =
+        AVFormatContextInput::from_io_context(AVIOContextContainer::Custom(io_context))?;
     input_format_context.dump(0, filename)?;
 
     Ok(())

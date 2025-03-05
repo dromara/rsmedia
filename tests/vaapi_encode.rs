@@ -3,11 +3,12 @@ use anyhow::{Context, Result};
 use cstr::cstr;
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
-    avutil::{AVFrame, AVHWDeviceContext, ra},
+    avutil::{ra, AVFrame, AVHWDeviceContext},
     error::RsmpegError,
     ffi::{
-        AV_HWDEVICE_TYPE_CUDA, AV_HWDEVICE_TYPE_VAAPI, AV_HWDEVICE_TYPE_VIDEOTOOLBOX, AV_PIX_FMT_CUDA, AV_PIX_FMT_NV12,
-        AV_PIX_FMT_VAAPI, AV_PIX_FMT_VIDEOTOOLBOX, AVHWDeviceType, AVPixelFormat,
+        AVHWDeviceType, AVPixelFormat, AV_HWDEVICE_TYPE_CUDA, AV_HWDEVICE_TYPE_VAAPI,
+        AV_HWDEVICE_TYPE_VIDEOTOOLBOX, AV_PIX_FMT_CUDA, AV_PIX_FMT_NV12, AV_PIX_FMT_VAAPI,
+        AV_PIX_FMT_VIDEOTOOLBOX,
     },
 };
 use std::{
@@ -42,7 +43,11 @@ fn set_hwframe_ctx(
     Ok(())
 }
 
-fn encode_write(avctx: &mut AVCodecContext, frame: Option<&AVFrame>, fout: &mut File) -> Result<()> {
+fn encode_write(
+    avctx: &mut AVCodecContext,
+    frame: Option<&AVFrame>,
+    fout: &mut File,
+) -> Result<()> {
     avctx.send_frame(frame).context("Send frame failed")?;
     loop {
         let mut packet = match avctx.receive_packet() {
@@ -74,8 +79,8 @@ fn hw_encode(
     let mut fin = File::open(input).context("Fail to open input file")?;
     let mut fout = File::create(output).context("Fail to open output file")?;
 
-    let hw_device_ctx =
-        AVHWDeviceContext::create(device_type, None, None, 0).context("Failed to create a VAAPI device")?;
+    let hw_device_ctx = AVHWDeviceContext::create(device_type, None, None, 0)
+        .context("Failed to create a VAAPI device")?;
 
     let codec = AVCodec::find_encoder_by_name(encoder).context("Could not find encoder.")?;
 
@@ -88,10 +93,19 @@ fn hw_encode(
     avctx.set_sample_aspect_ratio(ra(1, 1));
     avctx.set_pix_fmt(hw_format);
 
-    set_hwframe_ctx(&mut avctx, &hw_device_ctx, width, height, hw_format, sw_format)
-        .context("Failed to set hwframe context.")?;
+    set_hwframe_ctx(
+        &mut avctx,
+        &hw_device_ctx,
+        width,
+        height,
+        hw_format,
+        sw_format,
+    )
+    .context("Failed to set hwframe context.")?;
 
-    avctx.open(None).context("Cannot open video encoder codec")?;
+    avctx
+        .open(None)
+        .context("Cannot open video encoder codec")?;
 
     loop {
         let mut sw_frame = AVFrame::new();

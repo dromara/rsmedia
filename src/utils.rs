@@ -44,11 +44,8 @@ pub fn from_os_str(path_or_url: impl AsRef<OsStr>) -> CString {
 ///
 /// - 指针必须指向一个有效的以 null 结尾的 C 字符串
 /// - 字符串内容必须是有效的 UTF-8
-pub unsafe fn from_cstr<'a>(ptr: *const c_char) -> &'a str {
-    if ptr.is_null() {
-        return "";
-    }
-    CStr::from_ptr(ptr).to_str().unwrap()
+pub unsafe fn from_cstr(ptr: *const c_char) -> String {
+    CStr::from_ptr(ptr).to_string_lossy().to_string()
 }
 
 /// 将 Rust 字符串转换为 C 字符串指针

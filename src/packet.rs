@@ -419,15 +419,18 @@ impl<'a> Iterator for PacketIter<'a> {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         match self.context.read_packet() {
-            Ok(Some(pkt)) => unsafe {
-                Some(Ok((
-                    Stream::wrap(
-                        std::mem::transmute_copy(&self.context),
-                        pkt.stream_index as usize,
-                    ),
-                    Packet::new_with_avpacket(pkt),
-                )))
-            },
+            Ok(Some(pkt)) => {
+                let context_ref: &'a AVFormatContextInput = unsafe { &*(self.context as *const _) };
+                let stream = Stream::wrap(
+                    context_ref
+                        .streams()
+                        .get(pkt.stream_index as usize)
+                        .unwrap(),
+                    context_ref.iformat(),
+                    context_ref.metadata(),
+                );
+                Some(Ok((stream, Packet::new_with_avpacket(pkt))))
+            }
             Ok(None) => None,
             Err(e) => Some(Err(e)),
         }

@@ -1,14 +1,14 @@
-use crate::flags::AvDispositionFlags;
 use crate::io::Reader;
 use crate::packet::Packet;
 use crate::{utils, Rational, Writer};
 
-use rsmpeg::avformat::{AVFormatContextInput, AVStreamRef};
-use rsmpeg::avutil::{AVDictionary, AVMediaType};
+use rsmpeg::avcodec::AVCodecParametersRef;
+use rsmpeg::avformat::{AVInputFormat, AVInputFormatRef, AVStreamRef};
+use rsmpeg::avutil::{AVDictionary, AVDictionaryRef, AVMediaType};
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
-use libc::{c_int, c_uint};
+use libc::c_int;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
@@ -210,79 +210,90 @@ impl StreamSideData<'_> {
 ////////////////////////////////////////
 // #[derive(Debug)]
 pub struct Stream<'a> {
-    context: &'a AVFormatContextInput,
-    index: usize,
+    stream_ref: &'a AVStreamRef<'a>,
+    iformat: AVInputFormatRef<'a>,
+    ctx_metadata: Option<AVDictionaryRef<'a>>,
 }
 
 impl<'a> Stream<'a> {
-    pub fn wrap(context: &'a AVFormatContextInput, index: usize) -> Stream<'a> {
-        Stream { context, index }
+    pub fn wrap(
+        stream_ref: &'a AVStreamRef<'a>,
+        iformat: AVInputFormatRef<'a>,
+        ctx_metadata: Option<AVDictionaryRef<'a>>,
+    ) -> Stream<'a> {
+        Stream {
+            stream_ref,
+            iformat,
+            ctx_metadata,
+        }
     }
 
-    pub fn as_ptr(&self) -> *const ffi::AVStream {
-        unsafe { *(*self.context.as_ptr()).streams.add(self.index) }
+    pub fn iformat(&self) -> &AVInputFormat {
+        self.iformat.deref()
+    }
+
+    pub fn ctx_metadata(&self) -> Option<&AVDictionary> {
+        self.ctx_metadata.as_deref()
     }
 }
 
 impl Stream<'_> {
     pub fn id(&self) -> i32 {
-        unsafe { (*self.as_ptr()).id }
+        self.stream_ref.id
     }
 
-    // pub fn parameters(&self) -> codec::Parameters {
-    //     unsafe {
-    //         codec::Parameters::wrap((*self.as_ptr()).codecpar, Some(self.context.destructor()))
-    //     }
-    // }
-
     pub fn index(&self) -> usize {
-        unsafe { (*self.as_ptr()).index as usize }
+        self.stream_ref.index as usize
     }
 
     pub fn time_base(&self) -> Rational {
-        unsafe { Rational::from((*self.as_ptr()).time_base) }
+        Rational::from(self.stream_ref.time_base)
     }
 
     pub fn start_time(&self) -> i64 {
-        unsafe { (*self.as_ptr()).start_time }
+        self.stream_ref.start_time
     }
 
     pub fn duration(&self) -> i64 {
-        unsafe { (*self.as_ptr()).duration }
+        self.stream_ref.duration
     }
 
-    pub fn frames(&self) -> i64 {
-        unsafe { (*self.as_ptr()).nb_frames }
+    pub fn nb_frames(&self) -> i64 {
+        self.stream_ref.nb_frames
     }
 
-    pub fn disposition(&self) -> AvDispositionFlags {
-        unsafe { AvDispositionFlags::from_bits_truncate((*self.as_ptr()).disposition as c_uint) }
+    pub fn disposition(&self) -> i32 {
+        self.stream_ref.disposition
     }
 
     pub fn discard(&self) -> ffi::AVDiscard {
-        unsafe { ffi::AVDiscard::from((*self.as_ptr()).discard) }
+        self.stream_ref.discard
     }
 
     pub fn side_data(&self) -> StreamSideDataIter {
         StreamSideDataIter::new(self)
     }
 
-    pub fn rate(&self) -> Rational {
-        unsafe { Rational::from((*self.as_ptr()).r_frame_rate) }
+    pub fn r_frame_rate(&self) -> Rational {
+        self.stream_ref.r_frame_rate.into()
     }
 
     pub fn avg_frame_rate(&self) -> Rational {
-        unsafe { Rational::from((*self.as_ptr()).avg_frame_rate) }
+        self.stream_ref.avg_frame_rate.into()
     }
 
-    // pub fn metadata(&self) -> DictionaryRef {
-    //     unsafe { DictionaryRef::wrap((*self.as_ptr()).metadata) }
-    // }
+    pub fn parameters(&self) -> AVCodecParametersRef {
+        self.stream_ref.codecpar()
+    }
+
+    pub fn metadata(&self) -> Option<AVDictionaryRef> {
+        self.stream_ref.metadata()
+    }
 }
 
 impl PartialEq for Stream<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.as_ptr() == other.as_ptr()
+        self.stream_ref.as_ptr() == other.stream_ref.as_ptr()
     }
 }
 
@@ -304,14 +315,15 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if self.current >= (*self.stream.as_ptr()).nb_side_data {
+            if self.current >= self.stream.stream_ref.nb_side_data {
                 return None;
             }
 
             self.current += 1;
 
             Some(StreamSideData::wrap(
-                (*self.stream.as_ptr())
+                self.stream
+                    .stream_ref
                     .side_data
                     .offset((self.current - 1) as isize),
             ))
@@ -319,81 +331,12 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        unsafe {
-            let length = (*self.stream.as_ptr()).nb_side_data as usize;
-
-            (
-                length - self.current as usize,
-                Some(length - self.current as usize),
-            )
-        }
+        let length = self.stream.stream_ref.nb_side_data as usize;
+        (
+            length - self.current as usize,
+            Some(length - self.current as usize),
+        )
     }
 }
 
 impl ExactSizeIterator for StreamSideDataIter<'_> {}
-
-/////////////////////////////////////////
-pub struct StreamMut<'a> {
-    context: &'a mut AVFormatContextInput,
-    index: usize,
-    immutable: Stream<'a>,
-}
-
-impl StreamMut<'_> {
-    /// Wraps a mutable reference to `AVFormatContextInput` and an index into a `StreamMut`.
-    pub fn wrap(context: &mut AVFormatContextInput, index: usize) -> StreamMut {
-        unsafe {
-            StreamMut {
-                context: std::mem::transmute_copy(&context),
-                index,
-                immutable: Stream::wrap(std::mem::transmute_copy(&context), index),
-            }
-        }
-    }
-
-    pub fn as_mut_ptr(&mut self) -> *mut ffi::AVStream {
-        unsafe { *(*self.context.as_mut_ptr()).streams.add(self.index) }
-    }
-}
-
-impl StreamMut<'_> {
-    pub fn set_time_base<R: Into<Rational>>(&mut self, value: R) {
-        unsafe {
-            (*self.as_mut_ptr()).time_base = value.into().into();
-        }
-    }
-
-    pub fn set_rate<R: Into<Rational>>(&mut self, value: R) {
-        unsafe {
-            (*self.as_mut_ptr()).r_frame_rate = value.into().into();
-        }
-    }
-
-    pub fn set_avg_frame_rate<R: Into<Rational>>(&mut self, value: R) {
-        unsafe {
-            (*self.as_mut_ptr()).avg_frame_rate = value.into().into();
-        }
-    }
-
-    // pub fn set_parameters<P: Into<codec::Parameters>>(&mut self, parameters: P) {
-    //     let parameters = parameters.into();
-    //
-    //     unsafe {
-    //         avcodec_parameters_copy((*self.as_mut_ptr()).codecpar, parameters.as_ptr());
-    //     }
-    // }
-
-    pub fn set_metadata(&mut self, metadata: &mut AVDictionary) {
-        unsafe {
-            (*self.as_mut_ptr()).metadata = metadata.as_mut_ptr();
-        }
-    }
-}
-
-impl<'a> Deref for StreamMut<'a> {
-    type Target = Stream<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.immutable
-    }
-}

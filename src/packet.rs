@@ -1,5 +1,4 @@
 use crate::flags::AvPacketFlags;
-use crate::stream::Stream;
 use crate::time::Time;
 use crate::Rational;
 
@@ -398,41 +397,5 @@ impl PacketSideData<'_> {
 
     pub fn data(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts((*self.as_ptr()).data, (*self.as_ptr()).size) }
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////
-
-pub struct PacketIter<'a> {
-    context: &'a mut AVFormatContextInput,
-}
-
-impl<'a> PacketIter<'a> {
-    pub fn new(context: &'a mut AVFormatContextInput) -> PacketIter<'a> {
-        PacketIter { context }
-    }
-}
-
-impl<'a> Iterator for PacketIter<'a> {
-    type Item = Result<(Stream<'a>, Packet), RsmpegError>;
-
-    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        match self.context.read_packet() {
-            Ok(Some(pkt)) => {
-                let context_ref: &'a AVFormatContextInput = unsafe { &*(self.context as *const _) };
-                let stream = Stream::wrap(
-                    context_ref
-                        .streams()
-                        .get(pkt.stream_index as usize)
-                        .unwrap(),
-                    context_ref.iformat(),
-                    context_ref.metadata(),
-                );
-                Some(Ok((stream, Packet::new_with_avpacket(pkt))))
-            }
-            Ok(None) => None,
-            Err(e) => Some(Err(e)),
-        }
     }
 }

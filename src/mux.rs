@@ -1,6 +1,6 @@
-use crate::io::{Reader, Write};
+use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{Packet, Rational};
+use crate::Packet;
 
 use rsmpeg::avcodec::AVCodecParameters;
 
@@ -8,13 +8,13 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 
 /// Builds a [`Muxer`].
-pub struct MuxerBuilder<W: Write> {
+pub struct MuxerBuilder<W: Writer> {
     writer: W,
     interleaved: bool,
-    mapping: HashMap<usize, StreamDescription>,
+    mapping: HashMap<usize, StreamInfo>,
 }
 
-impl<W: Write> MuxerBuilder<W> {
+impl<W: Writer> MuxerBuilder<W> {
     /// Create a new [`MuxerBuilder`].
     pub fn new(writer: W) -> Self {
         Self {
@@ -42,11 +42,8 @@ impl<W: Write> MuxerBuilder<W> {
             av_stream.set_time_base(reader_stream_time_base.into());
             av_stream.index
         };
-        let stream_description = StreamDescription {
-            index: writer_stream_index as usize,
-            source_time_base: reader_stream_time_base,
-        };
-        self.mapping.insert(index, stream_description);
+        let stream_info = { StreamInfo::from_writer(&self.writer, writer_stream_index as usize)? };
+        self.mapping.insert(index, stream_info);
         Ok(self)
     }
 
@@ -110,7 +107,7 @@ impl<W: Write> MuxerBuilder<W> {
 ///
 /// ```rust,ignore
 /// let reader = Reader::new(Path::new("my_file.mp4")).unwrap();
-/// let writer = BufWriter::new("mp4").unwrap();
+/// let writer = BufferWriter::new("mp4").unwrap();
 /// let mut muxer = MuxerBuilder::new(writer)
 ///     .with_streams(&reader)
 ///     .build()
@@ -120,15 +117,15 @@ impl<W: Write> MuxerBuilder<W> {
 /// }
 /// muxer.finish()?;
 /// ```
-pub struct Muxer<W: Write> {
+pub struct Muxer<W: Writer> {
     pub(crate) writer: W,
-    mapping: HashMap<usize, StreamDescription>,
+    mapping: HashMap<usize, StreamInfo>,
     interleaved: bool,
     have_written_header: bool,
     have_written_trailer: bool,
 }
 
-impl<W: Write> Muxer<W> {
+impl<W: Writer> Muxer<W> {
     /// Mux a single packet. This will mux a single packet.
     ///
     /// # Arguments
@@ -140,25 +137,22 @@ impl<W: Write> Muxer<W> {
             self.writer.write_header()?;
         }
 
-        let stream_description = self
+        let stream_desc = self
             .mapping
             .get(&(packet.stream_index()))
             .context("Packet stream index not found in muxer")?;
 
-        let destination_stream = self
+        let dst_stream = self
             .writer
             .output()
             .streams()
-            .get(stream_description.index)
+            .get(stream_desc.index)
             .context("Writer Stream not found in muxer")?;
 
         let mut pkt = packet;
         pkt.set_pos(-1);
-        pkt.set_stream_index(destination_stream.index as usize);
-        pkt.rescale_ts(
-            stream_description.source_time_base,
-            destination_stream.time_base,
-        );
+        pkt.set_stream_index(dst_stream.index as usize);
+        pkt.rescale_ts(stream_desc.time_base, dst_stream.time_base);
 
         let out = if self.interleaved {
             self.writer.write_interleaved(&mut pkt)?
@@ -201,21 +195,14 @@ impl<W: Write> Muxer<W> {
     // }
 }
 
-unsafe impl<W: Write> Send for Muxer<W> {}
-unsafe impl<W: Write> Sync for Muxer<W> {}
-
-/// Internal structure that holds the stream index and the time base of the source packet for rescaling.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct StreamDescription {
-    index: usize,
-    source_time_base: Rational,
-}
+unsafe impl<W: Writer> Send for Muxer<W> {}
+unsafe impl<W: Writer> Sync for Muxer<W> {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::{self, BufWriterBuilder, PacketizedBufWriterBuilder, Writer};
-    use crate::Time;
+    use crate::io::{self, BufferWriterBuilder, PacketizedBufWriterBuilder, StreamWriter};
+    use crate::{Rational, Time};
     use std::collections::HashMap;
     use std::path::Path;
 
@@ -223,7 +210,7 @@ mod tests {
     #[ignore = "test_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_muxer() {
         let mut reader = Reader::new(Path::new("/tmp/bear.mp4")).unwrap();
-        let writer = Writer::new(Path::new("/tmp/bear.mov")).unwrap();
+        let writer = StreamWriter::new(Path::new("/tmp/bear.mov")).unwrap();
 
         let mut muxer = MuxerBuilder::new(writer)
             .with_streams(&reader)
@@ -282,7 +269,7 @@ mod tests {
     fn test_buf_muxer() {
         // only have stream 0
         let mut reader = Reader::new(Path::new("/tmp/trim.mp4")).unwrap();
-        let writer = BufWriterBuilder::new("mp4").build().unwrap();
+        let writer = BufferWriterBuilder::new("mp4").build().unwrap();
 
         let mut buf_muxer = MuxerBuilder::new(writer)
             .with_streams(&reader)

@@ -23,7 +23,7 @@ pub mod utils;
 pub use decode::{Decoder, DecoderBuilder};
 pub use encode::{Encoder, EncoderBuilder};
 pub use init::init;
-pub use io::{Reader, ReaderBuilder, Writer, WriterBuilder};
+pub use io::{Reader, ReaderBuilder, StreamWriter, StreamWriterBuilder};
 pub use location::{Location, Url};
 pub use options::Options;
 pub use packet::Packet;

@@ -273,16 +273,16 @@ unsafe impl Send for Reader {}
 unsafe impl Sync for Reader {}
 
 /// Any type that implements this can write video packets.
-pub trait Write: private::Write + private::Output {}
+pub trait Writer: private::Write + private::Output {}
 
-/// Build a [`Writer`].
-pub struct WriterBuilder<'a> {
+/// Build a [`StreamWriter`].
+pub struct StreamWriterBuilder<'a> {
     destination: Location,
     format: Option<&'a str>,
     options: Option<&'a Options>,
 }
 
-impl<'a> WriterBuilder<'a> {
+impl<'a> StreamWriterBuilder<'a> {
     /// Create a new writer with the specified destination.
     ///
     /// # Arguments
@@ -316,22 +316,22 @@ impl<'a> WriterBuilder<'a> {
         self
     }
 
-    /// Build [`Writer`].
-    pub fn build(self) -> Result<Writer> {
+    /// Build [`StreamWriter`].
+    pub fn build(self) -> Result<StreamWriter> {
         match (self.format, self.options) {
-            (None, None) => Ok(Writer {
+            (None, None) => Ok(StreamWriter {
                 output: Self::output(&self.destination.as_path())?,
                 destination: self.destination,
             }),
-            (Some(format), None) => Ok(Writer {
+            (Some(format), None) => Ok(StreamWriter {
                 output: Self::output_as(&self.destination.as_path(), format)?,
                 destination: self.destination,
             }),
-            (None, Some(options)) => Ok(Writer {
+            (None, Some(options)) => Ok(StreamWriter {
                 output: Self::output_with(&self.destination.as_path(), Some(options.to_dict()))?,
                 destination: self.destination,
             }),
-            (Some(format), Some(options)) => Ok(Writer {
+            (Some(format), Some(options)) => Ok(StreamWriter {
                 output: Self::output_as_with(
                     &self.destination.as_path(),
                     format,
@@ -473,12 +473,12 @@ impl<'a> WriterBuilder<'a> {
 ///     .build()
 ///     .unwrap();
 /// ```
-pub struct Writer {
+pub struct StreamWriter {
     pub destination: Location,
     pub output: AVFormatContextOutput,
 }
 
-impl Writer {
+impl StreamWriter {
     /// Create a new file writer for video files.
     ///
     /// # Arguments
@@ -486,7 +486,7 @@ impl Writer {
     /// * `dest` - Where to write to.
     #[inline]
     pub fn new(destination: impl Into<Location>) -> Result<Self> {
-        WriterBuilder::new(destination).build()
+        StreamWriterBuilder::new(destination).build()
     }
 
     /// Retrieve stream information for a stream. Stream information can be used to set up a
@@ -500,10 +500,10 @@ impl Writer {
     }
 }
 
-impl Write for Writer {}
+impl Writer for StreamWriter {}
 
-unsafe impl Send for Writer {}
-unsafe impl Sync for Writer {}
+unsafe impl Send for StreamWriter {}
+unsafe impl Sync for StreamWriter {}
 
 /// Type alias for a byte buffer.
 pub type Buf = Vec<u8>;
@@ -511,13 +511,13 @@ pub type Buf = Vec<u8>;
 /// Type alias for multiple buffers.
 pub type Bufs = Vec<Buf>;
 
-/// Build a [`BufWriter`].
-pub struct BufWriterBuilder<'a> {
+/// Build a [`BufferWriter`].
+pub struct BufferWriterBuilder<'a> {
     format: &'a str,
     options: Option<&'a Options>,
 }
 
-impl<'a> BufWriterBuilder<'a> {
+impl<'a> BufferWriterBuilder<'a> {
     /// Create a new writer that writes to a buffer.
     ///
     /// # Arguments
@@ -540,9 +540,9 @@ impl<'a> BufWriterBuilder<'a> {
         self
     }
 
-    /// Build [`BufWriter`].
-    pub fn build(self) -> Result<BufWriter> {
-        Ok(BufWriter {
+    /// Build [`BufferWriter`].
+    pub fn build(self) -> Result<BufferWriter> {
+        Ok(BufferWriter {
             output: output_raw(self.format)?,
             options: self.options.cloned(),
         })
@@ -554,15 +554,15 @@ impl<'a> BufWriterBuilder<'a> {
 /// # Example
 ///
 /// ```ignore
-/// let mut writer = BufWriter::new("mp4").unwrap();
+/// let mut writer = BufferWriter::new("mp4").unwrap();
 /// let bytes = writer.write_header()?;
 /// ```
-pub struct BufWriter {
+pub struct BufferWriter {
     pub(crate) output: AVFormatContextOutput,
     options: Option<Options>,
 }
 
-impl BufWriter {
+impl BufferWriter {
     /// Create a video writer that writes to a buffer and returns the resulting bytes.
     ///
     /// # Arguments
@@ -570,7 +570,7 @@ impl BufWriter {
     /// * `format` - Container format to use.
     #[inline]
     pub fn new(format: &str) -> Result<Self> {
-        BufWriterBuilder::new(format).build()
+        BufferWriterBuilder::new(format).build()
     }
 
     fn begin_write(&mut self) {
@@ -582,9 +582,9 @@ impl BufWriter {
     }
 }
 
-impl Write for BufWriter {}
+impl Writer for BufferWriter {}
 
-impl Drop for BufWriter {
+impl Drop for BufferWriter {
     fn drop(&mut self) {
         // Make sure to close the buffer properly before dropping the object or `avio_close` will
         // get confused and double free. We can simply ignore the resulting buffer.
@@ -592,8 +592,8 @@ impl Drop for BufWriter {
     }
 }
 
-unsafe impl Send for BufWriter {}
-unsafe impl Sync for BufWriter {}
+unsafe impl Send for BufferWriter {}
+unsafe impl Sync for BufferWriter {}
 
 /// Build a [`PacketizedBufWriter`].
 pub struct PacketizedBufWriterBuilder<'a> {
@@ -687,7 +687,7 @@ impl PacketizedBufWriter {
     }
 }
 
-impl Write for PacketizedBufWriter {}
+impl Writer for PacketizedBufWriter {}
 
 unsafe impl Send for PacketizedBufWriter {}
 unsafe impl Sync for PacketizedBufWriter {}
@@ -719,7 +719,7 @@ pub(crate) mod private {
         fn write_trailer(&mut self) -> Result<Self::Out>;
     }
 
-    impl Write for Writer {
+    impl Write for StreamWriter {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
@@ -753,7 +753,7 @@ pub(crate) mod private {
         }
     }
 
-    impl Write for BufWriter {
+    impl Write for BufferWriter {
         type Out = Buf;
 
         fn write_header(&mut self) -> Result<Buf> {
@@ -827,7 +827,7 @@ pub(crate) mod private {
         fn output_mut(&mut self) -> &mut AVFormatContextOutput;
     }
 
-    impl Output for Writer {
+    impl Output for StreamWriter {
         fn output(&self) -> &AVFormatContextOutput {
             &self.output
         }
@@ -837,7 +837,7 @@ pub(crate) mod private {
         }
     }
 
-    impl Output for BufWriter {
+    impl Output for BufferWriter {
         fn output(&self) -> &AVFormatContextOutput {
             &self.output
         }

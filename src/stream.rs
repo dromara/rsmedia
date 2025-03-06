@@ -1,9 +1,9 @@
-use crate::io::Reader;
+use crate::io::{Reader, Writer};
 use crate::packet::Packet;
-use crate::{utils, Rational, Writer};
+use crate::{utils, Rational};
 
 use rsmpeg::avcodec::AVCodecParametersRef;
-use rsmpeg::avformat::{AVInputFormat, AVInputFormatRef, AVStreamRef};
+use rsmpeg::avformat::{AVInputFormat, AVInputFormatRef, AVStream, AVStreamRef};
 use rsmpeg::avutil::{AVDictionary, AVDictionaryRef, AVMediaType};
 use rsmpeg::ffi;
 
@@ -52,7 +52,7 @@ impl StreamInfo {
     ///
     /// * `reader` - Reader to find stream information from.
     /// * `stream_index` - Index of stream in reader.
-    pub(crate) fn from_reader(reader: &Reader, stream_index: usize) -> Result<Self> {
+    pub fn from_reader(reader: &Reader, stream_index: usize) -> Result<Self> {
         let stream = reader
             .input
             .streams()
@@ -62,12 +62,12 @@ impl StreamInfo {
                 stream_index
             )))?;
 
-        Self::from_params(stream, stream_index)
+        Self::from_stream(stream)
     }
 
-    pub(crate) fn from_writer(writer: &Writer, stream_index: usize) -> Result<Self> {
+    pub fn from_writer<W: Writer>(writer: &W, stream_index: usize) -> Result<Self> {
         let stream = writer
-            .output
+            .output()
             .streams()
             .get(stream_index)
             .ok_or(Error::msg(format!(
@@ -75,10 +75,10 @@ impl StreamInfo {
                 stream_index
             )))?;
 
-        Self::from_params(stream, stream_index)
+        Self::from_stream(stream)
     }
 
-    pub fn from_params(av_stream: &AVStreamRef, stream_index: usize) -> Result<Self> {
+    pub fn from_stream(av_stream: &AVStream) -> Result<Self> {
         unsafe {
             let stream = av_stream.deref();
             let media_type = {
@@ -106,7 +106,7 @@ impl StreamInfo {
             let avg_frame_rate = ffi::av_q2d(stream.avg_frame_rate);
 
             Ok(Self {
-                index: stream_index,
+                index: stream.index as usize,
                 stream_type: media_type.to_string(),
                 codec: codec as isize,
                 format: pix_fmt as isize,

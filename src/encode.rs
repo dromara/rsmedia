@@ -3,7 +3,7 @@ use crate::flags::{AvCodecFlags, AvFormatFlags};
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::io::private::Write;
-use crate::io::{Writer, WriterBuilder};
+use crate::io::{StreamWriter, StreamWriterBuilder};
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
@@ -188,14 +188,14 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
-    /// Create an encoder from a [`Writer`].
+    /// Create an encoder from a [`StreamWriter`].
     ///
     /// # Arguments
     ///
-    /// * `writer` - [`Writer`] to create encoder from.
+    /// * `writer` - [`StreamWriter`] to create encoder from.
     /// * `interleaved` - Whether or not to use interleaved write.
     /// * `settings` - Encoder settings to use.
-    pub fn build_from_writer(self, mut writer: Writer) -> Result<Encoder> {
+    pub fn build_from_writer(self, mut writer: StreamWriter) -> Result<Encoder> {
         let global_header =
             AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
                 .contains(AvFormatFlags::GLOBAL_HEADER);
@@ -302,7 +302,7 @@ impl<'a> EncoderBuilder<'a> {
 
     /// Build an [`Encoder`].
     pub fn build(self) -> Result<Encoder> {
-        let mut writer_builder = WriterBuilder::new(self.destination.clone());
+        let mut writer_builder = StreamWriterBuilder::new(self.destination.clone());
         if let Some(options) = self.options {
             writer_builder = writer_builder.with_options(options);
         }
@@ -336,7 +336,7 @@ impl<'a> EncoderBuilder<'a> {
 pub struct Encoder {
     hw_context: Option<HWContext>,
     encode_ctx: AVCodecContext,
-    writer: Writer,
+    writer: StreamWriter,
     writer_stream_index: usize,
     interleaved: bool,
     frame_count: u64,

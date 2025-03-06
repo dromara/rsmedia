@@ -277,7 +277,7 @@ impl HWContext {
         hw_frame.set_height(sw_frame.height);
         hw_frame.set_format(self.get_format(true));
         unsafe {
-            hw_frame.deref_mut().hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
+            (*hw_frame.as_mut_ptr()).hw_frames_ctx = hw_frames_ctx.as_mut_ptr();
         }
 
         // 分配硬件缓冲区

@@ -3,7 +3,7 @@ use crate::pixel::PixelFormat;
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext, AVPixelFormat};
+use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext};
 use rsmpeg::{ffi, UnsafeDerefMut};
 
 /// 硬件加速设备配置
@@ -115,6 +115,7 @@ impl HWContext {
     /// 设置编解码器的硬件帧上下文
     pub fn setup_hw_frames(
         &mut self,
+        is_decoder: bool,
         codec_ctx: &mut AVCodecContext,
         width: i32,
         height: i32,
@@ -135,15 +136,15 @@ impl HWContext {
         codec_ctx.set_pix_fmt(self.get_format(true));
 
         // only used by decoders
-        unsafe {
-            let ctx_mut_ptr = codec_ctx.deref_mut();
-            ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
-            ctx_mut_ptr.opaque =
-                i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
-            ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
-            ctx_mut_ptr.get_format = Some(hwaccel_get_format);
-            // (*codec_ctx).hwaccel
-            // (*codec_ctx).hwaccel_context
+        if is_decoder {
+            unsafe {
+                let ctx_mut_ptr = codec_ctx.deref_mut();
+                ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
+                ctx_mut_ptr.opaque =
+                    i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
+                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
+                ctx_mut_ptr.get_format = Some(hwaccel_get_format);
+            }
         }
 
         Ok(())
@@ -367,7 +368,7 @@ impl HWContext {
     }
 
     /// Helper function to get the appropriate pixel format for a frame
-    pub fn get_format(&self, is_hw: bool) -> AVPixelFormat {
+    pub fn get_format(&self, is_hw: bool) -> ffi::AVPixelFormat {
         if is_hw {
             self.config.hw_pixel_format.into()
         } else {
@@ -484,7 +485,7 @@ impl HWDeviceType {
         }
     }
 
-    pub fn find_hw_pixel_format_with_codec(&self, codec: &AVCodec) -> Option<AVPixelFormat> {
+    pub fn find_hw_pixel_format_with_codec(&self, codec: &AVCodec) -> Option<ffi::AVPixelFormat> {
         let mut i = 0;
         loop {
             unsafe {

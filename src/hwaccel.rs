@@ -56,17 +56,6 @@ impl HWDeviceConfig {
         )
     }
 
-    /// 创建VDPAU配置
-    pub fn vdpau() -> Self {
-        Self::new(
-            HWDeviceType::VDPAU,
-            PixelFormat::VDPAU,
-            PixelFormat::NV12,
-            None,
-            None,
-        )
-    }
-
     /// 创建Vulkan配置
     pub fn vulkan() -> Self {
         Self::new(

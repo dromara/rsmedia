@@ -1,7 +1,6 @@
 use crate::location::Location;
 use crate::options::Options;
-use crate::packet::PacketIter;
-use crate::stream::StreamInfo;
+use crate::stream::{Stream, StreamInfo};
 use crate::utils;
 use crate::Packet;
 
@@ -139,7 +138,7 @@ impl Reader {
     /// ```
     pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
         loop {
-            match self.packets().next() {
+            match self.read_packet() {
                 Some(pkt_res) => match pkt_res {
                     Ok((stream, packet)) => {
                         if stream.index() == stream_index {
@@ -149,7 +148,7 @@ impl Reader {
                     }
                     Err(e) => {
                         log::error!("Error reading packet: {}", e);
-                        return Err(Error::new(e));
+                        return Err(e);
                     }
                 },
                 None => return Err(Error::msg("No more packets")),
@@ -158,20 +157,31 @@ impl Reader {
     }
 
     pub fn read_any(&mut self) -> Result<Packet> {
-        match self.packets().next() {
+        match self.read_packet() {
             Some(pkt_res) => match pkt_res {
                 Ok((stream, packet)) => Ok(Packet::new(packet, stream.time_base())),
                 Err(e) => {
                     log::error!("Error reading packet: {}", e);
-                    Err(Error::new(e))
+                    Err(e)
                 }
             },
             None => Err(Error::msg("No more packets")),
         }
     }
 
-    pub fn packets(&mut self) -> PacketIter {
-        PacketIter::new(&mut self.input)
+    pub fn read_packet(&mut self) -> Option<Result<(Stream, Packet)>> {
+        match self.input.read_packet() {
+            Ok(Some(pkt)) => {
+                let stream = Stream::wrap(
+                    self.input.streams().get(pkt.stream_index as usize).unwrap(),
+                    self.input.iformat(),
+                    self.input.metadata(),
+                );
+                Some(Ok((stream, Packet::new_with_avpacket(pkt))))
+            }
+            Ok(None) => None,
+            Err(e) => Some(Err(Error::new(e))),
+        }
     }
 
     /// Retrieve stream information for a stream. Stream information can be used to set up a

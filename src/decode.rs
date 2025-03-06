@@ -684,7 +684,8 @@ impl Drop for DecoderSplit {
             // 1. malloc(): unsorted double linked list corrupted
             // 2. malloc(): mismatching next->prev_size (unsorted)
             // 3. free(): invalid pointer
-            // 4. double free or corruption (fasttop)
+            // 4. double free or corruption (!prev)
+            // 5. corrupted double-linked list Aborted (core dumped)
             let codec_ctx_ptr = self.decode_ctx.as_mut_ptr();
             if !codec_ctx_ptr.is_null() {
                 if !(*codec_ctx_ptr).hw_frames_ctx.is_null() {

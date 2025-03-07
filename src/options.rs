@@ -5,49 +5,32 @@ use rsmpeg::avutil::AVDictionary;
 use std::collections::HashMap;
 
 /// A wrapper type for ffmpeg options.
+///
+/// FFmpeg Documentation: <https://ffmpeg.org/doxygen/trunk/>
+///
+/// `libavformat/options_table.h`: <https://www.ffmpeg.org/doxygen/trunk/libavformat_2options__table_8h-source.html>
+///
+/// `libavcodec/options_table.h`: <https://www.ffmpeg.org/doxygen/trunk/libavcodec_2options__table_8h_source.html>
 #[derive(Clone)]
 pub struct Options(AVDictionary);
 
 impl Options {
     /// Creates options such that ffmpeg will prefer TCP transport when reading RTSP stream (over
-    /// the default UDP format).
-    ///
-    /// This sets the `rtsp_transport` to `tcp` in ffmpeg options.
-    pub fn preset_rtsp_transport_tcp() -> Self {
-        let opts = AVDictionary::new(
-            &utils::from_str("rtsp_transport"),
-            &utils::from_str("tcp"),
-            0,
-        );
-        Self(opts)
-    }
-
-    /// Creates options such that ffmpeg will prefer TCP transport when reading RTSP stream (over
     /// the default UDP format). It also adds some options to reduce the socket and I/O timeouts to
     /// 4 seconds.
     ///
-    /// This sets the `rtsp_transport` to `tcp` in ffmpeg options, it also sets `rw_timeout` to
-    /// lower (more sane) values.
-    pub fn preset_rtsp_transport_tcp_and_sane_timeouts() -> Self {
-        let opts = AVDictionary::new(
-            &utils::from_str("rtsp_transport"),
-            &utils::from_str("tcp"),
-            0,
-        )
-        // These can't be too low because ffmpeg takes its sweet time when connecting to RTSP
-        // sources sometimes.
-        .set(
-            &utils::from_str("rw_timeout"),
-            &utils::from_str("16000000"),
-            0,
-        )
-        .set(
-            &utils::from_str("stimeout"),
-            &utils::from_str("16000000"),
-            0,
-        );
+    /// This sets the `rtsp_transport` to `tcp` in ffmpeg options,
+    /// it also sets `rw_timeout` and `stimeout` to lower (more sane) values.
+    pub fn preset_avformat_rtsp_transport_tcp() -> Self {
+        let mut opts = HashMap::new();
+        opts.insert("rtsp_transport".to_string(), "tcp".to_string());
+        // These can't be too low
+        // because ffmpeg takes its sweet time when connecting to RTSP sources sometimes.
+        opts.insert("rw_timeout".to_string(), "16000000".to_string());
+        opts.insert("stimeout".to_string(), "16000000".to_string());
 
-        Self(opts)
+        // HashMap<String, String> -> Options
+        opts.into()
     }
 
     /// Creates options such that ffmpeg is instructed to fragment output and mux to fragmented mp4
@@ -56,7 +39,7 @@ impl Options {
     /// This modifies the `movflags` key to supported fragmented output. The muxer output will not
     /// have a header and each packet contains enough metadata to be streamed without the header.
     /// Muxer output should be compatiable with MSE.
-    pub fn preset_fragmented_mov() -> Self {
+    pub fn preset_avformat_fragmented_mov() -> Self {
         let opts = AVDictionary::new(
             &utils::from_str("movflags"),
             &utils::from_str("faststart+frag_keyframe+frag_custom+empty_moov+omit_tfhd_offset"),
@@ -66,7 +49,7 @@ impl Options {
         Self(opts)
     }
 
-    /// Default options for a libx264 encoder.
+    /// Default avcodec options for a libx264 encoder.
     pub fn preset_h264() -> Self {
         let mut opts = HashMap::new();
         // ultrafast,superfast,veryfast,faster,fast,medium,slow,slower,veryslow,placebo
@@ -187,13 +170,9 @@ impl From<HashMap<String, String>> for Options {
     }
 }
 
-impl From<Options> for HashMap<String, String> {
-    /// Converts from `Options` to `HashMap`.
-    ///
-    /// # Arguments
-    ///
-    /// * `item` - Item to convert from.
-    fn from(item: Options) -> Self {
+/// Converts from `&Options` to `HashMap`.
+impl From<&Options> for HashMap<String, String> {
+    fn from(item: &Options) -> Self {
         item.0
             .into_iter()
             .map(|entry| {
@@ -206,5 +185,40 @@ impl From<Options> for HashMap<String, String> {
     }
 }
 
+impl From<Options> for HashMap<String, String> {
+    /// Converts from `Options` to `HashMap`.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - Item to convert from.
+    fn from(item: Options) -> Self {
+        (&item).into()
+    }
+}
+
+impl std::fmt::Debug for Options {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let dict: HashMap<String, String> = self.into();
+        write!(f, "{:?}", dict)
+    }
+}
+
+impl std::fmt::Display for Options {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
 unsafe impl Send for Options {}
 unsafe impl Sync for Options {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_options_debug() {
+        let opts = Options::preset_h264_realtime();
+        println!("{:?}", opts);
+    }
+}

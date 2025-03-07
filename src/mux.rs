@@ -201,7 +201,7 @@ unsafe impl<W: Writer> Sync for Muxer<W> {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::{self, BufferWriterBuilder, PacketizedBufWriterBuilder, StreamWriter};
+    use crate::io::{self, BufferWriterBuilder, PacketizedBufWriterBuilder, StreamWriterBuilder};
     use crate::{Rational, Time};
     use std::collections::HashMap;
     use std::path::Path;
@@ -210,7 +210,10 @@ mod tests {
     #[ignore = "test_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_muxer() {
         let mut reader = Reader::new(Path::new("/tmp/bear.mp4")).unwrap();
-        let writer = StreamWriter::new(Path::new("/tmp/bear.mov")).unwrap();
+        let writer = StreamWriterBuilder::new(Path::new("/tmp/bear.mov"))
+            .with_format("mov")
+            .build()
+            .unwrap();
 
         let mut muxer = MuxerBuilder::new(writer)
             .with_streams(&reader)

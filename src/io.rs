@@ -73,6 +73,21 @@ impl<'a> ReaderBuilder<'a> {
 
     /// Build [`Reader`].
     pub fn build(self) -> Result<Reader> {
+        let src_path = self.source.as_path().to_str().unwrap();
+        let protocol =
+            unsafe { ffi::avio_find_protocol_name(utils::to_cstr(src_path) as *const _) };
+        if protocol.is_null() {
+            return Err(Error::msg(format!(
+                "Unsupported input source protocol: {}",
+                src_path
+            )));
+        }
+        log::debug!(
+            "Using input protocol: [{}], source: {}",
+            unsafe { utils::from_cstr(protocol) },
+            src_path
+        );
+
         match self.options {
             None => Ok(Reader {
                 input: Self::input(&self.source.as_path(), self.format)?,

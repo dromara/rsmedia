@@ -19,6 +19,8 @@ pub struct DecoderBuilder<'a> {
     source: Location,
     resize: Option<Resize>,
     codec_name: Option<String>,
+    /// container format
+    format: Option<&'a str>,
     options: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
 }
@@ -31,6 +33,7 @@ impl<'a> DecoderBuilder<'a> {
         Self {
             source: source.into(),
             resize: None,
+            format: None,
             options: None,
             codec_name: None,
             hw_device_type: None,
@@ -41,6 +44,12 @@ impl<'a> DecoderBuilder<'a> {
     /// If not set, the decoder will try to guess the codec based on the input.
     pub fn with_codec_name(mut self, codec_name: String) -> Self {
         self.codec_name = Some(codec_name);
+        self
+    }
+
+    /// Set the container format.
+    pub fn with_format(mut self, format: &'a str) -> Self {
+        self.format = Some(format);
         self
     }
 
@@ -73,6 +82,9 @@ impl<'a> DecoderBuilder<'a> {
         let mut reader_builder = ReaderBuilder::new(self.source);
         if let Some(opts) = self.options {
             reader_builder = reader_builder.with_options(opts);
+        }
+        if let Some(format) = self.format {
+            reader_builder = reader_builder.with_format(format);
         }
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;

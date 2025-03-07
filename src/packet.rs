@@ -320,7 +320,8 @@ impl Clone for Packet {
     fn clone_from(&mut self, source: &Self) {
         unsafe {
             let pkt = ffi::av_packet_clone(source.inner.as_ptr());
-            self.inner.set_ptr(std::ptr::NonNull::new(pkt).unwrap())
+            self.inner.set_ptr(std::ptr::NonNull::new(pkt).unwrap());
+            self.time_base = source.time_base;
         }
     }
 }

@@ -18,10 +18,11 @@ use rsmpeg::ffi;
 pub struct DecoderBuilder<'a> {
     source: Location,
     resize: Option<Resize>,
-    codec_name: Option<String>,
     /// container format
     format: Option<&'a str>,
-    options: Option<&'a Options>,
+    format_opts: Option<&'a Options>,
+    codec_name: Option<String>,
+    codec_opts: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
@@ -34,8 +35,9 @@ impl<'a> DecoderBuilder<'a> {
             source: source.into(),
             resize: None,
             format: None,
-            options: None,
+            format_opts: None,
             codec_name: None,
+            codec_opts: None,
             hw_device_type: None,
         }
     }
@@ -56,8 +58,13 @@ impl<'a> DecoderBuilder<'a> {
     /// Set custom options. Options are applied to the input.
     ///
     /// * `options` - Custom options.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
-        self.options = Some(options);
+    pub fn with_format_options(mut self, options: &'a Options) -> Self {
+        self.format_opts = Some(options);
+        self
+    }
+
+    pub fn with_codec_options(mut self, options: &'a Options) -> Self {
+        self.codec_opts = Some(options);
         self
     }
 
@@ -80,11 +87,11 @@ impl<'a> DecoderBuilder<'a> {
     /// Build [`Decoder`].
     pub fn build(self) -> Result<Decoder> {
         let mut reader_builder = ReaderBuilder::new(self.source);
-        if let Some(opts) = self.options {
-            reader_builder = reader_builder.with_options(opts);
-        }
         if let Some(format) = self.format {
             reader_builder = reader_builder.with_format(format);
+        }
+        if let Some(opts) = self.format_opts {
+            reader_builder = reader_builder.with_options(opts);
         }
         let reader = reader_builder.build().unwrap();
         let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
@@ -106,7 +113,7 @@ impl<'a> DecoderBuilder<'a> {
                 &reader,
                 video_stream_index,
                 codec,
-                self.options,
+                self.codec_opts,
                 self.resize,
                 self.hw_device_type,
             )?,
@@ -407,7 +414,7 @@ impl DecoderSplit {
         reader: &Reader,
         stream_index: usize,
         codec: AVCodecRef,
-        options: Option<&Options>,
+        opts: Option<&Options>,
         resize: Option<Resize>,
         hw_device_type: Option<HWDeviceType>,
     ) -> Result<Self> {
@@ -441,7 +448,7 @@ impl DecoderSplit {
             None => None,
         };
 
-        let dict = options.map(|options| options.to_dict());
+        let dict = opts.map(|options| options.to_dict());
         decode_ctx
             .open(dict)
             .context("Failed to open decoder for stream")?;

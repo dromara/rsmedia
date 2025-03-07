@@ -23,6 +23,8 @@ use libc::{c_int, c_uint};
 pub struct EncoderBuilder<'a> {
     width: i32,
     height: i32,
+    destination: Location,
+    pixel_format: PixelFormat,
     bit_rate: i64,
     gop_size: i32,
     interleaved: bool,
@@ -31,12 +33,11 @@ pub struct EncoderBuilder<'a> {
     max_b_frames: i32,
     thread_count: i32,
     keyframe_interval: u64,
-    pixel_format: PixelFormat,
-    destination: Location,
     /// container format
     format: Option<&'a str>,
+    format_opts: Option<&'a Options>,
     codec_name: Option<String>,
-    options: Option<&'a Options>,
+    codec_opts: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
@@ -75,8 +76,9 @@ impl<'a> EncoderBuilder<'a> {
             destination: destination.into(),
             pixel_format: PixelFormat::YUV420P,
             format: None,
-            options: None,
+            format_opts: None,
             codec_name: None,
+            codec_opts: None,
             hw_device_type: None,
             max_b_frames: 0,
             thread_count: 0,
@@ -143,8 +145,13 @@ impl<'a> EncoderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - The output options.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
-        self.options = Some(options);
+    pub fn with_format_options(mut self, options: &'a Options) -> Self {
+        self.format_opts = Some(options);
+        self
+    }
+
+    pub fn with_codec_options(mut self, options: &'a Options) -> Self {
+        self.codec_opts = Some(options);
         self
     }
 
@@ -231,7 +238,7 @@ impl<'a> EncoderBuilder<'a> {
             None => None,
         };
 
-        let dict = self.options.map(|options| options.to_dict());
+        let dict = self.codec_opts.map(|options| options.to_dict());
         encode_ctx
             .open(dict)
             .context("Failed to open encode context")?;
@@ -303,11 +310,11 @@ impl<'a> EncoderBuilder<'a> {
     /// Build an [`Encoder`].
     pub fn build(self) -> Result<Encoder> {
         let mut writer_builder = StreamWriterBuilder::new(self.destination.clone());
-        if let Some(opts) = self.options {
-            writer_builder = writer_builder.with_options(opts);
-        }
         if let Some(format) = self.format {
             writer_builder = writer_builder.with_format(format);
+        }
+        if let Some(opts) = self.format_opts {
+            writer_builder = writer_builder.with_options(opts);
         }
         self.build_from_writer(writer_builder.build()?)
     }

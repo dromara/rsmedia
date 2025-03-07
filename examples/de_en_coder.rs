@@ -17,8 +17,8 @@ fn main() {
         .with_format("mp4")
         .with_frame_rate(24)
         .with_codec_name("h264_nvenc".to_string())
+        .with_codec_options(&Options::preset_h264_nvenc())
         .with_hardware_device(HWDeviceType::CUDA)
-        .with_options(&Options::preset_h264_nvenc())
         .build()
         .expect("failed to create encoder");
 

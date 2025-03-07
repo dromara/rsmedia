@@ -303,8 +303,8 @@ impl<'a> EncoderBuilder<'a> {
     /// Build an [`Encoder`].
     pub fn build(self) -> Result<Encoder> {
         let mut writer_builder = StreamWriterBuilder::new(self.destination.clone());
-        if let Some(options) = self.options {
-            writer_builder = writer_builder.with_options(options);
+        if let Some(opts) = self.options {
+            writer_builder = writer_builder.with_options(opts);
         }
         if let Some(format) = self.format {
             writer_builder = writer_builder.with_format(format);

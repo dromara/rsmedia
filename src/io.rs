@@ -33,6 +33,7 @@ use std::ptr;
 /// ```
 pub struct ReaderBuilder<'a> {
     source: Location,
+    format: Option<&'a str>,
     options: Option<&'a Options>,
 }
 
@@ -45,8 +46,19 @@ impl<'a> ReaderBuilder<'a> {
     pub fn new(source: impl Into<Location>) -> Self {
         Self {
             source: source.into(),
+            format: None,
             options: None,
         }
+    }
+
+    /// Specify a custom format for the reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `format` - Container format to use.
+    pub fn with_format(mut self, format: &'a str) -> Self {
+        self.format = Some(format);
+        self
     }
 
     /// Specify options for the backend.
@@ -63,12 +75,13 @@ impl<'a> ReaderBuilder<'a> {
     pub fn build(self) -> Result<Reader> {
         match self.options {
             None => Ok(Reader {
-                input: Self::input(&self.source.as_path())?,
+                input: Self::input(&self.source.as_path(), self.format)?,
                 source: self.source,
             }),
             Some(options) => Ok(Reader {
                 input: Self::input_with_dictionary(
                     &self.source.as_path(),
+                    self.format,
                     &mut Some(options.to_dict()),
                 )?,
                 source: self.source,
@@ -76,11 +89,14 @@ impl<'a> ReaderBuilder<'a> {
         }
     }
 
-    pub fn input<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextInput> {
+    pub fn input<P: AsRef<Path> + ?Sized>(
+        path: &P,
+        format: Option<&str>,
+    ) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
-        let format_opt = AVInputFormat::find(&path);
+        let input_fmt_opt = format.and_then(|str| AVInputFormat::find(&utils::from_str(str)));
         let mut avformat_ctx_input =
-            AVFormatContextInput::open(&path, format_opt.as_deref(), &mut None)
+            AVFormatContextInput::open(&path, input_fmt_opt.as_deref(), &mut None)
                 .context("Create input format context failed.")?;
         avformat_ctx_input
             .dump(0, &path)
@@ -90,12 +106,13 @@ impl<'a> ReaderBuilder<'a> {
 
     pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
         path: &P,
+        format: Option<&str>,
         options: &mut Option<AVDictionary>,
     ) -> Result<AVFormatContextInput> {
         let path = utils::from_path(path);
-        let format_opt = AVInputFormat::find(&path);
+        let input_fmt_opt = format.and_then(|str| AVInputFormat::find(&utils::from_str(str)));
         let mut avformat_ctx_input =
-            AVFormatContextInput::open(&path, format_opt.as_deref(), options)
+            AVFormatContextInput::open(&path, input_fmt_opt.as_deref(), options)
                 .context("Create input format context failed.")?;
         avformat_ctx_input
             .dump(0, &path)

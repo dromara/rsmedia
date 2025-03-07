@@ -35,7 +35,7 @@ cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"
 pix = "0.13"
-yuvutils-rs = "0.7"
+yuvutils-rs = "0.8"
 colorutils-rs = "0.7"
 tokio = { version = "1", features = ["full"] }
 

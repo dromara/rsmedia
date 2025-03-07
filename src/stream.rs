@@ -1,6 +1,6 @@
 use crate::io::{Reader, Writer};
 use crate::packet::Packet;
-use crate::{utils, Rational};
+use crate::{utils, Options, Rational};
 
 use rsmpeg::avcodec::AVCodecParametersRef;
 use rsmpeg::avformat::{AVInputFormat, AVInputFormatRef, AVStream, AVStreamRef};
@@ -9,39 +9,82 @@ use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
 use libc::c_int;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
-#[derive(Debug, Clone)]
+// #[derive(Debug, Clone)]
 pub struct StreamInfo {
     /// Stream index
     pub index: usize,
-    /// Stream type video/audio/subtitle
-    pub stream_type: String,
+    /// Media type video/audio/subtitle
+    pub media_type: AVMediaType,
     /// Stream codec
     pub codec: isize,
     /// Pixel format / Sample format
-    pub format: isize,
+    pub format: i32,
     /// time_base
     pub time_base: Rational,
+    /// Stream Duration
+    pub duration: i64,
+    /// Start time
+    pub start_time: i64,
+    /// Number of frames
+    pub nb_frames: i64,
+    // Video parameters
     /// Video width
-    pub width: usize,
+    pub width: i32,
     /// Video height
-    pub height: usize,
+    pub height: i32,
     /// Video bit_rate
     pub bit_rate: i64,
-    /// Audio sample rate
-    pub sample_rate: isize,
+    /// Video frame rate FPS
+    pub frame_rate: f32,
+    pub avg_frame_rate: f32,
+    pub real_frame_rate: f32,
     /// video_delay
     pub video_delay: i32,
-    /// Video FPS
-    pub avg_frame_rate: f32,
-    /// Video frame rate
-    pub frame_rate: f32,
-    /// Codec parameters
+    /// Video GOP size
+    pub gop_size: i32,
+    /// Video has B frames
+    pub has_b_frames: i32,
+    /// Video sample aspect ratio
+    pub sample_aspect_ratio: Rational,
+    /// Display aspect ratio
+    pub display_aspect_ratio: Rational,
+    /// Video color space, eg: ffi::AVCOL_SPC_*
+    pub color_space: usize,
+    /// Video color range, eg: ffi::AVCOL_RANGE_*
+    pub color_range: usize,
+    /// Video color primaries, eg: ffi::AVCOL_PRI_*
+    pub color_primaries: usize,
+    /// Video color transfer, eg: ffi::AVCOL_TRC_*
+    pub color_transfer: usize,
+    /// Video field order
+    pub field_order: usize,
+    /// Video profile
+    pub profile: i32,
+    /// Video level, eg. 3.1, 4.1 etc.
+    pub level: i32,
+    /// Video rotation
+    pub rotation: f64,
+    // Audio parameters
+    /// Audio sample rate
+    pub sample_rate: i32,
+    /// Audio number of channels
+    pub channels: i32,
+    /// Audio channel layout
+    pub channel_layout: usize,
+    /// Audio frame size
+    pub frame_size: i32,
+    /// Audio block align
+    pub block_align: i32,
+    // extra
+    pub extra_data: Option<Vec<u8>>,
+    pub metadata: HashMap<String, String>,
     pub codec_parameters: NonNull<ffi::AVCodecParameters>,
 }
 
@@ -78,49 +121,55 @@ impl StreamInfo {
         Self::from_stream(stream)
     }
 
-    pub fn from_stream(av_stream: &AVStream) -> Result<Self> {
-        unsafe {
-            let stream = av_stream.deref();
-            let media_type = {
-                let media = AVMediaType((*stream.codecpar).codec_type);
-                if media.is_video() {
-                    "video"
-                } else if media.is_audio() {
-                    "audio"
-                } else if media.is_subtitle() {
-                    "subtitle"
-                } else if media.is_data() {
-                    "data"
-                } else {
-                    "unknown"
-                }
-            };
-            let codec = (*stream.codecpar).codec_id;
-            let pix_fmt = (*stream.codecpar).format;
-            let width = (*stream.codecpar).width;
-            let height = (*stream.codecpar).height;
-            let bit_rate = (*stream.codecpar).bit_rate;
-            let video_delay = (*stream.codecpar).video_delay;
-            let sample_rate = (*stream.codecpar).sample_rate;
-            let framerate = ffi::av_q2d((*stream.codecpar).framerate);
-            let avg_frame_rate = ffi::av_q2d(stream.avg_frame_rate);
+    pub fn from_stream(stream: &AVStream) -> Result<Self> {
+        let codecpar = stream.codecpar();
+        Ok(Self {
+            index: stream.index as usize,
+            media_type: codecpar.codec_type(),
+            codec: codecpar.codec_id as isize,
+            format: codecpar.format,
+            time_base: stream.time_base.into(),
+            duration: stream.duration,
+            start_time: stream.start_time,
+            nb_frames: stream.nb_frames,
+            // Video
+            width: codecpar.width,
+            height: codecpar.height,
+            bit_rate: codecpar.bit_rate,
+            frame_rate: ffi::av_q2d(codecpar.framerate) as f32,
+            avg_frame_rate: ffi::av_q2d(stream.avg_frame_rate) as f32,
+            real_frame_rate: ffi::av_q2d(stream.r_frame_rate) as f32,
+            video_delay: codecpar.video_delay,
+            gop_size: 0,
+            has_b_frames: 0,
+            sample_aspect_ratio: codecpar.sample_aspect_ratio.into(),
+            display_aspect_ratio: stream.sample_aspect_ratio.into(),
+            color_space: codecpar.color_space as usize,
+            color_range: codecpar.color_range as usize,
+            color_primaries: codecpar.color_primaries as usize,
+            color_transfer: codecpar.color_trc as usize,
+            field_order: codecpar.field_order as usize,
+            profile: codecpar.profile,
+            level: codecpar.level,
+            rotation: Self::display_rotation(stream),
+            // Audio
+            sample_rate: codecpar.sample_rate,
+            channels: codecpar.ch_layout.nb_channels,
+            channel_layout: codecpar.ch_layout.order as usize,
+            frame_size: codecpar.frame_size,
+            block_align: codecpar.block_align,
+            // extra
+            extra_data: None,
+            metadata: stream
+                .metadata()
+                .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into()),
+            codec_parameters: NonNull::new(stream.codecpar).unwrap(),
+        })
+    }
 
-            Ok(Self {
-                index: stream.index as usize,
-                stream_type: media_type.to_string(),
-                codec: codec as isize,
-                format: pix_fmt as isize,
-                time_base: stream.time_base.into(),
-                width: width as usize,
-                height: height as usize,
-                bit_rate,
-                video_delay,
-                sample_rate: sample_rate as isize,
-                avg_frame_rate: avg_frame_rate as f32,
-                frame_rate: framerate as f32,
-                codec_parameters: NonNull::new(stream.codecpar).unwrap(),
-            })
-        }
+    fn display_rotation(_stream: &AVStream) -> f64 {
+        // TODO: ffi::av_display_rotation_get
+        0.0f64
     }
 
     /// Turn information back into parts for usage.
@@ -147,18 +196,29 @@ impl std::fmt::Display for StreamInfo {
             )))
         };
         let pix_fmt = unsafe {
-            if self.stream_type.eq_ignore_ascii_case("video") {
+            if self.media_type.is_video() {
                 utils::from_cstr(ffi::av_get_pix_fmt_name(self.format as c_int))
-            } else if self.stream_type.eq_ignore_ascii_case("audio") {
+            } else if self.media_type.is_audio() {
                 utils::from_cstr(ffi::av_get_sample_fmt_name(self.format as c_int))
             } else {
                 "unknown".to_string()
             }
         };
+        let stream_type = if self.media_type.is_video() {
+            "video"
+        } else if self.media_type.is_audio() {
+            "audio"
+        } else if self.media_type.is_data() {
+            "data"
+        } else if self.media_type.is_subtitle() {
+            "subtitle"
+        } else {
+            "unknown"
+        };
         write!(
             f,
             "{} #{}: codec={}, pix_fmt={}, size={}x{}, bit_rate={}, fps={:.3}, frame_rate={:.3}, video_delay={}",
-            self.stream_type,
+            stream_type,
             self.index,
             codec_name,
             pix_fmt,
@@ -169,6 +229,12 @@ impl std::fmt::Display for StreamInfo {
             self.frame_rate,
             self.video_delay
         )
+    }
+}
+
+impl std::fmt::Debug for StreamInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
     }
 }
 

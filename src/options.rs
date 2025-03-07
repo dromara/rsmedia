@@ -15,6 +15,10 @@ use std::collections::HashMap;
 pub struct Options(AVDictionary);
 
 impl Options {
+    pub fn new(dict: AVDictionary) -> Self {
+        Self(dict)
+    }
+
     /// Creates options such that ffmpeg will prefer TCP transport when reading RTSP stream (over
     /// the default UDP format). It also adds some options to reduce the socket and I/O timeouts to
     /// 4 seconds.

@@ -262,16 +262,11 @@ impl std::fmt::Display for StreamInfo {
                 "unknown".to_string()
             }
         };
-        let stream_type = if self.media_type.is_video() {
-            "video"
-        } else if self.media_type.is_audio() {
-            "audio"
-        } else if self.media_type.is_data() {
-            "data"
-        } else if self.media_type.is_subtitle() {
-            "subtitle"
-        } else {
-            "unknown"
+        let stream_type = {
+            let unknown = utils::from_str("unknown");
+            let media_type_str =
+                rsmpeg::avutil::get_media_type_string(self.media_type.0).unwrap_or(&unknown);
+            utils::to_string(media_type_str)
         };
         write!(
             f,
@@ -400,11 +395,12 @@ impl StreamSideData<'_> {
         unsafe { ffi::AVPacketSideDataType::from((*self.as_ptr()).type_) }
     }
 
+    pub fn size(&self) -> usize {
+        unsafe { (*self.as_ptr()).size }
+    }
+
     pub fn data(&self) -> &[u8] {
-        #[allow(clippy::unnecessary_cast)]
-        unsafe {
-            std::slice::from_raw_parts((*self.as_ptr()).data, (*self.as_ptr()).size as usize)
-        }
+        unsafe { std::slice::from_raw_parts((*self.as_ptr()).data, (*self.as_ptr()).size) }
     }
 }
 
@@ -427,7 +423,9 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if self.current >= self.stream.av_stream.nb_side_data {
+            if self.current >= self.stream.av_stream.nb_side_data
+                || self.stream.av_stream.side_data.is_null()
+            {
                 return None;
             }
 

@@ -3,15 +3,14 @@ use crate::packet::Packet;
 use crate::{utils, Options, Rational};
 
 use rsmpeg::avcodec::AVCodecParametersRef;
-use rsmpeg::avformat::{AVInputFormat, AVInputFormatRef, AVStream, AVStreamRef};
-use rsmpeg::avutil::{AVDictionary, AVDictionaryRef, AVMediaType};
+use rsmpeg::avformat::AVStream;
+use rsmpeg::avutil::{AVDictionaryRef, AVMediaType};
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
 use libc::c_int;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::ptr::NonNull;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
@@ -241,7 +240,84 @@ impl std::fmt::Debug for StreamInfo {
 unsafe impl Send for StreamInfo {}
 unsafe impl Sync for StreamInfo {}
 
-/////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+
+pub struct Stream<'a> {
+    av_stream: &'a AVStream,
+}
+
+impl<'a> Stream<'a> {
+    pub fn wrap(av_stream: &'a AVStream) -> Stream<'a> {
+        Stream { av_stream }
+    }
+}
+
+impl Stream<'_> {
+    pub fn id(&self) -> i32 {
+        self.av_stream.id
+    }
+
+    pub fn index(&self) -> usize {
+        self.av_stream.index as usize
+    }
+
+    pub fn time_base(&self) -> Rational {
+        Rational::from(self.av_stream.time_base)
+    }
+
+    pub fn start_time(&self) -> i64 {
+        self.av_stream.start_time
+    }
+
+    pub fn duration(&self) -> i64 {
+        self.av_stream.duration
+    }
+
+    pub fn nb_frames(&self) -> i64 {
+        self.av_stream.nb_frames
+    }
+
+    pub fn disposition(&self) -> i32 {
+        self.av_stream.disposition
+    }
+
+    pub fn discard(&self) -> ffi::AVDiscard {
+        self.av_stream.discard
+    }
+
+    pub fn side_data(&self) -> StreamSideDataIter {
+        StreamSideDataIter::new(self)
+    }
+
+    pub fn r_frame_rate(&self) -> Rational {
+        self.av_stream.r_frame_rate.into()
+    }
+
+    pub fn avg_frame_rate(&self) -> Rational {
+        self.av_stream.avg_frame_rate.into()
+    }
+
+    pub fn parameters(&self) -> AVCodecParametersRef {
+        self.av_stream.codecpar()
+    }
+
+    pub fn metadata(&self) -> Option<AVDictionaryRef> {
+        self.av_stream.metadata()
+    }
+}
+
+impl PartialEq for Stream<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.av_stream.as_ptr() == other.av_stream.as_ptr()
+    }
+}
+
+impl Eq for Stream<'_> {}
+
+/////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////
+
 pub struct StreamSideData<'a> {
     ptr: *mut ffi::AVPacketSideData,
     _marker: PhantomData<&'a Packet>,
@@ -273,97 +349,8 @@ impl StreamSideData<'_> {
     }
 }
 
-////////////////////////////////////////
-// #[derive(Debug)]
-pub struct Stream<'a> {
-    stream_ref: &'a AVStreamRef<'a>,
-    iformat: AVInputFormatRef<'a>,
-    ctx_metadata: Option<AVDictionaryRef<'a>>,
-}
-
-impl<'a> Stream<'a> {
-    pub fn wrap(
-        stream_ref: &'a AVStreamRef<'a>,
-        iformat: AVInputFormatRef<'a>,
-        ctx_metadata: Option<AVDictionaryRef<'a>>,
-    ) -> Stream<'a> {
-        Stream {
-            stream_ref,
-            iformat,
-            ctx_metadata,
-        }
-    }
-
-    pub fn iformat(&self) -> &AVInputFormat {
-        self.iformat.deref()
-    }
-
-    pub fn ctx_metadata(&self) -> Option<&AVDictionary> {
-        self.ctx_metadata.as_deref()
-    }
-}
-
-impl Stream<'_> {
-    pub fn id(&self) -> i32 {
-        self.stream_ref.id
-    }
-
-    pub fn index(&self) -> usize {
-        self.stream_ref.index as usize
-    }
-
-    pub fn time_base(&self) -> Rational {
-        Rational::from(self.stream_ref.time_base)
-    }
-
-    pub fn start_time(&self) -> i64 {
-        self.stream_ref.start_time
-    }
-
-    pub fn duration(&self) -> i64 {
-        self.stream_ref.duration
-    }
-
-    pub fn nb_frames(&self) -> i64 {
-        self.stream_ref.nb_frames
-    }
-
-    pub fn disposition(&self) -> i32 {
-        self.stream_ref.disposition
-    }
-
-    pub fn discard(&self) -> ffi::AVDiscard {
-        self.stream_ref.discard
-    }
-
-    pub fn side_data(&self) -> StreamSideDataIter {
-        StreamSideDataIter::new(self)
-    }
-
-    pub fn r_frame_rate(&self) -> Rational {
-        self.stream_ref.r_frame_rate.into()
-    }
-
-    pub fn avg_frame_rate(&self) -> Rational {
-        self.stream_ref.avg_frame_rate.into()
-    }
-
-    pub fn parameters(&self) -> AVCodecParametersRef {
-        self.stream_ref.codecpar()
-    }
-
-    pub fn metadata(&self) -> Option<AVDictionaryRef> {
-        self.stream_ref.metadata()
-    }
-}
-
-impl PartialEq for Stream<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.stream_ref.as_ptr() == other.stream_ref.as_ptr()
-    }
-}
-
-impl Eq for Stream<'_> {}
+/////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////
 
 pub struct StreamSideDataIter<'a> {
     stream: &'a Stream<'a>,
@@ -381,7 +368,7 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if self.current >= self.stream.stream_ref.nb_side_data {
+            if self.current >= self.stream.av_stream.nb_side_data {
                 return None;
             }
 
@@ -389,7 +376,7 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
 
             Some(StreamSideData::wrap(
                 self.stream
-                    .stream_ref
+                    .av_stream
                     .side_data
                     .offset((self.current - 1) as isize),
             ))
@@ -397,7 +384,7 @@ impl<'a> Iterator for StreamSideDataIter<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let length = self.stream.stream_ref.nb_side_data as usize;
+        let length = self.stream.av_stream.nb_side_data as usize;
         (
             length - self.current as usize,
             Some(length - self.current as usize),

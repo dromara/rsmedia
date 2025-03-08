@@ -171,48 +171,43 @@ impl Reader {
     pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
         loop {
             match self.read_packet() {
-                Some(pkt_res) => match pkt_res {
-                    Ok((stream, packet)) => {
-                        if stream.index() == stream_index {
-                            return Ok(Packet::new(packet, stream.time_base()));
-                        }
-                        log::debug!("Skipping packet from stream: {}", stream.index());
+                Ok(Some((stream, packet))) => {
+                    if stream.index() == stream_index {
+                        return Ok(Packet::new(packet, stream.time_base()));
                     }
-                    Err(e) => {
-                        log::error!("Error reading packet: {}", e);
-                        return Err(e);
-                    }
-                },
-                None => return Err(Error::msg("No more packets")),
+                    log::debug!("Skipping packet from stream: {}", stream.index());
+                }
+                Ok(None) => return Err(Error::msg("No more packets")),
+                Err(e) => {
+                    log::error!("Error reading packet: {}", e);
+                    return Err(e);
+                }
             }
         }
     }
 
     pub fn read_any(&mut self) -> Result<Packet> {
         match self.read_packet() {
-            Some(pkt_res) => match pkt_res {
-                Ok((stream, packet)) => Ok(Packet::new(packet, stream.time_base())),
-                Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    Err(e)
-                }
-            },
-            None => Err(Error::msg("No more packets")),
+            Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
+            Ok(None) => Err(Error::msg("No more packets")),
+            Err(e) => {
+                log::error!("Error reading packet: {}", e);
+                Err(e)
+            }
         }
     }
 
-    pub fn read_packet(&mut self) -> Option<Result<(Stream, Packet)>> {
+    pub fn read_packet(&mut self) -> Result<Option<(Stream, Packet)>> {
         match self.input.read_packet() {
             Ok(Some(pkt)) => {
-                let stream = Stream::wrap(
-                    self.input.streams().get(pkt.stream_index as usize).unwrap(),
-                    self.input.iformat(),
-                    self.input.metadata(),
-                );
-                Some(Ok((stream, Packet::new_with_avpacket(pkt))))
+                let av_stream = self.input.streams().get(pkt.stream_index as usize).unwrap();
+                Ok(Some((
+                    Stream::wrap(av_stream),
+                    Packet::new_with_avpacket(pkt),
+                )))
             }
-            Ok(None) => None,
-            Err(e) => Some(Err(Error::new(e))),
+            Ok(None) => Ok(None),
+            Err(e) => Err(Error::new(e)),
         }
     }
 

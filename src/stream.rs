@@ -17,12 +17,16 @@ use std::ptr::NonNull;
 /// purpose of transmuxing or transcoding.
 // #[derive(Debug, Clone)]
 pub struct StreamInfo {
+    /// id
+    pub id: i32,
     /// Stream index
     pub index: usize,
     /// Media type video/audio/subtitle
     pub media_type: AVMediaType,
     /// Stream codec
     pub codec: isize,
+    /// Codec Additional Info
+    pub codec_tag: u32,
     /// Pixel format / Sample format
     pub format: i32,
     /// time_base
@@ -33,6 +37,14 @@ pub struct StreamInfo {
     pub start_time: i64,
     /// Number of frames
     pub nb_frames: i64,
+    /// combination of AV_DISPOSITION_*
+    pub disposition: i32,
+    /// discard of AVDISCARD_*
+    pub discard: i32,
+    /// codec profile
+    pub profile: i32,
+    /// codec level, eg. 3.1, 4.1 etc.
+    pub level: i32,
     // Video parameters
     /// Video width
     pub width: i32,
@@ -64,10 +76,6 @@ pub struct StreamInfo {
     pub color_transfer: usize,
     /// Video field order
     pub field_order: usize,
-    /// Video profile
-    pub profile: i32,
-    /// Video level, eg. 3.1, 4.1 etc.
-    pub level: i32,
     /// Video rotation
     pub rotation: f64,
     // Audio parameters
@@ -122,15 +130,24 @@ impl StreamInfo {
 
     pub fn from_stream(stream: &AVStream) -> Result<Self> {
         let codecpar = stream.codecpar();
+        let metadata = stream
+            .metadata()
+            .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into());
         Ok(Self {
+            id: stream.id,
             index: stream.index as usize,
             media_type: codecpar.codec_type(),
             codec: codecpar.codec_id as isize,
+            codec_tag: codecpar.codec_tag,
             format: codecpar.format,
             time_base: stream.time_base.into(),
             duration: stream.duration,
             start_time: stream.start_time,
             nb_frames: stream.nb_frames,
+            disposition: stream.disposition,
+            discard: stream.discard,
+            profile: codecpar.profile,
+            level: codecpar.level,
             // Video
             width: codecpar.width,
             height: codecpar.height,
@@ -148,9 +165,7 @@ impl StreamInfo {
             color_primaries: codecpar.color_primaries as usize,
             color_transfer: codecpar.color_trc as usize,
             field_order: codecpar.field_order as usize,
-            profile: codecpar.profile,
-            level: codecpar.level,
-            rotation: Self::display_rotation(stream),
+            rotation: Self::get_stream_rotation_angle(stream, &metadata),
             // Audio
             sample_rate: codecpar.sample_rate,
             channels: codecpar.ch_layout.nb_channels,
@@ -158,17 +173,61 @@ impl StreamInfo {
             frame_size: codecpar.frame_size,
             block_align: codecpar.block_align,
             // extra
-            extra_data: None,
-            metadata: stream
-                .metadata()
-                .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into()),
+            metadata,
+            extra_data: Self::get_extra_data(stream),
             codec_parameters: NonNull::new(stream.codecpar).unwrap(),
         })
     }
 
-    fn display_rotation(_stream: &AVStream) -> f64 {
-        // TODO: ffi::av_display_rotation_get
-        0.0f64
+    fn get_stream_rotation_angle(stream: &AVStream, map: &HashMap<String, String>) -> f64 {
+        fn get_rotation_from_metadata(map: &HashMap<String, String>) -> f64 {
+            if let Some(value) = map.get("rotate") {
+                value.parse::<f64>().unwrap_or(0.0)
+            } else {
+                0.0
+            }
+        }
+
+        unsafe fn get_rotation_from_side_data(stream: &AVStream) -> f64 {
+            for i in 0..stream.nb_side_data {
+                let side_data = stream.side_data.offset(i as isize);
+                if (*side_data).type_ == ffi::AV_PKT_DATA_DISPLAYMATRIX {
+                    let matrix = unsafe {
+                        std::slice::from_raw_parts(
+                            (*side_data).data as *const i32,
+                            (*side_data).size,
+                        )
+                    };
+
+                    let rotation = unsafe { ffi::av_display_rotation_get(matrix.as_ptr()) };
+
+                    // av_display_rotation_get 返回的是顺时针角度，我们需要转换为逆时针
+                    return -rotation;
+                }
+            }
+            0.0
+        }
+
+        let rotation = unsafe { get_rotation_from_side_data(stream) };
+        if rotation != 0.0 {
+            return rotation;
+        }
+        get_rotation_from_metadata(map)
+    }
+
+    fn get_extra_data(stream: &AVStream) -> Option<Vec<u8>> {
+        let codecpar = stream.codecpar();
+        if codecpar.extradata_size > 0 && !codecpar.extradata.is_null() {
+            let extra_data = unsafe {
+                std::slice::from_raw_parts(
+                    codecpar.extradata as *const _,
+                    codecpar.extradata_size as usize,
+                )
+            };
+            Some(extra_data.to_vec())
+        } else {
+            None
+        }
     }
 
     /// Turn information back into parts for usage.
@@ -309,7 +368,7 @@ impl Stream<'_> {
 
 impl PartialEq for Stream<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.av_stream.as_ptr() == other.av_stream.as_ptr()
+        self.av_stream.id == other.av_stream.id
     }
 }
 

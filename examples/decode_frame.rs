@@ -15,8 +15,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // let source = std::path::Path::new("rainbow.mp4");
 
     let mut decoder = DecoderBuilder::new(source)
-        // .with_codec_name("h264_cuvid".to_string())
+        // use hwaccel cuda
         // .with_hardware_device(HWDeviceType::CUDA)
+        // .with_codec_name("h264_cuvid".to_string())
         .with_resize(Resize::Fit(1280, 720))
         .build()
         .context("failed to create decoder")?;

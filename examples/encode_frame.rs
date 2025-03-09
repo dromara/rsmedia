@@ -1,7 +1,6 @@
 use rsmedia::colors;
-use rsmedia::hwaccel::HWDeviceType;
 use rsmedia::time::Time;
-use rsmedia::{EncoderBuilder, FrameArray, Options};
+use rsmedia::{EncoderBuilder, FrameArray};
 use std::path::Path;
 
 fn main() {
@@ -9,10 +8,11 @@ fn main() {
 
     let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), 1280, 720)
         .with_format("mp4")
-        // libx264, h264_nvenc, h264_vaapi, h264_videotoolbox
-        .with_codec_name("h264_nvenc".to_string())
-        .with_codec_options(&Options::preset_h264_nvenc())
-        .with_hardware_device(HWDeviceType::CUDA)
+        // use hwaccel cuda
+        // .with_hardware_device(HWDeviceType::CUDA)
+        // libx264, libx265, h264_nvenc, h264_vaapi etc.
+        // .with_codec_name("h264_nvenc".to_string())
+        // .with_codec_options(&Options::preset_h264_nvenc())
         .build()
         .expect("failed to create encoder");
 

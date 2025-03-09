@@ -107,7 +107,7 @@ bitflags! {
         const CAPTIONS         = ffi::AV_DISPOSITION_CAPTIONS;
         const DESCRIPTIONS     = ffi::AV_DISPOSITION_DESCRIPTIONS;
         const METADATA         = ffi::AV_DISPOSITION_METADATA;
-        // #[cfg(feature = "ffmpeg_7_1")]
+        #[cfg(feature = "ffmpeg7")]
         const MULTILAYER       = ffi::AV_DISPOSITION_MULTILAYER;
     }
 }

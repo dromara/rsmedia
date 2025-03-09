@@ -748,6 +748,7 @@ pub enum PixelFormat {
     /// Hardware surfaces for Direct3D 12.
     ///
     /// data[0] points to an AVD3D12VAFrame
+    #[cfg(feature = "ffmpeg7")]
     D3D12,
 }
 
@@ -988,6 +989,7 @@ impl From<ffi::AVPixelFormat> for PixelFormat {
             ffi::AV_PIX_FMT_P412LE => Self::P412LE,
             ffi::AV_PIX_FMT_GBRAP14BE => Self::GBRAP14BE,
             ffi::AV_PIX_FMT_GBRAP14LE => Self::GBRAP14LE,
+            #[cfg(feature = "ffmpeg7")]
             ffi::AV_PIX_FMT_D3D12 => Self::D3D12,
 
             // unsupported pixel formats not included in ffmpeg
@@ -1231,6 +1233,7 @@ impl From<PixelFormat> for ffi::AVPixelFormat {
             PixelFormat::P412LE => ffi::AV_PIX_FMT_P412LE,
             PixelFormat::GBRAP14BE => ffi::AV_PIX_FMT_GBRAP14BE,
             PixelFormat::GBRAP14LE => ffi::AV_PIX_FMT_GBRAP14LE,
+            #[cfg(feature = "ffmpeg7")]
             PixelFormat::D3D12 => ffi::AV_PIX_FMT_D3D12,
         }
     }

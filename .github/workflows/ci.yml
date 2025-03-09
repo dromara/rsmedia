@@ -26,7 +26,12 @@ jobs:
     strategy:
       matrix:
         include:
+          # FFmpeg 6.x
+          - ffmpeg_version: "6.1"
+            feature: "ffmpeg6,ndarray"
+          # FFmpeg 7.x
           - ffmpeg_version: "7.1"
+            feature: "ffmpeg7,ndarray"
       fail-fast: false
 
     steps:
@@ -79,13 +84,10 @@ jobs:
           EOF
     
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --no-default-features --features ${{ matrix.feature }} --verbose
 
-      # undefined reference to symbol '__tls_get_addr@@GLIBC_2.3'
-      # /usr/bin/ld: /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2: error adding symbols: DSO missing from command line
-      # collect2: error: ld returned 1 exit status
       - name: Run Test
-        run: cargo test --verbose -- --nocapture
+        run: cargo test --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-macos:
     name: build / macos / latest ffmpeg

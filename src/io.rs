@@ -10,10 +10,8 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
-use libc::c_int;
 use std::ops::{Bound, Deref};
 use std::path::Path;
-use std::ptr;
 
 /// Builds a [`Reader`].
 ///
@@ -355,140 +353,16 @@ impl<'a> StreamWriterBuilder<'a> {
 
     /// Build [`StreamWriter`].
     pub fn build(self) -> Result<StreamWriter> {
-        match (self.format, self.options) {
-            (None, None) => Ok(StreamWriter {
-                output: Self::output(&self.destination.as_path())?,
-                destination: self.destination,
-            }),
-            (Some(format), None) => Ok(StreamWriter {
-                output: Self::output_as(&self.destination.as_path(), format)?,
-                destination: self.destination,
-            }),
-            (None, Some(options)) => Ok(StreamWriter {
-                output: Self::output_with(&self.destination.as_path(), Some(options.to_dict()))?,
-                destination: self.destination,
-            }),
-            (Some(format), Some(options)) => Ok(StreamWriter {
-                output: Self::output_as_with(
-                    &self.destination.as_path(),
-                    format,
-                    Some(options.to_dict()),
-                )?,
-                destination: self.destination,
-            }),
-        }
-    }
-
-    pub fn output<P: AsRef<Path> + ?Sized>(path: &P) -> Result<AVFormatContextOutput> {
-        let path = utils::from_path(path);
-        let avformat_ctx_output = AVFormatContextOutput::create(&path, None)
-            .context("Create output format context failed.")?;
-        Ok(avformat_ctx_output)
-    }
-
-    pub fn output_with<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        options: Option<AVDictionary>,
-    ) -> Result<AVFormatContextOutput> {
-        let path = utils::from_path(path);
-        let out_fmt_ctx = unsafe {
-            let mut out_fmt_ctx_ptr = ptr::null_mut();
-            let res = ffi::avformat_alloc_output_context2(
-                &mut out_fmt_ctx_ptr,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                path.as_ptr(),
-            );
-            if res != 0 {
-                return Err(Error::new(RsmpegError::from(res)));
-            }
-
-            let mut opts = options.map_or(ptr::null_mut(), |dict| dict.into_raw().as_ptr());
-            let res = ffi::avio_open2(
-                &mut (*out_fmt_ctx_ptr).pb,
-                path.as_ptr(),
-                ffi::AVIO_FLAG_WRITE as c_int,
-                ptr::null(),
-                &mut opts,
-            );
-            if res != 0 {
-                return Err(Error::new(RsmpegError::from(res)));
-            }
-
-            AVFormatContextOutput::from_raw(ptr::NonNull::new(out_fmt_ctx_ptr).unwrap())
-        };
-
-        Ok(out_fmt_ctx)
-    }
-
-    pub fn output_as<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        format: &str,
-    ) -> Result<AVFormatContextOutput> {
-        let path = utils::from_path(path);
-        let format = utils::from_str(format);
-        let out_fmt_ctx = unsafe {
-            let mut out_fmt_ctx_ptr = ptr::null_mut();
-            let res = ffi::avformat_alloc_output_context2(
-                &mut out_fmt_ctx_ptr,
-                ptr::null_mut(),
-                format.as_ptr(),
-                path.as_ptr(),
-            );
-            if res != 0 {
-                return Err(Error::new(RsmpegError::from(res)));
-            }
-
-            let res = ffi::avio_open(
-                &mut (*out_fmt_ctx_ptr).pb,
-                path.as_ptr(),
-                ffi::AVIO_FLAG_WRITE as c_int,
-            );
-            if res != 0 {
-                return Err(Error::new(RsmpegError::from(res)));
-            }
-
-            AVFormatContextOutput::from_raw(ptr::NonNull::new(out_fmt_ctx_ptr).unwrap())
-        };
-
-        Ok(out_fmt_ctx)
-    }
-
-    pub fn output_as_with<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        format: &str,
-        options: Option<AVDictionary>,
-    ) -> Result<AVFormatContextOutput> {
-        let path = utils::from_path(path);
-        let format = utils::from_str(format);
-        let out_fmt_ctx = unsafe {
-            let mut out_fmt_ctx_ptr = ptr::null_mut();
-            let res = ffi::avformat_alloc_output_context2(
-                &mut out_fmt_ctx_ptr,
-                ptr::null_mut(),
-                format.as_ptr(),
-                path.as_ptr(),
-            );
-            if res != 0 {
-                return Err(Error::new(RsmpegError::from(res)));
-            }
-
-            let mut opts = options.map_or(ptr::null_mut(), |dict| dict.into_raw().as_ptr());
-            let res = ffi::avio_open2(
-                &mut (*out_fmt_ctx_ptr).pb,
-                path.as_ptr(),
-                ffi::AVIO_FLAG_WRITE as c_int,
-                ptr::null(),
-                &mut opts,
-            );
-            if res != 0 {
-                return Err(Error::new(RsmpegError::from(res)));
-            }
-
-            AVFormatContextOutput::from_raw(ptr::NonNull::new(out_fmt_ctx_ptr).unwrap())
-        };
-
-        Ok(out_fmt_ctx)
+        let filename = utils::from_path(&self.destination.as_path());
+        let format = self.format.map(utils::from_str);
+        let mut opts = self.options.map(|opts| opts.to_dict());
+        let output_ctx =
+            AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut opts, None)
+                .context("Create output format context failed.")?;
+        Ok(StreamWriter {
+            destination: self.destination,
+            output: output_ctx,
+        })
     }
 }
 

@@ -26,7 +26,7 @@ log = "0.4"
 tracing = "0.1"
 env_logger = "0.11"
 ndarray = { version = "0.16", optional = true }
-rsmpeg = { git = "https://github.com/larksuite/rsmpeg", branch = "master", features = [
+rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", features = [
     "ffmpeg7", "link_system_ffmpeg"
 ] }
 

@@ -1,4 +1,3 @@
-use crate::flags::{AvCodecFlags, AvFormatFlags};
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
@@ -17,7 +16,6 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
-use libc::{c_int, c_uint};
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
@@ -203,17 +201,12 @@ impl<'a> EncoderBuilder<'a> {
     /// * `interleaved` - Whether or not to use interleaved write.
     /// * `settings` - Encoder settings to use.
     pub fn build_from_writer(self, mut writer: StreamWriter) -> Result<Encoder> {
-        let global_header =
-            AvFormatFlags::from_bits_truncate(writer.output.oformat().flags as c_uint)
-                .contains(AvFormatFlags::GLOBAL_HEADER);
-
         let codec = self.codec();
         let mut encode_ctx = AVCodecContext::new(&codec);
 
-        // Some formats require this flag to be set or the output will
-        // not be playable by dumb players.
-        if global_header {
-            encode_ctx.set_flags(AvCodecFlags::GLOBAL_HEADER.bits() as i32);
+        // Some formats want stream headers to be separate.
+        if writer.output.oformat().flags & ffi::AVFMT_GLOBALHEADER as i32 != 0 {
+            encode_ctx.set_flags(encode_ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
         }
 
         self.apply_to(&mut encode_ctx);
@@ -250,6 +243,10 @@ impl<'a> EncoderBuilder<'a> {
             av_stream.index as usize
         };
 
+        writer
+            .output
+            .dump(0, &utils::from_path(writer.destination.as_path()))
+            .context("Dump output format context failed.")?;
         let stream_info = writer.stream_info(writer_stream_index)?;
         log::info!("{}", stream_info);
 
@@ -303,7 +300,6 @@ impl<'a> EncoderBuilder<'a> {
         encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         unsafe {
             (*encoder.as_mut_ptr()).thread_count = self.thread_count;
-            (*encoder.as_mut_ptr()).flags2 = ffi::AV_CODEC_FLAG2_FAST as c_int;
         }
     }
 

@@ -5,7 +5,7 @@ pub mod frame;
 #[cfg(feature = "ndarray")]
 pub use frame::FrameArray;
 pub mod colors;
-mod flags;
+pub mod flags;
 pub mod hwaccel;
 pub mod init;
 pub mod io;

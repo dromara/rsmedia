@@ -228,7 +228,7 @@ mod tests {
     #[test]
     #[ignore = "test_rtp_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_rtp_muxer() {
-        // only have stream 0
+        //! only have stream 0
         let mut reader = Reader::new(Path::new("/tmp/trim.mp4")).unwrap();
 
         let mut opts = HashMap::<String, String>::new();
@@ -270,8 +270,7 @@ mod tests {
     #[test]
     #[ignore = "test_buf_muxer, muxer convert mp4, mov, avi to mkv, requires a file to be present"]
     fn test_buf_muxer() {
-        // only have stream 0
-        let mut reader = Reader::new(Path::new("/tmp/trim.mp4")).unwrap();
+        let mut reader = Reader::new(Path::new("/tmp/bear.mp4")).unwrap();
         let writer = BufferWriterBuilder::new("mp4").build().unwrap();
 
         let mut buf_muxer = MuxerBuilder::new(writer)

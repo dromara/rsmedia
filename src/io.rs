@@ -5,13 +5,11 @@ use crate::utils;
 use crate::Packet;
 
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput, AVInputFormat};
-use rsmpeg::avutil::AVDictionary;
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
 use std::ops::{Bound, Deref};
-use std::path::Path;
 
 /// Builds a [`Reader`].
 ///
@@ -86,51 +84,20 @@ impl<'a> ReaderBuilder<'a> {
             src_path
         );
 
-        match self.options {
-            None => Ok(Reader {
-                input: Self::input(&self.source.as_path(), self.format)?,
-                source: self.source,
-            }),
-            Some(options) => Ok(Reader {
-                input: Self::input_with_dictionary(
-                    &self.source.as_path(),
-                    self.format,
-                    &mut Some(options.to_dict()),
-                )?,
-                source: self.source,
-            }),
-        }
-    }
-
-    pub fn input<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        format: Option<&str>,
-    ) -> Result<AVFormatContextInput> {
-        let path = utils::from_path(path);
-        let input_fmt_opt = format.and_then(|str| AVInputFormat::find(&utils::from_str(str)));
-        let mut avformat_ctx_input =
-            AVFormatContextInput::open(&path, input_fmt_opt.as_deref(), &mut None)
-                .context("Create input format context failed.")?;
-        avformat_ctx_input
-            .dump(0, &path)
+        let filename = utils::from_path(&self.source.as_path());
+        let fmt_opt = self
+            .format
+            .and_then(|str| AVInputFormat::find(&utils::from_str(str)));
+        let mut opts = self.options.map(|opts| opts.to_dict());
+        let mut ctx_input = AVFormatContextInput::open(&filename, fmt_opt.as_deref(), &mut opts)
+            .context("Create input format context failed.")?;
+        ctx_input
+            .dump(0, &filename)
             .context("Dump input format context failed.")?;
-        Ok(avformat_ctx_input)
-    }
-
-    pub fn input_with_dictionary<P: AsRef<Path> + ?Sized>(
-        path: &P,
-        format: Option<&str>,
-        options: &mut Option<AVDictionary>,
-    ) -> Result<AVFormatContextInput> {
-        let path = utils::from_path(path);
-        let input_fmt_opt = format.and_then(|str| AVInputFormat::find(&utils::from_str(str)));
-        let mut avformat_ctx_input =
-            AVFormatContextInput::open(&path, input_fmt_opt.as_deref(), options)
-                .context("Create input format context failed.")?;
-        avformat_ctx_input
-            .dump(0, &path)
-            .context("Dump input format context failed.")?;
-        Ok(avformat_ctx_input)
+        Ok(Reader {
+            source: self.source,
+            input: ctx_input,
+        })
     }
 }
 

@@ -1,10 +1,13 @@
 use crate::pixel::PixelFormat;
+use crate::{utils, Options};
 
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext};
 use rsmpeg::{ffi, UnsafeDerefMut};
+
+use std::collections::HashMap;
 
 /// 硬件加速设备配置
 /// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
@@ -68,6 +71,30 @@ impl HWDeviceConfig {
     }
 }
 
+impl std::fmt::Debug for HWDeviceConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let options = self.options.to_owned();
+        let opts = options.map_or_else(HashMap::<String, String>::new, |dict| {
+            Options::new(dict).into()
+        });
+        write!(
+            f,
+            "HWDeviceConfig {{ device_type: {:?}, device_path: {:?},  hw_pixel_format: {:?}, sw_pixel_format: {:?}, options: {:?} }}",
+            self.device_type,
+            self.device_path,
+            self.hw_pixel_format,
+            self.sw_pixel_format,
+            opts
+        )
+    }
+}
+
+impl std::fmt::Display for HWDeviceConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
 pub struct HWContext {
     config: HWDeviceConfig,
     device_ctx: AVHWDeviceContext,
@@ -75,28 +102,17 @@ pub struct HWContext {
 
 impl HWContext {
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
-        let device_path = config.device_path.as_deref();
+        let device_path = utils::str_opt(config.device_path.as_ref());
         let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
-            device_path
-                .map(std::ffi::CString::new)
-                .transpose()
-                .unwrap()
-                .as_deref(),
+            device_path.as_deref(),
             config.options.as_ref(),
             0,
         )
         .context("Failed to create hardware device context")?;
 
         log::info!("Created hardware device context successfully.");
-        log::debug!(
-            "config: device_type: {:?}, hw_pixel: {:?}, sw_pixel: {:?}, device_path: {:?}, options: {:?}",
-            config.device_type,
-            config.hw_pixel_format,
-            config.sw_pixel_format,
-            device_path,
-            config.options.is_some()
-        );
+        log::debug!("{}", config);
 
         Ok(Self { config, device_ctx })
     }

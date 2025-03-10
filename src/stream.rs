@@ -249,15 +249,15 @@ impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
             #[allow(clippy::missing_transmute_annotations)]
-            utils::from_cstr(ffi::avcodec_get_name(std::mem::transmute(
+            utils::from_c_char(ffi::avcodec_get_name(std::mem::transmute(
                 self.codec as i32,
             )))
         };
         let pix_fmt = unsafe {
             if self.media_type.is_video() {
-                utils::from_cstr(ffi::av_get_pix_fmt_name(self.format as c_int))
+                utils::from_c_char(ffi::av_get_pix_fmt_name(self.format as c_int))
             } else if self.media_type.is_audio() {
-                utils::from_cstr(ffi::av_get_sample_fmt_name(self.format as c_int))
+                utils::from_c_char(ffi::av_get_sample_fmt_name(self.format as c_int))
             } else {
                 "unknown".to_string()
             }

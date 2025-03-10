@@ -2,11 +2,11 @@
   <code>rsmedia</code>
 </h1>
 
-This is a fork of the [video-rs](https://github.com/oddity-ai/video-rs) crate by [gerwin3](https://github.com/gerwin3).
+This is a fork of the [video-rs](https://github.com/oddity-ai/video-rs).
 
 Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rsmpeg).
 
-ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)
+ffmpeg 6.x, 7.x is supported based [rusty_ffmpeg](https://github.com/CCExtractor/rusty_ffmpeg)
 
 ## Wiki
 
@@ -61,7 +61,7 @@ ffmpeg 7.x above is supported based [`rusty_ffmpeg`](https://github.com/CCExtrac
 ## usage
 
 ```toml
-rsmedia = "0.1.0"
+rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
 ```
 
 ## Features
@@ -70,7 +70,9 @@ rsmedia = "0.1.0"
 Use the `ndarray` feature to be able to use raw frames with the
 [`ndarray`](https://github.com/rust-ndarray/ndarray) crate:
 
-- `ffmpeg6` or `ffmpeg7`:
+- `ffmpeg6`: enable support for `ffmpeg` 6.x.
+
+- `ffmpeg7`: enable support for `ffmpeg` 7.x.
 
 ```toml
 rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
@@ -221,3 +223,59 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
     ]
 }
 ```
+
+## 🪲 Debugging
+
+Ffmpeg does not always produce useful error messages directly. It is
+recommended to turn on tracing if you run into an issue to see if there is
+extra information present in the log messages.
+
+Add the following packages to `Cargo.toml`:
+
+```toml
+[dependencies]
+tracing = "0.1"
+tracing-subscriber = "0.3"
+```
+
+And add the following to your main functions:
+
+```rust
+fn main() {
+    tracing_subscriber::fmt::init();
+
+    // ...
+}
+```
+
+Set the `RUST_LOG` environment variable to display tracing messages:
+
+```sh
+RUST_LOG=video=debug cargo run
+```
+
+## ✨ Credits
+
+`rsmedia` only exists thanks to the following organizations and people:
+
+* All [video-rs contributors](https://github.com/oddity-ai/video-rs/graphs/contributors) for their work!
+* [Provincie Utrecht](https://www.provincie-utrecht.nl/) for supporting this project as part of the "Situational Awareness Software" project.
+* [rsmpeg contributors](https://github.com/larksuite/rsmpeg) for maintaining.
+* The [FFmpeg project](https://ffmpeg.org/) for `ffmpeg` and the `ffmpeg` libraries.
+
+## ⚖️ License
+
+Licensed under either of
+
+* Apache License, Version 2.0
+  ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license
+  ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

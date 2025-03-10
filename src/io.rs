@@ -71,7 +71,7 @@ impl<'a> ReaderBuilder<'a> {
     pub fn build(self) -> Result<Reader> {
         let src_path = self.source.as_path().to_str().unwrap();
         let protocol =
-            unsafe { ffi::avio_find_protocol_name(utils::to_cstr(src_path) as *const _) };
+            unsafe { ffi::avio_find_protocol_name(utils::to_c_char(src_path) as *const _) };
         if protocol.is_null() {
             return Err(Error::msg(format!(
                 "Unsupported input source protocol: {}",
@@ -80,7 +80,7 @@ impl<'a> ReaderBuilder<'a> {
         }
         log::debug!(
             "Using input protocol: [{}], source: {}",
-            unsafe { utils::from_cstr(protocol) },
+            unsafe { utils::from_c_char(protocol) },
             src_path
         );
 
@@ -1076,7 +1076,7 @@ pub fn sdp(output_fmt_ctx: &AVFormatContextOutput) -> Result<String> {
         let output_fmt_ctx_ptr = output_fmt_ctx_ptr as *mut *mut ffi::AVFormatContext;
         let ret = ffi::av_sdp_create(output_fmt_ctx_ptr, 1, buf_ptr, BUF_SIZE);
         if ret == 0 {
-            Ok(utils::from_cstr(buf_ptr))
+            Ok(utils::from_c_char(buf_ptr))
         } else {
             Err(Error::new(RsmpegError::from(ret)))
         }

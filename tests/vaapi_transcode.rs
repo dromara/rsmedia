@@ -343,7 +343,7 @@ fn hw_transcode(
             let download_sw_frame = hw_download(hw_frame, sw_format)?;
 
             // do something process, scaler frame etc.
-            log::info!("{}", download_sw_frame);
+            log::info!("{:?}", download_sw_frame);
 
             let upload_hw_frame = hw_upload(&mut encode_ctx, download_sw_frame, hw_format)?;
 

@@ -69,7 +69,7 @@ fn hw_encode(
     output: &Path,
     width: i32,
     height: i32,
-    encoder: &CStr,
+    encode_codec: &CStr,
     device_type: AVHWDeviceType,
     hw_format: AVPixelFormat,
     sw_format: AVPixelFormat,
@@ -82,7 +82,7 @@ fn hw_encode(
     let hw_device_ctx = AVHWDeviceContext::create(device_type, None, None, 0)
         .context("Failed to create a VAAPI device")?;
 
-    let codec = AVCodec::find_encoder_by_name(encoder).context("Could not find encoder.")?;
+    let codec = AVCodec::find_encoder_by_name(encode_codec).context("Could not find encoder.")?;
 
     let mut avctx = AVCodecContext::new(&codec);
 
@@ -197,7 +197,7 @@ fn toolbox_encode_test_videotoolbox() {
     // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv
     hw_encode(
         Path::new("tests/assets/vids/bear.yuv"),
-        Path::new("/tmp/toolbox_encode_test_h264.h264"),
+        Path::new("tests/output/toolbox_encode/toolbox_encode_test_h264.h264"),
         320,
         180,
         cstr!("h264_videotoolbox"),

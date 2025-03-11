@@ -873,7 +873,7 @@ pub fn output_raw_packetized_buf_start(
             // Passthrough for `write_packet`.
             // XXX: Doing a manual transmute here to match the expected callback function
             // signature. Since it changed since ffmpeg 7 and we don't know during compile time
-            // what verion we're dealing with, this trick will convert to the either the signature
+            // what version we're dealing with, this trick will convert to the either the signature
             // where the buffer argument is `*const u8` or `*mut u8`.
             #[allow(clippy::missing_transmute_annotations)]
             Some(std::mem::transmute::<*const (), _>(

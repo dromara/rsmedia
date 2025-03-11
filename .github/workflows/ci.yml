@@ -46,6 +46,8 @@ jobs:
             ca-certificates \
             clang \
             lld \
+            nasm \
+            yasm \
             curl \
             wget \
             gnupg \
@@ -63,7 +65,18 @@ jobs:
             libswscale-dev \
             libswresample-dev \
             libavdevice-dev \
-            libavfilter-dev
+            libavfilter-dev \
+            libssl-dev \
+            librtmp-dev \
+            libsrt-dev \
+            libvpx-dev \
+            libsvtav1-dev \
+            libaom-dev \
+            libxvidcore-dev \
+            libmp3lame-dev \
+            libopus-dev \
+            libvorbis-dev \
+            libfdk-aac-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -219,11 +232,15 @@ jobs:
             ca-certificates \
             clang \
             lld \
+            nasm \
+            yasm \
             curl \
             wget \
             gnupg \
             libc6 \
             libc6-dev \
+            libgcc-s1 \
+            linux-libc-dev \
             binutils \
             pkg-config \
             libx264-dev \
@@ -234,7 +251,18 @@ jobs:
             libswscale-dev \
             libswresample-dev \
             libavdevice-dev \
-            libavfilter-dev
+            libavfilter-dev \
+            libssl-dev \
+            librtmp-dev \
+            libsrt-dev \
+            libvpx-dev \
+            libsvtav1-dev \
+            libaom-dev \
+            libxvidcore-dev \
+            libmp3lame-dev \
+            libopus-dev \
+            libvorbis-dev \
+            libfdk-aac-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

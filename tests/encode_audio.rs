@@ -271,6 +271,20 @@ fn encode_audio(
         .first()
         .copied()
         .unwrap_or(44100);
+
+    println!(
+        "{}",
+        format!(
+            "encode_audio: output_path:{}, codec_id:{}, sameple_format:{}, codec_config: {:#?}",
+            output_path.to_string_lossy().to_string(),
+            codec_id,
+            sample_format,
+            codec_config
+        )
+    );
+    // [aac @ 0x7ff0e8000d40] Specified sample format flt is not supported by the aac encoder
+    // [aac @ 0x7ff0e8000d40] Supported sample formats:
+    // [aac @ 0x7ff0e8000d40]   fltp
     assert!(
         codec_config.is_sample_fmt_supported(sample_format),
         "Unsupported sample format"

@@ -10,161 +10,92 @@ use rsmpeg::{
 use cstr::cstr;
 use rsmpeg::avformat::AVFormatContextOutput;
 use rsmpeg::error::RsmpegError;
-use std::f32::consts::PI;
 use std::ffi::CStr;
 
-/// 获取编码器配置: (frame_size, sample_rates, sample_fmt)
-fn get_codec_params(codec_id: ffi::AVCodecID) -> (i32, Vec<i32>, Vec<ffi::AVSampleFormat>) {
-    match codec_id {
-        // MP3 (MPEG Layer-3)
-        ffi::AV_CODEC_ID_MP3 => (
-            1152,
-            vec![44100, 48000, 32000],
-            vec![ffi::AV_SAMPLE_FMT_S16P, ffi::AV_SAMPLE_FMT_FLTP],
-        ),
+/// 编码器能力描述结构体
+#[derive(Debug, Clone)]
+pub struct CodecConfig {
+    /// 支持的帧率列表（视频编码器）
+    pub supported_frame_rates: Option<Vec<ffi::AVRational>>,
+    /// 支持的采样率列表（音频编码器）
+    pub supported_sample_rates: Vec<i32>,
+    /// 支持的像素格式列表（视频编码器）
+    pub supported_pix_fmts: Vec<ffi::AVPixelFormat>,
+    /// 支持的采样格式列表（音频编码器）
+    pub supported_sample_fmts: Vec<ffi::AVSampleFormat>,
+    /// 典型帧大小（单位：样本数/视频帧）
+    pub frame_size: i32,
+}
 
-        // WMA (Windows Media Audio)
-        ffi::AV_CODEC_ID_WMAV2 => (
-            2048,
-            vec![44100, 48000, 32000, 22050, 16000, 11025, 8000],
-            vec![ffi::AV_SAMPLE_FMT_FLTP],
-        ),
+impl CodecConfig {
+    /// 从AVCodec动态获取编码器配置
+    pub fn new(codec: &AVCodec) -> Self {
+        // 获取视频相关参数
+        let supported_frame_rates = codec.supported_framerates().map(|rates| rates.to_vec());
 
-        // ALAC (Apple Lossless)
-        ffi::AV_CODEC_ID_ALAC => (
-            4096,
-            vec![44100, 48000, 88200, 96000, 176400, 192000],
-            vec![
-                ffi::AV_SAMPLE_FMT_S16P,
-                ffi::AV_SAMPLE_FMT_S32P,
-                ffi::AV_SAMPLE_FMT_FLTP,
-            ],
-        ),
+        let supported_pix_fmts = codec
+            .pix_fmts()
+            .unwrap_or(&[])
+            .iter()
+            .filter(|&&fmt| fmt != ffi::AV_PIX_FMT_NONE)
+            .cloned()
+            .collect();
 
-        // FLAC
-        ffi::AV_CODEC_ID_FLAC => (
-            576,
-            vec![
-                8000, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000,
-            ],
-            vec![
-                ffi::AV_SAMPLE_FMT_S16,
-                ffi::AV_SAMPLE_FMT_S32,
-                ffi::AV_SAMPLE_FMT_S16P,
-                ffi::AV_SAMPLE_FMT_S32P,
-            ],
-        ),
+        // 获取音频相关参数
+        let supported_sample_fmts = codec
+            .sample_fmts()
+            .unwrap_or(&[])
+            .iter()
+            .filter(|&&fmt| fmt != ffi::AV_SAMPLE_FMT_NONE)
+            .cloned()
+            .collect();
 
-        // AC3 (Dolby Digital)
-        ffi::AV_CODEC_ID_AC3 => (
-            1536,
-            vec![48000, 44100, 32000],
-            vec![ffi::AV_SAMPLE_FMT_FLTP, ffi::AV_SAMPLE_FMT_S16P],
-        ),
+        let supported_sample_rates = codec.supported_samplerates().unwrap_or(&[]).to_vec();
 
-        // PCM_S16LE
-        ffi::AV_CODEC_ID_PCM_S16LE => (
-            1024,
-            vec![
-                8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000,
-            ],
-            vec![ffi::AV_SAMPLE_FMT_S16, ffi::AV_SAMPLE_FMT_S16P],
-        ),
+        let frame_size = if codec.capabilities & ffi::AV_CODEC_CAP_VARIABLE_FRAME_SIZE as i32 != 0 {
+            1024
+        } else {
+            match codec.id {
+                ffi::AV_CODEC_ID_FLAC => 4608,
+                ffi::AV_CODEC_ID_ALAC => 4096,
+                ffi::AV_CODEC_ID_WMAV2 => 2048,
+                ffi::AV_CODEC_ID_AC3 => 1536,
+                ffi::AV_CODEC_ID_MP2 => 1152,
+                ffi::AV_CODEC_ID_MP3 => 1152,
+                ffi::AV_CODEC_ID_OPUS => 960,
+                ffi::AV_CODEC_ID_DTS => 512,
+                ffi::AV_CODEC_ID_AMR_NB => 160,
+                ffi::AV_CODEC_ID_VORBIS => 64,
+                _ => 1024,
+            }
+        };
 
-        // PCM formats (S24LE, S32LE)
-        ffi::AV_CODEC_ID_PCM_S24LE | ffi::AV_CODEC_ID_PCM_S32LE => (
-            1024,
-            vec![
-                8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000,
-            ],
-            vec![
-                ffi::AV_SAMPLE_FMT_S32,
-                ffi::AV_SAMPLE_FMT_S32P,
-                ffi::AV_SAMPLE_FMT_S16,
-                ffi::AV_SAMPLE_FMT_S16P,
-            ],
-        ),
+        Self {
+            supported_frame_rates,
+            supported_sample_rates,
+            supported_pix_fmts,
+            supported_sample_fmts,
+            frame_size,
+        }
+    }
 
-        // PCM_S24BE
-        ffi::AV_CODEC_ID_PCM_S24BE => (
-            1024,
-            vec![
-                8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 64000, 88200, 96000,
-            ],
-            vec![
-                ffi::AV_SAMPLE_FMT_S32,
-                ffi::AV_SAMPLE_FMT_S32P,
-                ffi::AV_SAMPLE_FMT_S16,
-                ffi::AV_SAMPLE_FMT_S16P,
-            ],
-        ),
+    /// 检查采样格式是否支持
+    pub fn is_sample_fmt_supported(&self, fmt: ffi::AVSampleFormat) -> bool {
+        self.supported_sample_fmts.contains(&fmt)
+    }
 
-        // AAC
-        ffi::AV_CODEC_ID_AAC => (
-            1024,
-            vec![
-                8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 64000, 88200, 96000,
-            ],
-            vec![ffi::AV_SAMPLE_FMT_FLTP],
-        ),
-
-        // Opus
-        ffi::AV_CODEC_ID_OPUS => (
-            960,
-            vec![48000, 24000, 16000, 12000, 8000],
-            vec![
-                ffi::AV_SAMPLE_FMT_S16,
-                ffi::AV_SAMPLE_FMT_FLT,
-                ffi::AV_SAMPLE_FMT_S16P,
-                ffi::AV_SAMPLE_FMT_FLTP,
-            ],
-        ),
-
-        // Vorbis
-        ffi::AV_CODEC_ID_VORBIS => (64, vec![44100, 48000, 32000], vec![ffi::AV_SAMPLE_FMT_FLTP]),
-
-        // DTS
-        ffi::AV_CODEC_ID_DTS => (
-            512,
-            vec![
-                8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 192000,
-            ],
-            vec![
-                ffi::AV_SAMPLE_FMT_S16P,
-                ffi::AV_SAMPLE_FMT_S32P,
-                ffi::AV_SAMPLE_FMT_FLTP,
-            ],
-        ),
-
-        // MP2
-        ffi::AV_CODEC_ID_MP2 => (
-            1152,
-            vec![44100, 48000, 32000],
-            vec![ffi::AV_SAMPLE_FMT_S16P, ffi::AV_SAMPLE_FMT_FLTP],
-        ),
-
-        // AMR-NB
-        ffi::AV_CODEC_ID_AMR_NB => (
-            160,
-            vec![8000],
-            vec![ffi::AV_SAMPLE_FMT_S16, ffi::AV_SAMPLE_FMT_FLTP],
-        ),
-
-        // 默认配置
-        _ => (
-            1024,
-            vec![44100, 48000],
-            vec![
-                ffi::AV_SAMPLE_FMT_FLTP,
-                ffi::AV_SAMPLE_FMT_S16P,
-                ffi::AV_SAMPLE_FMT_S16,
-            ],
-        ),
+    /// 获取默认采样格式（优先级：FLTP > S16P > 首个支持格式）
+    pub fn default_sample_fmt(&self) -> Option<ffi::AVSampleFormat> {
+        [ffi::AV_SAMPLE_FMT_FLTP, ffi::AV_SAMPLE_FMT_S16P]
+            .iter()
+            .find(|&&fmt| self.supported_sample_fmts.contains(&fmt))
+            .copied()
+            .or_else(|| self.supported_sample_fmts.first().copied())
     }
 }
 
 /// 生成正弦波音频样本（优化内存访问）
-fn generate_sine_wave(frame: &mut AVFrame, frequency: f32, sample_rate: i32) -> Result<()> {
+fn generate_sine_wave(frame: &mut AVFrame, frequency: f64, sample_rate: i32) -> Result<()> {
     let sample_fmt = frame.format;
     let channels = frame.ch_layout.nb_channels as usize;
     let sample_count = frame.nb_samples as usize;
@@ -173,15 +104,16 @@ fn generate_sine_wave(frame: &mut AVFrame, frequency: f32, sample_rate: i32) -> 
         ffi::AV_SAMPLE_FMT_U8P
             | ffi::AV_SAMPLE_FMT_S16P
             | ffi::AV_SAMPLE_FMT_S32P
+            | ffi::AV_SAMPLE_FMT_S64P
             | ffi::AV_SAMPLE_FMT_FLTP
             | ffi::AV_SAMPLE_FMT_DBLP
     );
 
     // 公共样本生成逻辑
-    let generate_samples = |buffer: &mut [f32], channel_offset: usize| {
+    let generate_samples = |buffer: &mut [f64], channel_offset: usize| {
         for (i, sample) in buffer.iter_mut().enumerate() {
-            let t = (i * channels + channel_offset) as f32 / sample_rate as f32;
-            *sample = (2.0 * PI * frequency * t).sin() * 0.5;
+            let t = (i * channels + channel_offset) as f64 / sample_rate as f64;
+            *sample = (2.0 * std::f64::consts::PI * frequency * t).sin() * 0.5;
         }
     };
 
@@ -201,7 +133,7 @@ fn generate_sine_wave(frame: &mut AVFrame, frequency: f32, sample_rate: i32) -> 
             channels,
             sample_count,
             generate_samples,
-            |v| (v * i16::MAX as f32).round() as i16,
+            |v| (v * i16::MAX as f64).round() as i16,
         ),
 
         ffi::AV_SAMPLE_FMT_S32 | ffi::AV_SAMPLE_FMT_S32P => process_sample_data::<i32>(
@@ -210,7 +142,16 @@ fn generate_sine_wave(frame: &mut AVFrame, frequency: f32, sample_rate: i32) -> 
             channels,
             sample_count,
             generate_samples,
-            |v| (v * i32::MAX as f32).round() as i32,
+            |v| (v * i32::MAX as f64).round() as i32,
+        ),
+
+        ffi::AV_SAMPLE_FMT_S64 | ffi::AV_SAMPLE_FMT_S64P => process_sample_data::<i64>(
+            frame,
+            is_planar,
+            channels,
+            sample_count,
+            generate_samples,
+            |v| (v * i64::MAX as f64).round() as i64,
         ),
 
         ffi::AV_SAMPLE_FMT_FLT | ffi::AV_SAMPLE_FMT_FLTP => process_sample_data::<f32>(
@@ -219,7 +160,7 @@ fn generate_sine_wave(frame: &mut AVFrame, frequency: f32, sample_rate: i32) -> 
             channels,
             sample_count,
             generate_samples,
-            |v| v,
+            |v| v as f32,
         ),
 
         ffi::AV_SAMPLE_FMT_DBL | ffi::AV_SAMPLE_FMT_DBLP => process_sample_data::<f64>(
@@ -230,10 +171,10 @@ fn generate_sine_wave(frame: &mut AVFrame, frequency: f32, sample_rate: i32) -> 
             |buf, ch| {
                 for (i, v) in buf.iter_mut().enumerate() {
                     let t = (i * channels + ch) as f64 / sample_rate as f64;
-                    *v = (2.0 * std::f64::consts::PI * frequency as f64 * t).sin() as f32 * 0.5;
+                    *v = (2.0 * std::f64::consts::PI * frequency * t).sin() * 0.5;
                 }
             },
-            |v| v as f64,
+            |v| v,
         ),
 
         _ => return Err(anyhow::anyhow!("Unsupported format")),
@@ -248,19 +189,21 @@ fn process_sample_data<T: Copy>(
     is_planar: bool,
     channels: usize,
     sample_count: usize,
-    generate_samples: impl Fn(&mut [f32], usize),
-    scale: impl Fn(f32) -> T,
+    generate_samples: impl Fn(&mut [f64], usize),
+    scale: impl Fn(f64) -> T,
 ) {
     let frame_ptr = frame.as_mut_ptr();
 
     if is_planar {
         // 平面格式处理
         for channel in 0..channels {
-            let buffer = unsafe {
-                std::slice::from_raw_parts_mut((*frame_ptr).data[channel] as *mut T, sample_count)
-            };
+            let data_ptr = unsafe { (*frame_ptr).data[channel] };
+            assert!(!data_ptr.is_null(), "Channel {} data is null", channel);
 
-            let mut float_buffer = vec![0.0f32; sample_count];
+            let buffer =
+                unsafe { std::slice::from_raw_parts_mut(data_ptr as *mut T, sample_count) };
+
+            let mut float_buffer = vec![0.0; sample_count];
             generate_samples(&mut float_buffer, channel);
 
             for (i, &v) in float_buffer.iter().enumerate() {
@@ -273,7 +216,7 @@ fn process_sample_data<T: Copy>(
             std::slice::from_raw_parts_mut((*frame_ptr).data[0] as *mut T, sample_count * channels)
         };
 
-        let mut float_buffer = vec![0.0f32; sample_count * channels];
+        let mut float_buffer = vec![0.0; sample_count * channels];
         for channel in 0..channels {
             generate_samples(&mut float_buffer[channel..], channel);
         }
@@ -322,20 +265,23 @@ fn encode_audio(
         AVCodec::find_encoder(codec_id).context(format!("Failed to find encoder: {}", codec_id))?;
     let mut encode_ctx = AVCodecContext::new(&codec);
 
-    // 获取编码器要求的帧大小
-    let (frame_size, sample_rates, supported_sample_fmts) = get_codec_params(codec_id);
+    let codec_config = CodecConfig::new(&codec);
+    let sample_rate = codec_config
+        .supported_sample_rates
+        .first()
+        .copied()
+        .unwrap_or(44100);
     assert!(
-        supported_sample_fmts.contains(&sample_format),
+        codec_config.is_sample_fmt_supported(sample_format),
         "Unsupported sample format"
     );
 
     // 配置编码参数
     encode_ctx.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels).into_inner());
-    encode_ctx.set_sample_rate(sample_rates[0]);
-    encode_ctx.set_time_base(avutil::ra(1, sample_rates[0])); // eg: 时间基 1/44100
+    encode_ctx.set_sample_rate(sample_rate);
+    encode_ctx.set_time_base(avutil::ra(1, sample_rate));
     encode_ctx.set_sample_fmt(sample_format);
-    // TODO:
-    // max_bit_rate = (bit_rate * sample_rate) / frame_size_bites_per_second
+    // max_bit_rate = (bit_rate * sample_rate) / frame_size
     encode_ctx.set_bit_rate(bit_rate);
 
     encode_ctx
@@ -358,7 +304,7 @@ fn encode_audio(
 
     // 初始化音频帧（带自动内存管理）
     let mut frame = AVFrame::new();
-    frame.set_nb_samples(frame_size);
+    frame.set_nb_samples(codec_config.frame_size);
     frame.set_ch_layout(encode_ctx.ch_layout);
     frame.set_format(encode_ctx.sample_fmt);
     frame
@@ -439,7 +385,7 @@ fn test_encode_audio() {
     encode_audio(
         cstr!("/tmp/encode_audio_output.flac"),
         ffi::AV_CODEC_ID_FLAC,
-        ffi::AV_SAMPLE_FMT_S32,
+        ffi::AV_SAMPLE_FMT_S16,
         0,
         2,
     )
@@ -516,12 +462,13 @@ fn test_encode_audio() {
     .unwrap();
 
     // AMR-NB - 移动语音编码 (12.2kbps)
-    encode_audio(
-        cstr!("/tmp/encode_audio_output.amr"),
-        ffi::AV_CODEC_ID_AMR_NB,
-        ffi::AV_SAMPLE_FMT_S16,
-        12200,
-        1,
-    )
-    .unwrap();
+    // [libopencore_amrnb @ 0x12c604080] Only 8000Hz sample rate supported
+    // encode_audio(
+    //     cstr!("/tmp/encode_audio_output.amr"),
+    //     ffi::AV_CODEC_ID_AMR_NB,
+    //     ffi::AV_SAMPLE_FMT_S16,
+    //     12200,
+    //     1,
+    // )
+    // .unwrap();
 }

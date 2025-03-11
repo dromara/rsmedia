@@ -38,7 +38,7 @@ fn main() {
 fn rainbow_frame(p: f32) -> FrameArray {
     // This is what generated the rainbow effect!
     // We loop through the HSV color spectrum and convert to RGB.
-    let rgb = colors::hsv_to_rgb(p * 360.0, 1.0, 1.0);
+    let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
 
     // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
     // pixel are equal, and determined by the `rgb` we chose above.

@@ -61,45 +61,62 @@ pub fn rgb_to_hsv(r: u8, g: u8, b: u8) -> [f32; 3] {
     let r = r as f32 / 255.0;
     let g = g as f32 / 255.0;
     let b = b as f32 / 255.0;
+
     let max = r.max(g.max(b));
     let min = r.min(g.min(b));
     let delta = max - min;
 
-    let hue = if delta == 0.0 {
+    const EPSILON: f32 = 1e-10;
+
+    let h = if delta < EPSILON {
         0.0
-    } else if max == r {
-        60.0 * (((g - b) / delta) % 6.0)
-    } else if max == g {
+    } else if (max - r).abs() < EPSILON {
+        60.0 * (((g - b) / delta + 6.0) % 6.0)
+    } else if (max - g).abs() < EPSILON {
         60.0 * (((b - r) / delta) + 2.0)
     } else {
         60.0 * (((r - g) / delta) + 4.0)
     };
 
-    let saturation = if max == 0.0 { 0.0 } else { delta / max };
-    let value = max;
+    // Ensures a range of 0-360 degrees
+    let h = if h < 0.0 { h + 360.0 } else { h % 360.0 };
+    // Saturation and value
+    let s = if max < EPSILON {
+        0.0
+    } else {
+        (delta / max * 100.0).clamp(0.0, 100.0)
+    };
+    let v = (max * 100.0).clamp(0.0, 100.0);
 
-    [hue, saturation, value]
+    [h, s, v]
 }
 
 /// Convert HSV to RGB color space.
 pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
-    let c = v * s;
+    let h = h % 360.0; // H limited to 0-360
+    let s = s.clamp(0.0, 100.0); // S limited to 0-100
+    let v = v.clamp(0.0, 100.0); // V limited to 0-100
+
+    let s = s / 100.0;
+    let v = v / 100.0;
+    let c = s * v;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
     let m = v - c;
 
-    let (r, g, b) = match h as u32 {
-        0..=59 => (c, x, 0.0),
-        60..=119 => (x, c, 0.0),
-        120..=179 => (0.0, c, x),
-        180..=239 => (0.0, x, c),
-        240..=299 => (x, 0.0, c),
-        _ => (c, 0.0, x),
+    let (r, g, b) = match (h / 60.0) as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        5 => (c, 0.0, x),
+        _ => (0.0, 0.0, 0.0),
     };
 
     [
-        ((r + m) * 255.0) as u8,
-        ((g + m) * 255.0) as u8,
-        ((b + m) * 255.0) as u8,
+        ((r + m) * 255.0).round() as u8,
+        ((g + m) * 255.0).round() as u8,
+        ((b + m) * 255.0).round() as u8,
     ]
 }
 
@@ -109,4 +126,150 @@ pub fn color_distance(c1: &Rgb<u8>, c2: &Rgb<u8>) -> u8 {
         + (c1[1] as i16 - c2[1] as i16).abs()
         + (c1[2] as i16 - c2[2] as i16).abs()) as u8
         / 3
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// allow floating point error comparison
+    macro_rules! assert_approx_eq {
+        ($a:expr, $b:expr) => {
+            assert!(($a - $b).abs() < f32::EPSILON, "{} ≈ {}", $a, $b);
+        };
+        ($a:expr, $b:expr, $eps:expr) => {
+            assert!(($a - $b).abs() < $eps, "{} ≈ {}", $a, $b);
+        };
+    }
+
+    #[test]
+    fn test_pure_colors() {
+        // 红色
+        let [h, s, v] = rgb_to_hsv(255, 0, 0);
+        assert_approx_eq!(h, 0.0);
+        assert_approx_eq!(s, 100.0);
+        assert_approx_eq!(v, 100.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [255, 0, 0]);
+
+        // 绿色
+        let [h, s, v] = rgb_to_hsv(0, 255, 0);
+        assert_approx_eq!(h, 120.0);
+        assert_approx_eq!(s, 100.0);
+        assert_approx_eq!(v, 100.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [0, 255, 0]);
+
+        // 蓝色
+        let [h, s, v] = rgb_to_hsv(0, 0, 255);
+        assert_approx_eq!(h, 240.0);
+        assert_approx_eq!(s, 100.0);
+        assert_approx_eq!(v, 100.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [0, 0, 255]);
+    }
+
+    #[test]
+    fn test_grayscale() {
+        // 纯黑
+        let [h, s, v] = rgb_to_hsv(0, 0, 0);
+        assert_approx_eq!(s, 0.0);
+        assert_approx_eq!(v, 0.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [0, 0, 0]);
+
+        // 纯白
+        let [h, s, v] = rgb_to_hsv(255, 255, 255);
+        assert_approx_eq!(s, 0.0);
+        assert_approx_eq!(v, 100.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [255, 255, 255]);
+
+        // 中灰
+        let [h, s, v] = rgb_to_hsv(128, 128, 128);
+        assert_approx_eq!(s, 0.0);
+        assert_approx_eq!(v, 50.196078, 0.1); // 128/255 ≈ 50.196%
+        assert_eq!(hsv_to_rgb(h, s, v), [128, 128, 128]);
+    }
+
+    #[test]
+    fn test_special_colors() {
+        // 黄色 (R+G)
+        let [h, s, v] = rgb_to_hsv(255, 255, 0);
+        assert_approx_eq!(h, 60.0);
+        assert_approx_eq!(s, 100.0);
+        assert_approx_eq!(v, 100.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [255, 255, 0]);
+
+        // 品红色 (R+B)
+        let [h, s, v] = rgb_to_hsv(255, 0, 255);
+        assert_approx_eq!(h, 300.0);
+        assert_approx_eq!(s, 100.0);
+        assert_approx_eq!(v, 100.0);
+        assert_eq!(hsv_to_rgb(h, s, v), [255, 0, 255]);
+    }
+
+    #[test]
+    fn test_round_trip() {
+        let test_colors = [
+            [123, 45, 67],  // 随机颜色
+            [255, 128, 0],  // 橙色
+            [75, 200, 220], // 青色系
+            [30, 150, 80],  // 绿色系
+        ];
+
+        for &[r, g, b] in &test_colors {
+            let [h, s, v] = rgb_to_hsv(r, g, b);
+            let [r2, g2, b2] = hsv_to_rgb(h, s, v);
+
+            // 允许 ±1 的误差（因浮点舍入）
+            assert!((r as i32 - r2 as i32).abs() <= 1);
+            assert!((g as i32 - g2 as i32).abs() <= 1);
+            assert!((b as i32 - b2 as i32).abs() <= 1);
+        }
+    }
+
+    #[test]
+    fn test_precision() {
+        let test_cases = [
+            (255, 0, 0),     // 纯红
+            (0, 255, 0),     // 纯绿
+            (0, 0, 255),     // 纯蓝
+            (128, 128, 128), // 灰色
+            (255, 255, 0),   // 黄色
+            (255, 0, 255),   // 洋红
+            (0, 255, 255),   // 青色
+        ];
+
+        for (r, g, b) in test_cases.iter() {
+            let hsv_f32 = rgb_to_hsv(*r, *g, *b);
+            println!("RGB({}, {}, {})", r, g, b);
+            println!(
+                "HSV f32: [{:.6}, {:.6}, {:.6}]",
+                hsv_f32[0], hsv_f32[1], hsv_f32[2]
+            );
+        }
+    }
+
+    #[test]
+    fn test_boundary_conditions() {
+        // 测试超范围输入规范化
+        assert_eq!(
+            hsv_to_rgb(361.0, 110.0, 120.0), // 输入超出范围
+            hsv_to_rgb(1.0, 100.0, 100.0)    // 预期等价于规范化后的值
+        );
+
+        // 测试负值输入规范化
+        assert_eq!(
+            hsv_to_rgb(-90.0, -50.0, -10.0), // 输入负值
+            hsv_to_rgb(270.0, 0.0, 0.0)      // 预期等价于 (360-90)=270, 饱和度/明度归零
+        );
+
+        // 测试 V=0 时的输出
+        assert_eq!(hsv_to_rgb(180.0, 50.0, 0.0), [0, 0, 0]); // V=0 必须输出黑色
+        assert_eq!(hsv_to_rgb(0.0, 100.0, 0.0), [0, 0, 0]); // V=0 必须输出黑色
+
+        // 测试接近零的值
+        let hsv = rgb_to_hsv(1, 0, 0);
+        assert!(hsv[1] > 0.0 && hsv[1] <= 100.0);
+
+        // 测试近似相等的值
+        let hsv = rgb_to_hsv(128, 128, 127);
+        assert!(hsv[1] >= 0.0 && hsv[1] <= 100.0);
+    }
 }

@@ -248,10 +248,8 @@ impl StreamInfo {
 impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
-            #[allow(clippy::missing_transmute_annotations)]
-            utils::from_c_char(ffi::avcodec_get_name(std::mem::transmute(
-                self.codec as i32,
-            )))
+            let codec_id = self.codec as i32 as ffi::AVCodecID;
+            utils::from_c_char(ffi::avcodec_get_name(codec_id))
         };
         let pix_fmt = unsafe {
             if self.media_type.is_video() {

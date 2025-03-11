@@ -368,8 +368,8 @@ fn vaapi_transcode_test_vaapi() {
     std::fs::create_dir_all("tests/output/vaapi_transcode/").unwrap();
 
     hw_transcode(
-        cstr!("tests/assets/vids/bear.yuv"),
-        cstr!("tests/output/vaapi_transcode/vaapi_transcode_test_vaapi.h264"),
+        cstr!("tests/assets/vids/bear.mp4"),
+        cstr!("tests/output/vaapi_transcode/vaapi_transcode_h264_vaapi.mp4"),
         cstr!("h264_vaapi"),
         cstr!("h264_vaapi"),
         AV_HWDEVICE_TYPE_VAAPI,
@@ -384,8 +384,8 @@ fn vaapi_transcode_test_vaapi() {
 fn nvenc_transcode_test_nvenc() {
     std::fs::create_dir_all("tests/output/nvenc_transcode/").unwrap();
     hw_transcode(
-        cstr!("tests/assets/vids/bear.yuv"),
-        cstr!("tests/output/nvenc_transcode/nvenc_transcode_test_nvenc.h264"),
+        cstr!("tests/assets/vids/bear.mp4"),
+        cstr!("tests/output/nvenc_transcode/nvenc_transcode_h264_nvenc.mp4"),
         cstr!("h264_cuvid"),
         cstr!("h264_nvenc"),
         AV_HWDEVICE_TYPE_CUDA,

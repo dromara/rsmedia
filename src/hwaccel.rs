@@ -562,9 +562,9 @@ unsafe extern "C" fn hwaccel_get_format(
     pix_fmts: *const ffi::AVPixelFormat,
 ) -> ffi::AVPixelFormat {
     let mut p = pix_fmts;
+    let hw_format = (*ctx).opaque as ffi::AVPixelFormat;
     while *p != ffi::AV_PIX_FMT_NONE {
-        #[allow(clippy::useless_transmute)]
-        if *p == std::mem::transmute::<i32, ffi::AVPixelFormat>((*ctx).opaque as i32) {
+        if *p == hw_format {
             return *p;
         }
         p = p.add(1);

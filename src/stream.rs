@@ -29,6 +29,7 @@ pub struct StreamInfo {
     pub codec_tag: u32,
     /// Pixel format / Sample format
     pub format: i32,
+
     /// time_base
     pub time_base: Rational,
     /// Stream Duration
@@ -37,6 +38,8 @@ pub struct StreamInfo {
     pub start_time: i64,
     /// Number of frames
     pub nb_frames: i64,
+    /// Bit rate
+    pub bit_rate: i64,
     /// combination of AV_DISPOSITION_*
     pub disposition: i32,
     /// discard of AVDISCARD_*
@@ -45,13 +48,12 @@ pub struct StreamInfo {
     pub profile: i32,
     /// codec level, eg. 3.1, 4.1 etc.
     pub level: i32,
+
     // Video parameters
     /// Video width
     pub width: i32,
     /// Video height
     pub height: i32,
-    /// Video bit_rate
-    pub bit_rate: i64,
     /// Video frame rate FPS
     pub frame_rate: f32,
     pub avg_frame_rate: f32,
@@ -78,17 +80,21 @@ pub struct StreamInfo {
     pub field_order: usize,
     /// Video rotation
     pub rotation: f64,
+
     // Audio parameters
     /// Audio sample rate
     pub sample_rate: i32,
-    /// Audio number of channels
-    pub channels: i32,
-    /// Audio channel layout
-    pub channel_layout: usize,
+    /// Audio Channel layout
+    pub channel_layout: ffi::AVChannelLayout,
     /// Audio frame size
     pub frame_size: i32,
     /// Audio block align
     pub block_align: i32,
+    /// The number of bits per code sample
+    pub bits_per_coded_sample: i32,
+    /// Raw Sample Bit Depth
+    pub bits_per_raw_sample: i32,
+
     // extra
     pub extra_data: Option<Vec<u8>>,
     pub metadata: HashMap<String, String>,
@@ -168,10 +174,11 @@ impl StreamInfo {
             rotation: Self::get_stream_rotation_angle(stream, &metadata),
             // Audio
             sample_rate: codecpar.sample_rate,
-            channels: codecpar.ch_layout.nb_channels,
-            channel_layout: codecpar.ch_layout.order as usize,
+            channel_layout: codecpar.ch_layout,
             frame_size: codecpar.frame_size,
             block_align: codecpar.block_align,
+            bits_per_coded_sample: codecpar.bits_per_coded_sample,
+            bits_per_raw_sample: codecpar.bits_per_raw_sample,
             // extra
             metadata,
             extra_data: Self::get_extra_data(stream),
@@ -251,7 +258,7 @@ impl std::fmt::Display for StreamInfo {
             let codec_id = self.codec as i32 as ffi::AVCodecID;
             utils::from_c_char(ffi::avcodec_get_name(codec_id))
         };
-        let pix_fmt = unsafe {
+        let format = unsafe {
             if self.media_type.is_video() {
                 utils::from_c_char(ffi::av_get_pix_fmt_name(self.format as c_int))
             } else if self.media_type.is_audio() {
@@ -268,17 +275,17 @@ impl std::fmt::Display for StreamInfo {
         };
         write!(
             f,
-            "{} #{}: codec={}, pix_fmt={}, size={}x{}, bit_rate={}, fps={:.3}, frame_rate={:.3}, video_delay={}",
+            "{} #{}: codec={}, format={}, size={}x{}, fps={:.3}, bit_rate={}, sample_rate={}, video_delay={}",
             stream_type,
             self.index,
             codec_name,
-            pix_fmt,
+            format,
             self.width,
             self.height,
-            self.bit_rate,
             self.avg_frame_rate,
-            self.frame_rate,
-            self.video_delay
+            self.bit_rate,
+            self.sample_rate,
+            self.video_delay,
         )
     }
 }

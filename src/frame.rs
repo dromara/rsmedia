@@ -1,9 +1,10 @@
 use crate::pixel::PixelFormat;
 
 use anyhow::{Context, Error, Result};
-
-use rsmpeg::avutil::{AVFrame, AVImage};
+use rsmpeg::avcodec::AVCodecContext;
+use rsmpeg::avutil::{AVFrame, AVImage, AVSamples};
 use rsmpeg::ffi;
+use rsmpeg::swresample::SwrContext;
 use rsmpeg::swscale::SwsContext;
 
 /// A frame array is the `ndarray` version of `AVFrame`. It is 3-dimensional array with dims `(H, W,
@@ -322,13 +323,18 @@ pub fn convert_ndarray_yuv_to_rgb(yuv: &FrameArray) -> Result<FrameArray> {
     Ok(rgb)
 }
 
-/// 将 AVFrame YUV420P 转换为 RGB24 格式
-pub fn convert_avframe(
-    src_frame: &AVFrame,
+///////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////// Video Scaler SwsContext ////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+fn setup_scaler(
+    src_width: i32,
+    src_height: i32,
+    src_pix_fmt: ffi::AVPixelFormat,
     dst_width: i32,
     dst_height: i32,
-    dst_pix_fmt: PixelFormat,
-) -> Result<AVFrame> {
+    dst_pix_fmt: ffi::AVPixelFormat,
+) -> Result<SwsContext> {
     /*
      * Scaler selection options. Only one may be active at a time.
      */
@@ -396,17 +402,14 @@ pub fn convert_avframe(
     let flags =
         ffi::SWS_BICUBIC | ffi::SWS_FULL_CHR_H_INT | ffi::SWS_ACCURATE_RND | ffi::SWS_BITEXACT;
 
-    // 计算缩放时间
-    let scale_start = std::time::Instant::now();
-
     // 创建转换上下文
-    let mut sws_ctx = SwsContext::get_context(
-        src_frame.width,
-        src_frame.height,
-        src_frame.format,
+    let sws_ctx = SwsContext::get_context(
+        src_width,
+        src_height,
+        src_pix_fmt,
         dst_width,
         dst_height,
-        dst_pix_fmt.into(),
+        dst_pix_fmt,
         flags,
         None,
         None,
@@ -414,22 +417,91 @@ pub fn convert_avframe(
     )
     .context("Failed to create a swscale context.")?;
 
-    // 创建目标缓冲区
+    Ok(sws_ctx)
+}
+
+/// # Safety
+///
+/// ffi::sws_scale_frame
+pub fn scale(
+    src_frame: &AVFrame,
+    dst_width: i32,
+    dst_height: i32,
+    dst_pix_fmt: PixelFormat,
+) -> Result<AVFrame> {
+    if !src_frame.hw_frames_ctx.is_null() {
+        anyhow::bail!("Hardware frames are not supported in this software scalar");
+    }
+
     let mut dst_frame = AVFrame::new();
-    dst_frame.set_width(dst_width);
-    dst_frame.set_height(dst_height);
-    dst_frame.set_format(dst_pix_fmt.into());
-    // extra
-    dst_frame.set_pts(src_frame.pts);
-    dst_frame.set_time_base(src_frame.time_base);
-    dst_frame.set_sample_rate(src_frame.sample_rate);
-    dst_frame.set_pict_type(src_frame.pict_type);
-    dst_frame.set_ch_layout(src_frame.ch_layout);
-    dst_frame.set_nb_samples(src_frame.nb_samples);
+    // copy props
+    let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));
+    }
 
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
+
+    let mut sws_ctx = setup_scaler(
+        src_frame.width,
+        src_frame.height,
+        src_frame.format,
+        dst_width,
+        dst_height,
+        dst_pix_fmt.into(),
+    )
+    .context("Failed to create swscale context.")?;
+
+    let ret = unsafe {
+        ffi::sws_scale_frame(
+            sws_ctx.as_mut_ptr(),
+            dst_frame.as_mut_ptr(),
+            src_frame.as_ptr(),
+        )
+    };
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to scale frame, ret: {}", ret)));
+    }
+
+    Ok(dst_frame)
+}
+
+/// 将 AVFrame YUV420P 转换为 RGB24 格式
+pub fn scale_frame(
+    src_frame: &AVFrame,
+    dst_width: i32,
+    dst_height: i32,
+    dst_pix_fmt: PixelFormat,
+) -> Result<AVFrame> {
+    if !src_frame.hw_frames_ctx.is_null() {
+        anyhow::bail!("Hardware frames are not supported in this software scalar");
+    }
+
+    let mut dst_frame = AVFrame::new();
+    dst_frame.set_width(dst_width);
+    dst_frame.set_height(dst_height);
+    dst_frame.set_format(dst_pix_fmt.into());
+    // copy props
+    let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));
+    }
+
+    dst_frame
+        .alloc_buffer()
+        .context("Failed to allocate destination frame buffer")?;
+
+    let mut sws_ctx = setup_scaler(
+        src_frame.width,
+        src_frame.height,
+        src_frame.format,
+        dst_width,
+        dst_height,
+        dst_pix_fmt.into(),
+    )
+    .context("Failed to create swscale context.")?;
 
     sws_ctx
         .scale_frame(src_frame, 0, src_frame.height, &mut dst_frame)
@@ -438,24 +510,144 @@ pub fn convert_avframe(
             src_frame.format, src_frame.width, src_frame.height, dst_pix_fmt, dst_width, dst_height
         ))?;
 
-    log::debug!(
-        "scale_frame src:[fmt:{}, pts:{}, size:{}x{}], dst:[fmt:{}, pts:{}, size:{}x{}], cost:{:?}",
-        src_frame.format,
-        src_frame.pts,
-        src_frame.width,
-        src_frame.height,
-        dst_frame.format,
-        dst_frame.pts,
-        dst_frame.width,
-        dst_frame.height,
-        scale_start.elapsed()
-    );
+    Ok(dst_frame)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////// Audio Resampler SwrContext /////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+fn setup_resampler(
+    out_ch_layout: &ffi::AVChannelLayout,
+    out_sample_fmt: ffi::AVSampleFormat,
+    out_sample_rate: i32,
+    in_ch_layout: &ffi::AVChannelLayout,
+    in_sample_fmt: ffi::AVSampleFormat,
+    in_sample_rate: i32,
+) -> Result<SwrContext> {
+    let mut resample_context = SwrContext::new(
+        out_ch_layout,
+        out_sample_fmt,
+        out_sample_rate,
+        in_ch_layout,
+        in_sample_fmt,
+        in_sample_rate,
+    )
+    .context("Could not allocate resample context")?;
+
+    resample_context
+        .init()
+        .context("Could not open resample context")?;
+
+    Ok(resample_context)
+}
+
+/// Audio resampling frame
+pub fn convert(
+    decode_context: &AVCodecContext,
+    encode_context: &AVCodecContext,
+    src_frame: &AVFrame,
+) -> Result<AVSamples> {
+    if !src_frame.hw_frames_ctx.is_null() {
+        anyhow::bail!("Hardware frames are not supported in this software re-sampler");
+    }
+
+    let sample_fmt = rsmpeg::avutil::get_sample_fmt_name(src_frame.format);
+    if src_frame.sample_rate < 0 || sample_fmt.is_none() {
+        return Err(Error::msg("Invalid input frame."));
+    }
+
+    let mut resample_context = setup_resampler(
+        &encode_context.ch_layout,
+        encode_context.sample_fmt,
+        encode_context.sample_rate,
+        &decode_context.ch_layout,
+        decode_context.sample_fmt,
+        decode_context.sample_rate,
+    )
+    .context("Failed to create resample context.")?;
+
+    let mut output_samples = AVSamples::new(
+        encode_context.ch_layout.nb_channels,
+        src_frame.nb_samples,
+        encode_context.sample_fmt,
+        0,
+    )
+    .context("Create samples buffer failed.")?;
+
+    let ret = unsafe {
+        resample_context
+            .convert(
+                output_samples.audio_data.as_mut_ptr(),
+                output_samples.nb_samples,
+                src_frame.extended_data as *const _,
+                src_frame.nb_samples,
+            )
+            .context("Could not convert input samples")?
+    };
+    if ret < 0 {
+        return Err(Error::msg(format!(
+            "Failed to convert input samples, ret: {}",
+            ret
+        )));
+    }
+
+    Ok(output_samples)
+}
+
+/// Audio resampling frame
+pub fn convert_frame(
+    decode_context: &AVCodecContext,
+    encode_context: &AVCodecContext,
+    src_frame: &AVFrame,
+) -> Result<AVFrame> {
+    if !src_frame.hw_frames_ctx.is_null() {
+        anyhow::bail!("Hardware frames are not supported in this software re-sampler");
+    }
+
+    let sample_fmt = rsmpeg::avutil::get_sample_fmt_name(src_frame.format);
+    if src_frame.sample_rate < 0 || sample_fmt.is_none() {
+        return Err(Error::msg("Invalid input frame."));
+    }
+
+    // 转换输入 AVFrame 中的样本并将其写入输出 AVFrame。
+    // 输入和输出 AVFrame 必须设置通道布局、采样率和格式。
+    // 如果输出 AVFrame 没有分配数据指针，则将在调用 av_frame_get_buffer() 分配帧时设置 nb_samples 字段。
+    // 输出的 AVFrame 可以是 NULL，或者分配的样本少于所需的数量。在这种情况下，未写入输出的剩余样本将被添加到内部 FIFO 缓冲区，在下次调用此函数或 swr_convert() 时返回。
+    // 如果转换采样率，内部重采样延迟缓冲区中可能会有剩余数据。要以输出方式获取这些数据，请调用此函数或 swr_convert()，并输入 NULL。
+    let resample_context = setup_resampler(
+        &encode_context.ch_layout,
+        encode_context.sample_fmt,
+        encode_context.sample_rate,
+        &decode_context.ch_layout,
+        decode_context.sample_fmt,
+        decode_context.sample_rate,
+    )
+    .context("Failed to create resample context.")?;
+
+    let mut dst_frame = AVFrame::new();
+    let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));
+    }
+
+    dst_frame.set_format(encode_context.sample_fmt);
+    dst_frame.set_ch_layout(encode_context.ch_layout);
+    dst_frame.set_sample_rate(encode_context.sample_rate);
+    dst_frame
+        .alloc_buffer()
+        .context("Failed to allocate destination frame buffer")?;
+
+    resample_context
+        .convert_frame(Some(src_frame), &mut dst_frame)
+        .context("Failed to convert frame.")?;
 
     Ok(dst_frame)
 }
 
-////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////// MyAVImage /////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 pub struct MyAVImage(pub AVImage);
 
@@ -498,31 +690,60 @@ impl MyAVImage {
         Ok(MyAVImage(img))
     }
 
-    /// 封装 `av_image_fill_linesizes`
-    pub fn fill_linesizes(&mut self, pix_fmt: PixelFormat, width: i32) -> Result<()> {
-        let ret = unsafe {
-            ffi::av_image_fill_linesizes(self.linesizes.as_mut_ptr(), pix_fmt.into(), width)
-        };
+    pub fn fill_linesizes(fmt: PixelFormat, width: i32) -> Result<[i32; 4]> {
+        let mut linesizes = [0; 4];
+        let ret =
+            unsafe { ffi::av_image_fill_linesizes(linesizes.as_mut_ptr(), fmt.into(), width) };
+
+        // >= 0 in case of success, a negative error code otherwise
         if ret < 0 {
-            return Err(Error::msg(format!(
-                "Failed to fill linesizes, ret: {}",
-                ret
-            )));
+            return Err(Error::msg(format!("Failed to fill linesizes: {}", ret)));
         }
 
-        Ok(())
+        Ok(linesizes)
     }
 
-    /// 封装 `av_image_fill_plane_sizes`
-    pub fn fill_plane_sizes(&mut self, line_sizes: &[isize]) -> Result<()> {
+    /// See ffi::av_image_get_linesize
+    pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> Result<usize> {
+        // Safe because format is a valid format and this function is pure computation.
+        let ret = unsafe { ffi::av_image_get_linesize(pix_fmt.into(), width as _, plane as _) };
+
+        // returns the computed size in bytes
+        if ret <= 0 {
+            return Err(Error::msg(format!("Failed to get line size, ret: {}", ret)));
+        }
+
+        Ok(ret as usize)
+    }
+
+    /// See ffi::av_image_fill_plane_sizes.
+    pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
+        format: PixelFormat,
+        linesizes: I,
+        height: u32,
+    ) -> Result<Vec<usize>> {
+        const MAX_FFMPEG_PLANES: usize = 4;
+
+        let mut linesizes_buf = [0; MAX_FFMPEG_PLANES];
+        let mut planes = 0;
+        for (i, linesize) in linesizes.into_iter().take(MAX_FFMPEG_PLANES).enumerate() {
+            linesizes_buf[i] = linesize as _;
+            planes += 1;
+        }
+        let mut plane_sizes_buf = [0; MAX_FFMPEG_PLANES];
+
+        // Safe because plane_sizes_buf and linesizes_buf have the size specified by the API, format is
+        // valid, and this function doesn't have any side effects other than writing to plane_sizes_buf.
         let ret = unsafe {
             ffi::av_image_fill_plane_sizes(
-                self.linesizes.as_mut_ptr() as *mut usize,
-                self.pix_fmt,
-                self.height,
-                line_sizes.as_ptr(),
+                plane_sizes_buf.as_mut_ptr(),
+                format.into(),
+                height as _,
+                linesizes_buf.as_ptr(),
             )
         };
+
+        // >= 0 in case of success, a negative error code otherwise
         if ret < 0 {
             return Err(Error::msg(format!(
                 "Failed to fill plane sizes, ret: {}",
@@ -530,137 +751,62 @@ impl MyAVImage {
             )));
         }
 
+        Ok(plane_sizes_buf
+            .into_iter()
+            .map(|x| x as _)
+            .take(planes)
+            .collect())
+    }
+
+    /// 封装 `av_image_check_size`
+    pub fn check_size(width: u32, height: u32) -> Result<()> {
+        let ret = unsafe { ffi::av_image_check_size(width, height, 0, std::ptr::null_mut()) };
+        if ret < 0 {
+            return Err(Error::msg(format!("Failed to check size, ret: {}", ret)));
+        }
         Ok(())
     }
 
-    /// 封装 `av_image_fill_pointers`
-    /// 为图像填写像素格式 pix_fmt 和高度 height 的平面数据指针。
-    pub fn fill_pointers(&mut self, src: &[u8]) -> Result<()> {
+    /// 封装 `av_image_check_size2`
+    /// 检查图像的给定维度是否有效，这意味着具有指定pix_fmt的图像平面的所有字节都可以用带符号的int寻址。
+    pub fn check_size2(
+        width: u32,
+        height: u32,
+        max_pixels: i64,
+        pix_fmt: PixelFormat,
+    ) -> Result<()> {
         let ret = unsafe {
-            ffi::av_image_fill_pointers(
-                self.data.as_mut_ptr(),
-                self.pix_fmt,
-                self.height,
-                src.as_ptr() as *mut u8,
-                self.linesizes.as_ptr(),
+            ffi::av_image_check_size2(
+                width,
+                height,
+                max_pixels,
+                pix_fmt.into(),
+                0,
+                std::ptr::null_mut(),
             )
         };
         if ret < 0 {
-            return Err(Error::msg(format!("Failed to fill pointers, ret: {}", ret)));
-        }
-
-        Ok(())
-    }
-
-    /// 封装 `av_image_copy_to_buffer`
-    pub fn copy_to_buffer(&self, dst: &mut [u8]) -> Result<i32> {
-        let buffer_size = unsafe {
-            ffi::av_image_copy_to_buffer(
-                dst.as_mut_ptr(),
-                dst.len() as i32,
-                self.data.as_ptr() as *const *const u8,
-                self.linesizes.as_ptr(),
-                self.pix_fmt,
-                self.width,
-                self.height,
-                1, // align
-            )
-        };
-
-        if buffer_size < 0 {
-            return Err(Error::msg(format!(
-                "Failed to copy to buffer, ret: {}",
-                buffer_size
-            )));
-        }
-
-        Ok(buffer_size)
-    }
-
-    /// 封装 `av_image_copy`
-    pub fn copy(&mut self, src: &AVImage) -> Result<()> {
-        if self.pix_fmt != src.pix_fmt || self.width != src.width || self.height != src.height {
-            return Err(Error::msg(
-                "Invalid argument: source frame has different size or format",
-            ));
-        }
-
-        unsafe {
-            ffi::av_image_copy(
-                self.data.as_mut_ptr(),
-                self.linesizes.as_mut_ptr(),
-                src.data.as_ptr() as *const *const u8,
-                src.linesizes.as_ptr(),
-                self.pix_fmt,
-                self.width,
-                self.height,
-            );
+            return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
         }
         Ok(())
     }
-}
 
-// ----------------------- 其他工具函数 -----------------------
-
-/// 封装 `av_image_check_size`
-pub fn check_size(width: u32, height: u32) -> Result<()> {
-    let ret = unsafe { ffi::av_image_check_size(width, height, 0, std::ptr::null_mut()) };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to check size, ret: {}", ret)));
+    pub fn into_inner(self) -> AVImage {
+        self.0
     }
-    Ok(())
 }
 
-/// 封装 `av_image_check_size2`
-/// 检查图像的给定维度是否有效，这意味着具有指定pix_fmt的图像平面的所有字节都可以用带符号的int寻址。
-pub fn check_size2(width: u32, height: u32, max_pixels: i64, pix_fmt: PixelFormat) -> Result<()> {
-    let ret = unsafe {
-        ffi::av_image_check_size2(
-            width,
-            height,
-            max_pixels,
-            pix_fmt.into(),
-            0,
-            std::ptr::null_mut(),
-        )
-    };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
+impl std::ops::Deref for MyAVImage {
+    type Target = AVImage;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
-    Ok(())
 }
 
-/// 封装 `av_image_get_linesize`
-pub fn image_get_linesize(pix_fmt: PixelFormat, width: i32, plane: i32) -> Result<i32> {
-    let ret = unsafe { ffi::av_image_get_linesize(pix_fmt.into(), width, plane) };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to get linesize, ret: {}", ret)));
-    }
-    Ok(ret)
-}
-
-/// 封装 `av_image_fill_max_pixsteps`
-pub fn image_fill_max_pix_steps(
-    pix_fmt: PixelFormat,
-) -> Result<(
-    [i32; ffi::AV_NUM_DATA_POINTERS as usize],
-    [i32; ffi::AV_NUM_DATA_POINTERS as usize],
-)> {
-    unsafe {
-        let mut max_pix_steps: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
-            [0; ffi::AV_NUM_DATA_POINTERS as usize];
-        let mut max_pix_step_comps: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
-            [0; ffi::AV_NUM_DATA_POINTERS as usize];
-
-        let pix_desc = ffi::av_pix_fmt_desc_get(pix_fmt.into());
-
-        ffi::av_image_fill_max_pixsteps(
-            max_pix_steps.as_mut_ptr(),
-            max_pix_step_comps.as_mut_ptr(),
-            pix_desc,
-        );
-
-        Ok((max_pix_steps, max_pix_step_comps))
+impl std::ops::DerefMut for MyAVImage {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -714,20 +860,6 @@ pub fn get_pix_fmt_loss(
     }
 
     Ok(loss)
-}
-
-impl std::ops::Deref for MyAVImage {
-    type Target = AVImage;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for MyAVImage {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
 }
 
 #[cfg(test)]
@@ -1891,8 +2023,8 @@ mod tests {
         let align = 32;
 
         // 1. 测试图像大小检查
-        check_size(width as u32, height as u32)?;
-        check_size2(
+        MyAVImage::check_size(width as u32, height as u32)?;
+        MyAVImage::check_size2(
             width as u32,
             height as u32,
             (width * height * 3) as i64,
@@ -1900,38 +2032,10 @@ mod tests {
         )?;
 
         // 2. 创建图像
-        let mut img = MyAVImage::alloc(pix_fmt, width, height, align)?;
+        let img = MyAVImage::alloc(pix_fmt, width, height, align)?;
         assert_eq!(img.width, width);
         assert_eq!(img.height, height);
         assert_eq!(img.pix_fmt, pix_fmt.into());
-
-        // 3. 设置行大小
-        img.fill_linesizes(pix_fmt, width)?;
-        let linesize = img.linesizes[0];
-        assert!(linesize > 0);
-
-        // 4. 测试获取行大小
-        let computed_linesize = image_get_linesize(pix_fmt, width, 0)?;
-        println!("Computed linesize: {}", computed_linesize);
-
-        // 5. 测试平面大小填充
-        // img.fill_plane_sizes(img.linesizes.map(|x| x as isize).as_slice())?;
-
-        // 6. 测试缓冲区复制
-        let buffer_size = linesize as usize * height as usize;
-        let mut dst_buffer = vec![0u8; buffer_size];
-        let copied_size = img.copy_to_buffer(&mut dst_buffer)?;
-        assert!(copied_size > 0);
-
-        // 7. 测试图像复制
-        let mut image2 = MyAVImage::alloc(pix_fmt, width, height, align)?;
-        image2.fill_linesizes(pix_fmt, width)?;
-        image2.copy(&img)?;
-
-        // 8. 测试最大像素步长填充
-        let (max_steps, max_comps) = image_fill_max_pix_steps(pix_fmt)?;
-        assert!(!max_steps.is_empty());
-        assert!(!max_comps.is_empty());
 
         // 9. 测试最佳像素格式查找
         let best_fmt = find_best_pix_fmt(
@@ -1946,31 +2050,180 @@ mod tests {
         // 10. 测试像素格式损失计算
         let loss = get_pix_fmt_loss(PixelFormat::RGB24, PixelFormat::YUV420P, false)?;
         println!("Pixel format loss: {}", loss);
-        // assert!(loss <= 10);
 
         // 打印调试信息（避免直接访问指针）
         println!("Test configuration:");
         println!("Width: {}, Height: {}", width, height);
         println!("Pixel format: {:?}", pix_fmt);
         println!("Alignment: {}", align);
-        println!("Actual linesize: {}", linesize);
-        println!("line_size * height size: {}", buffer_size);
 
         Ok(())
     }
 
     #[test]
-    fn test_error_conditions() -> Result<()> {
-        // 测试无效尺寸
-        assert!(check_size(0, 0).is_err());
+    fn test_image_linesize_planar() -> Result<()> {
+        // --------------------------
+        // 测试用例1: YUV420P 格式
+        // --------------------------
+        // 输入：3个平面（Y/U/V）的行大小 [640, 320, 320]，高度 480。
+        // 输出：平面大小计算规则：
+        //      Y平面：行大小 * 高度 → 640 * 480 = 307200
+        //      U/V平面：行大小 * (高度 / 2) → 320 * 240 = 76800（因色度子采样）
+        let yuv_fmt = PixelFormat::YUV420P;
+        let yuv_width = 640;
+        let yuv_height = 480;
 
-        // 测试无效的像素格式转换
-        assert!(get_pix_fmt_loss(PixelFormat::NONE, PixelFormat::RGB24, false).is_err());
+        // 步骤1：获取各平面行大小
+        let yuv_linesizes = MyAVImage::fill_linesizes(yuv_fmt, yuv_width)?;
+        assert_eq!(
+            yuv_linesizes,
+            [640, 320, 320, 0],
+            "YUV420P linesizes mismatch"
+        );
 
-        // 测试图像复制时的格式不匹配
-        let mut img1 = MyAVImage::alloc(PixelFormat::RGB24, 640, 480, 1)?;
-        let img2 = MyAVImage::alloc(PixelFormat::BGR24, 320, 240, 1)?;
-        assert!(img1.copy(&img2).is_err());
+        // 步骤2：验证 av_image_line_size 返回值
+        assert_eq!(
+            MyAVImage::get_linesize(yuv_fmt, yuv_width as u32, 0)?,
+            640,
+            "Y plane linesize incorrect"
+        );
+        assert_eq!(
+            MyAVImage::get_linesize(yuv_fmt, yuv_width as u32, 1)?,
+            320,
+            "U plane linesize incorrect"
+        );
+        assert_eq!(
+            MyAVImage::get_linesize(yuv_fmt, yuv_width as u32, 2)?,
+            320,
+            "V plane linesize incorrect"
+        );
+
+        // 步骤3：计算平面大小
+        let plane_sizes = MyAVImage::fill_plane_sizes(
+            yuv_fmt,
+            yuv_linesizes[..3].iter().map(|&x| x as u32),
+            yuv_height as u32,
+        )?;
+        // 预期结果：
+        // Y: 640 * 480 = 307200
+        // U: 320 * 240 = 76800
+        // V: 320 * 240 = 76800
+        assert_eq!(plane_sizes.len(), 3);
+        assert_eq!(plane_sizes[0], 307200);
+        assert_eq!(plane_sizes[1], 76800);
+        assert_eq!(plane_sizes[2], 76800);
+
+        // --------------------------
+        // 测试用例2: RGBA 格式
+        // --------------------------
+        // 输入：单平面行大小 1280
+        // 输出：单平面大小 1280 * 720 = 921600
+        let rgba_fmt = PixelFormat::RGBA;
+        let rgba_width = 320;
+        let rgba_height = 720;
+
+        // 步骤1：获取行大小（单平面）
+        let rgba_linesizes = MyAVImage::fill_linesizes(rgba_fmt, rgba_width)?;
+        assert_eq!(rgba_linesizes, [1280, 0, 0, 0], "RGBA linesizes mismatch");
+
+        // 步骤2：验证 av_image_line_size
+        assert_eq!(
+            MyAVImage::get_linesize(rgba_fmt, rgba_width as u32, 0)?,
+            1280,
+            "RGBA plane linesize incorrect"
+        );
+
+        // 步骤3：计算平面大小
+        let plane_sizes = MyAVImage::fill_plane_sizes(
+            rgba_fmt,
+            vec![rgba_linesizes[0] as u32],
+            rgba_height as u32,
+        )?;
+        // 预期结果：1280 * 720 = 921600
+        assert_eq!(plane_sizes.len(), 1);
+        assert_eq!(plane_sizes[0], 921600);
+
+        // --------------------------
+        // 测试用例3: NV12 格式（YUV420半平面，UV交错）
+        // --------------------------
+        let nv12_fmt = PixelFormat::NV12;
+        let nv12_width = 640;
+        let nv12_height = 480;
+
+        // 步骤1：获取各平面行大小
+        let linesizes = MyAVImage::fill_linesizes(nv12_fmt, nv12_width)?;
+        assert_eq!(
+            linesizes,
+            [640, 640, 0, 0], // NV12只有两个平面：Y（行640）、UV（行640）
+            "NV12 linesizes mismatch"
+        );
+
+        // 步骤2：验证 av_image_line_size 返回值
+        assert_eq!(
+            MyAVImage::get_linesize(nv12_fmt, nv12_width as u32, 0)?,
+            640,
+            "NV12 Y plane linesize incorrect"
+        );
+        assert_eq!(
+            MyAVImage::get_linesize(nv12_fmt, nv12_width as u32, 1)?,
+            640,
+            "NV12 UV plane linesize incorrect"
+        );
+
+        // 错误测试：访问不存在的平面（索引2）
+        assert!(
+            MyAVImage::get_linesize(nv12_fmt, nv12_width as u32, 2).is_err(),
+            "NV12 should reject plane index 2"
+        );
+
+        // 步骤3：计算平面大小
+        let plane_sizes = MyAVImage::fill_plane_sizes(
+            nv12_fmt,
+            vec![linesizes[0] as u32, linesizes[1] as u32], // 传入两个平面
+            nv12_height as u32,
+        )?;
+
+        // 预期结果：
+        // Y平面：640 * 480 = 307200
+        // UV平面：640 * (480 / 2) = 153600
+        assert_eq!(plane_sizes.len(), 2);
+        assert_eq!(plane_sizes[0], 307200);
+        assert_eq!(plane_sizes[1], 153600);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_image_linesize_error() -> Result<()> {
+        let yuv_fmt = PixelFormat::YUV420P;
+
+        // --------------------------
+        // 测试用例3: 错误场景
+        // --------------------------
+        // 错误1：无效像素格式
+        assert!(
+            MyAVImage::get_linesize(PixelFormat::NONE, 640, 0).is_err(),
+            "None format should fail"
+        );
+
+        // 错误2：越界平面索引（YUV420P只有3个平面）
+        assert!(
+            MyAVImage::get_linesize(yuv_fmt, 640, 3).is_err(),
+            "Plane index 3 should be invalid for YUV420P"
+        );
+
+        // 错误3：非法宽度（0或负数）
+        assert!(
+            MyAVImage::get_linesize(yuv_fmt, 0, 0).is_err(),
+            "Width 0 should fail"
+        );
+
+        // 错误4：传入过多平面（超过4个）
+        let oversized_input = vec![640, 320, 320, 128, 64];
+        assert!(
+            MyAVImage::fill_plane_sizes(yuv_fmt, oversized_input, 480).is_ok(),
+            "Should truncate to first 4 planes"
+        );
 
         Ok(())
     }
@@ -1982,19 +2235,12 @@ mod tests {
         let height = 480;
         let pix_fmt = PixelFormat::RGB24;
 
-        let mut image = MyAVImage::alloc(pix_fmt, width, height, 1)?;
-
-        // 创建测试数据
-        let mut test_data = vec![255u8; (width * height * 3) as usize]; // 全白图像
-                                                                        // 填充数据
-        image.fill_pointers(test_data.as_mut_slice())?;
-
-        // 验证数据
-        let mut output_buffer = vec![0u8; (width * height * 3) as usize];
-        let copied_size = image.copy_to_buffer(&mut output_buffer)?;
-
-        assert_eq!(copied_size as usize, width as usize * height as usize * 3);
-        assert!(output_buffer.iter().all(|&x| x == 255));
+        let image = MyAVImage::alloc(pix_fmt, width, height, 1)?;
+        let img = image.into_inner();
+        println!(
+            "img width: {}, height: {}, pix_fmt: {:?}",
+            img.width, img.height, img.pix_fmt
+        );
 
         Ok(())
     }

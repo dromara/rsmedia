@@ -647,7 +647,7 @@ impl DecoderSplit {
             && frame.height as u32 == resize_height);
 
         if is_scale_needed {
-            return frame::convert_avframe(
+            return frame::scale_frame(
                 &frame,
                 resize_width as i32,
                 resize_height as i32,

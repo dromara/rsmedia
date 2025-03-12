@@ -423,7 +423,7 @@ impl Encoder {
 
         // Reformat frame to target pixel format if need
         let mut frame = if raw_frame.format != target_format.into() {
-            frame::convert_avframe(raw_frame, raw_frame.width, raw_frame.height, target_format)?
+            frame::scale_frame(raw_frame, raw_frame.width, raw_frame.height, target_format)?
         } else {
             raw_frame.clone()
         };

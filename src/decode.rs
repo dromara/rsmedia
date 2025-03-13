@@ -1,3 +1,4 @@
+use crate::flags::MediaType;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
@@ -94,7 +95,7 @@ impl<'a> DecoderBuilder<'a> {
             reader_builder = reader_builder.with_options(opts);
         }
         let reader = reader_builder.build().unwrap();
-        let (video_stream_index, codec_name) = reader.best_video_stream_index()?;
+        let (stream_index, codec_name) = reader.find_best_stream(MediaType::VIDEO)?;
 
         let codec = {
             let codec_name = if let Some(ref codec_name) = self.codec_name {
@@ -111,14 +112,14 @@ impl<'a> DecoderBuilder<'a> {
         Ok(Decoder {
             decoder: DecoderSplit::new(
                 &reader,
-                video_stream_index,
+                stream_index,
                 codec,
                 self.codec_opts,
                 self.resize,
                 self.hw_device_type,
             )?,
             reader,
-            stream_index: video_stream_index,
+            stream_index,
             draining: false,
         })
     }
@@ -600,7 +601,7 @@ impl DecoderSplit {
         };
 
         let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
-            if hw_ctx.is_hw_frame(frame.clone()) {
+            if hw_ctx.is_hw_frame(&frame) {
                 match hw_ctx.hw_download(&mut self.decode_ctx, &frame) {
                     Ok(sw_frame) => sw_frame,
                     Err(e) => {

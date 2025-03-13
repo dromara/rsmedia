@@ -111,3 +111,14 @@ bitflags! {
         const MULTILAYER       = ffi::AV_DISPOSITION_MULTILAYER;
     }
 }
+
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MediaType {
+    UNKNOWN = ffi::AVMEDIA_TYPE_UNKNOWN,
+    VIDEO = ffi::AVMEDIA_TYPE_VIDEO,
+    AUDIO = ffi::AVMEDIA_TYPE_AUDIO,
+    DATA = ffi::AVMEDIA_TYPE_DATA,
+    SUBTITLE = ffi::AVMEDIA_TYPE_SUBTITLE,
+    ATTACHMENT = ffi::AVMEDIA_TYPE_ATTACHMENT,
+}

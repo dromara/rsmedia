@@ -173,26 +173,6 @@ impl<W: Writer> Muxer<W> {
             Ok(None)
         }
     }
-
-    // Get parameter sets corresponding to each internal stream. The parameter set contains one SPS
-    // (Sequence Parameter Set) and zero or more PPSs (Picture Parameter Sets).
-    //
-    // Note that this function only supports extracting parameter sets for streams with the H.264
-    // codec and will return `Error::UnsupportedCodecParameterSets` for streams with another type
-    // of codec.
-    // pub fn parameter_sets_h264(&self) -> Vec<Result<(Sps<'_>, Pps<'_>)>> {
-    //     self.writer
-    //         .output()
-    //         .streams()
-    //         .iter().for_each(|stream| {
-    //             if stream.codecpar().codec_id == ffi::AV_CODEC_ID_H264 {
-    //                 extract_parameter_sets_h264(extradata(self.writer.output(), stream.index())?)
-    //             } else {
-    //                 Err(Error::msg("Unsupported codec parameter sets"))
-    //             }
-    //         })
-    //         .collect::<Vec<_>>()
-    // }
 }
 
 unsafe impl<W: Writer> Send for Muxer<W> {}

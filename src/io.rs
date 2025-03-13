@@ -1,3 +1,4 @@
+use crate::flags::MediaType;
 use crate::location::Location;
 use crate::options::Options;
 use crate::stream::{Stream, StreamInfo};
@@ -250,23 +251,20 @@ impl Reader {
         }
     }
 
-    /// Find the best video stream and return the index.
-    pub fn best_video_stream_index(&self) -> Result<(usize, String)> {
+    /// Find the best stream
+    ///
+    /// # Arguments
+    ///
+    /// * `media_type` - MediaType maybe Video, Audio, etc.
+    pub fn find_best_stream(&self, media_type: MediaType) -> Result<(usize, String)> {
         let res = self
             .input
-            .find_best_stream(ffi::AVMEDIA_TYPE_VIDEO)?
+            .find_best_stream(media_type as _)?
             .map(|(index, codec)| (index, utils::to_string(codec.name())))
-            .ok_or(Error::msg("No video stream found"))?;
-        Ok(res)
-    }
-
-    /// Find the best audio stream and return the index.
-    pub fn best_audio_stream_index(&self) -> Result<(usize, String)> {
-        let res = self
-            .input
-            .find_best_stream(ffi::AVMEDIA_TYPE_AUDIO)?
-            .map(|(index, codec)| (index, utils::to_string(codec.name())))
-            .ok_or(Error::msg("No audio stream found"))?;
+            .ok_or(Error::msg(format!(
+                "No stream found for MediaType:{:?}",
+                media_type
+            )))?;
         Ok(res)
     }
 }

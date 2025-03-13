@@ -436,7 +436,7 @@ impl Encoder {
             Some(hw_ctx) => {
                 // 上传到硬件内存并获取硬件帧
                 let hw_frame = {
-                    if hw_ctx.is_sw_frame(frame.clone()) {
+                    if hw_ctx.is_sw_frame(&frame) {
                         hw_ctx
                             .hw_upload(&mut self.encode_ctx, &frame)
                             .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?

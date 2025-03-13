@@ -127,8 +127,8 @@ impl HWContext {
     ) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
-        hw_frames_ref.data().format = self.config.hw_pixel_format.into();
-        hw_frames_ref.data().sw_format = self.config.sw_pixel_format.into();
+        hw_frames_ref.data().format = self.get_format(true);
+        hw_frames_ref.data().sw_format = self.get_format(false);
         hw_frames_ref.data().width = width;
         hw_frames_ref.data().height = height;
         hw_frames_ref.data().initial_pool_size = 20;
@@ -144,11 +144,10 @@ impl HWContext {
         if is_decoder {
             unsafe {
                 let ctx_mut_ptr = codec_ctx.deref_mut();
-                ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
-                ctx_mut_ptr.opaque =
-                    i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
-                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
+                ctx_mut_ptr.opaque = self.get_format(true) as *mut std::os::raw::c_void;
                 ctx_mut_ptr.get_format = Some(hwaccel_get_format);
+                ctx_mut_ptr.sw_pix_fmt = self.get_format(false);
+                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
             }
         }
 
@@ -176,8 +175,7 @@ impl HWContext {
         let hw_down_start = std::time::Instant::now();
 
         // Check if input frame is actually in hardware memory
-        if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into()
-        {
+        if !self.is_hw_frame(hw_frame) {
             return Err(Error::msg(format!(
                 "Input frame is not a valid hardware frame: format={:?}, expected={:?}, hw_frames_ctx={:?}",
                 hw_frame.format,
@@ -262,7 +260,7 @@ impl HWContext {
         let hw_up_start = std::time::Instant::now();
 
         // Check if input frame format matches our software format
-        if sw_frame.format != self.config.sw_pixel_format.into() {
+        if !self.is_sw_frame(sw_frame) {
             return Err(Error::msg(format!(
                 "Input frame format ({:?}) doesn't match expected software format ({:?})",
                 sw_frame.format, self.config.sw_pixel_format
@@ -347,7 +345,7 @@ impl HWContext {
     ///
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
-    pub fn is_hw_frame(&self, frame: AVFrame) -> bool {
+    pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
         // 检查硬件帧上下文是否为空
         if frame.hw_frames_ctx.is_null() {
             log::debug!("Frame hardware context is null");
@@ -355,12 +353,7 @@ impl HWContext {
         }
 
         // 检查帧格式是否匹配硬件像素格式
-        if frame.format != self.config.hw_pixel_format.into() {
-            log::debug!(
-                "Frame format ({:?}) doesn't match hardware format ({:?})",
-                frame.format,
-                self.config.hw_pixel_format
-            );
+        if frame.format != self.get_format(true) {
             return false;
         }
 
@@ -368,8 +361,8 @@ impl HWContext {
     }
 
     /// Check if a frame is in software memory format
-    pub fn is_sw_frame(&self, frame: AVFrame) -> bool {
-        frame.format == self.config.sw_pixel_format.into()
+    pub fn is_sw_frame(&self, frame: &AVFrame) -> bool {
+        frame.format == self.get_format(false)
     }
 
     /// Helper function to get the appropriate pixel format for a frame

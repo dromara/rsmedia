@@ -610,11 +610,6 @@ pub fn convert_frame(
         return Err(Error::msg("Invalid input frame."));
     }
 
-    // 转换输入 AVFrame 中的样本并将其写入输出 AVFrame。
-    // 输入和输出 AVFrame 必须设置通道布局、采样率和格式。
-    // 如果输出 AVFrame 没有分配数据指针，则将在调用 av_frame_get_buffer() 分配帧时设置 nb_samples 字段。
-    // 输出的 AVFrame 可以是 NULL，或者分配的样本少于所需的数量。在这种情况下，未写入输出的剩余样本将被添加到内部 FIFO 缓冲区，在下次调用此函数或 swr_convert() 时返回。
-    // 如果转换采样率，内部重采样延迟缓冲区中可能会有剩余数据。要以输出方式获取这些数据，请调用此函数或 swr_convert()，并输入 NULL。
     let resample_context = setup_resampler(
         &encode_context.ch_layout,
         encode_context.sample_fmt,
@@ -638,6 +633,11 @@ pub fn convert_frame(
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
 
+    // 转换输入 AVFrame 中的样本并将其写入输出 AVFrame。
+    // 输入和输出 AVFrame 必须设置通道布局、采样率和格式。
+    // 如果输出 AVFrame 没有分配数据指针，则将在调用 av_frame_get_buffer() 分配帧时设置 nb_samples 字段。
+    // 输出的 AVFrame 可以是 NULL，或者分配的样本少于所需的数量。在这种情况下，未写入输出的剩余样本将被添加到内部 FIFO 缓冲区，在下次调用此函数或 swr_convert() 时返回。
+    // 如果转换采样率，内部重采样延迟缓冲区中可能会有剩余数据。要以输出方式获取这些数据，请调用此函数或 swr_convert()，并输入 NULL。
     resample_context
         .convert_frame(Some(src_frame), &mut dst_frame)
         .context("Failed to convert frame.")?;
@@ -690,10 +690,10 @@ impl MyAVImage {
         Ok(MyAVImage(img))
     }
 
-    pub fn fill_linesizes(fmt: PixelFormat, width: i32) -> Result<[i32; 4]> {
+    pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> Result<[i32; 4]> {
         let mut linesizes = [0; 4];
         let ret =
-            unsafe { ffi::av_image_fill_linesizes(linesizes.as_mut_ptr(), fmt.into(), width) };
+            unsafe { ffi::av_image_fill_linesizes(linesizes.as_mut_ptr(), pix_fmt.into(), width) };
 
         // >= 0 in case of success, a negative error code otherwise
         if ret < 0 {
@@ -761,9 +761,12 @@ impl MyAVImage {
     /// 封装 `av_image_check_size`
     pub fn check_size(width: u32, height: u32) -> Result<()> {
         let ret = unsafe { ffi::av_image_check_size(width, height, 0, std::ptr::null_mut()) };
+
+        // >= 0 if valid, a negative error code otherwise
         if ret < 0 {
             return Err(Error::msg(format!("Failed to check size, ret: {}", ret)));
         }
+
         Ok(())
     }
 
@@ -785,6 +788,8 @@ impl MyAVImage {
                 std::ptr::null_mut(),
             )
         };
+
+        // >= 0 if valid, a negative error code otherwise
         if ret < 0 {
             return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
         }

@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // .with_hardware_device(HWDeviceType::CUDA)
         // .with_codec_name("h264_cuvid".to_string())
         .with_resize(Resize::Fit(1280, 720))
-        .build()
+        .build_with_stream_reader()
         .context("failed to create decoder")?;
 
     let output_folder = "frames_video_rs";

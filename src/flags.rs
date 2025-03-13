@@ -113,7 +113,7 @@ bitflags! {
 }
 
 #[repr(i32)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MediaType {
     UNKNOWN = ffi::AVMEDIA_TYPE_UNKNOWN,
     VIDEO = ffi::AVMEDIA_TYPE_VIDEO,
@@ -121,4 +121,35 @@ pub enum MediaType {
     DATA = ffi::AVMEDIA_TYPE_DATA,
     SUBTITLE = ffi::AVMEDIA_TYPE_SUBTITLE,
     ATTACHMENT = ffi::AVMEDIA_TYPE_ATTACHMENT,
+}
+
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SampleFormat {
+    /// < none
+    NONE = ffi::AV_SAMPLE_FMT_NONE,
+    /// < unsigned 8 bits
+    U8 = ffi::AV_SAMPLE_FMT_U8,
+    /// < signed 16 bits
+    S16 = ffi::AV_SAMPLE_FMT_S16,
+    /// < signed 32 bits
+    S32 = ffi::AV_SAMPLE_FMT_S32,
+    /// < float
+    FLT = ffi::AV_SAMPLE_FMT_FLT,
+    /// < double
+    DBL = ffi::AV_SAMPLE_FMT_DBL,
+    /// < unsigned 8 bits, planar
+    U8P = ffi::AV_SAMPLE_FMT_U8P,
+    /// < signed 16 bits, planar
+    S16P = ffi::AV_SAMPLE_FMT_S16P,
+    /// < signed 32 bits, planar
+    S32P = ffi::AV_SAMPLE_FMT_S32P,
+    /// < float, planar
+    FLTP = ffi::AV_SAMPLE_FMT_FLTP,
+    /// < double, planar
+    DBLP = ffi::AV_SAMPLE_FMT_DBLP,
+    /// < signed 64 bits
+    S64 = ffi::AV_SAMPLE_FMT_S64,
+    /// < signed 64 bits, planar
+    S64P = ffi::AV_SAMPLE_FMT_S64P,
 }

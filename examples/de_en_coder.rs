@@ -10,7 +10,7 @@ fn main() {
         // .with_hardware_device(HWDeviceType::CUDA)
         // .with_codec_name("h264_cuvid".to_string())
         .with_resize(Resize::Exact(320, 180))
-        .build()
+        .build_with_stream_reader()
         .expect("failed to create decoder");
 
     let mut encoder = EncoderBuilder::new(Path::new("/tmp/output.mp4"), 320, 180)
@@ -20,7 +20,7 @@ fn main() {
         // .with_hardware_device(HWDeviceType::CUDA)
         // .with_codec_name("h264_nvenc".to_string())
         // .with_codec_options(&Options::preset_h264_nvenc())
-        .build()
+        .build_with_stream_writer()
         .expect("failed to create encoder");
 
     for frame in decoder.decode_raw_iter() {

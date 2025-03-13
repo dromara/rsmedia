@@ -1,10 +1,11 @@
 use crate::flags::MediaType;
 use crate::location::Location;
 use crate::options::Options;
-use crate::stream::{Stream, StreamInfo};
+use crate::stream::Stream;
 use crate::utils;
 use crate::Packet;
 
+use rsmpeg::avcodec::AVCodecParameters;
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput, AVInputFormat};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -177,16 +178,6 @@ impl Reader {
         }
     }
 
-    /// Retrieve stream information for a stream. Stream information can be used to set up a
-    /// corresponding stream for transmuxing or transcoding.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to produce information for.
-    pub fn stream_info(&self, stream_index: usize) -> Result<StreamInfo> {
-        StreamInfo::from_reader(self, stream_index)
-    }
-
     /// Seek in reader. This will change the reader head so that it points to a location within one
     /// second of the target timestamp or it will return an error.
     ///
@@ -326,6 +317,7 @@ impl<'a> StreamWriterBuilder<'a> {
                 .context("Create output format context failed.")?;
         Ok(StreamWriter {
             destination: self.destination,
+            options: self.options.cloned(),
             output: output_ctx,
         })
     }
@@ -351,6 +343,7 @@ impl<'a> StreamWriterBuilder<'a> {
 /// ```
 pub struct StreamWriter {
     pub destination: Location,
+    pub options: Option<Options>,
     pub output: AVFormatContextOutput,
 }
 
@@ -363,16 +356,6 @@ impl StreamWriter {
     #[inline]
     pub fn new(destination: impl Into<Location>) -> Result<Self> {
         StreamWriterBuilder::new(destination).build()
-    }
-
-    /// Retrieve stream information for a stream. Stream information can be used to set up a
-    /// corresponding stream for transmuxing or transcoding.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to produce information for.
-    pub fn stream_info(&self, stream_index: usize) -> Result<StreamInfo> {
-        StreamInfo::from_writer(self, stream_index)
     }
 }
 
@@ -599,8 +582,9 @@ pub(crate) mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
+            let mut dict = self.options.clone().map(|options| options.to_dict());
             self.output
-                .write_header(&mut None)
+                .write_header(&mut dict)
                 .context("Failed to write header")?;
             Ok(())
         }
@@ -701,6 +685,14 @@ pub(crate) mod private {
 
         /// Obtain mutable reference to output context.
         fn output_mut(&mut self) -> &mut AVFormatContextOutput;
+
+        /// new stream
+        fn add_stream(&mut self, codecpar: AVCodecParameters, timebase: ffi::AVRational) -> usize {
+            let mut av_stream = self.output_mut().new_stream();
+            av_stream.set_codecpar(codecpar);
+            av_stream.set_time_base(timebase);
+            av_stream.index as usize
+        }
     }
 
     impl Output for StreamWriter {

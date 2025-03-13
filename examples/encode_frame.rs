@@ -13,7 +13,7 @@ fn main() {
         // libx264, libx265, h264_nvenc, h264_vaapi etc.
         // .with_codec_name("h264_nvenc".to_string())
         // .with_codec_options(&Options::preset_h264_nvenc())
-        .build()
+        .build_with_stream_writer()
         .expect("failed to create encoder");
 
     let duration: Time = Time::from_nth_of_a_second(24);

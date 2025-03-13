@@ -1,4 +1,3 @@
-use crate::flags::MediaType;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
@@ -7,19 +6,22 @@ use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
+use crate::stream::StreamInfo;
 use crate::time::Time;
-use crate::{utils, PixelFormat, Rational, RawFrame};
+use crate::{utils, MediaType, PixelFormat, Rational, RawFrame};
 
 use anyhow::{Context, Error, Result};
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecRef};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext};
+use rsmpeg::avformat::AVStreamRef;
 use rsmpeg::error::RsmpegError;
-use rsmpeg::ffi;
+use rsmpeg::{avutil, ffi};
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
     source: Location,
     resize: Option<Resize>,
-    /// container format
+    media_type: MediaType,
+    // container format
     format: Option<&'a str>,
     format_opts: Option<&'a Options>,
     codec_name: Option<String>,
@@ -35,6 +37,7 @@ impl<'a> DecoderBuilder<'a> {
         Self {
             source: source.into(),
             resize: None,
+            media_type: MediaType::VIDEO,
             format: None,
             format_opts: None,
             codec_name: None,
@@ -85,17 +88,23 @@ impl<'a> DecoderBuilder<'a> {
         self
     }
 
+    pub fn with_media_type(mut self, media_type: MediaType) -> Self {
+        self.media_type = media_type;
+        self
+    }
+
     /// Build [`Decoder`].
-    pub fn build(self) -> Result<Decoder> {
-        let mut reader_builder = ReaderBuilder::new(self.source);
-        if let Some(format) = self.format {
-            reader_builder = reader_builder.with_format(format);
-        }
-        if let Some(opts) = self.format_opts {
-            reader_builder = reader_builder.with_options(opts);
-        }
-        let reader = reader_builder.build().unwrap();
-        let (stream_index, codec_name) = reader.find_best_stream(MediaType::VIDEO)?;
+    pub fn build(self, reader: Reader) -> Result<Decoder> {
+        self.build_from_reader(reader)
+    }
+
+    pub fn build_from_reader(self, reader: Reader) -> Result<Decoder> {
+        let (stream_index, codec_name) = reader.find_best_stream(self.media_type)?;
+        let stream = reader
+            .input
+            .streams()
+            .get(stream_index)
+            .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
 
         let codec = {
             let codec_name = if let Some(ref codec_name) = self.codec_name {
@@ -109,19 +118,69 @@ impl<'a> DecoderBuilder<'a> {
             ))?
         };
 
+        let time_base = stream.time_base;
+        let mut decode_ctx = AVCodecContext::new(&codec);
+        decode_ctx.set_time_base(time_base);
+        decode_ctx.set_pkt_timebase(time_base);
+        decode_ctx.apply_codecpar(&stream.codecpar())?;
+
+        let (width, height) = (decode_ctx.width, decode_ctx.height);
+        let hw_context = if self.media_type == MediaType::VIDEO && self.hw_device_type.is_some() {
+            let device_type = self.hw_device_type.unwrap();
+            if device_type
+                .find_hw_pixel_format_with_codec(&codec)
+                .is_none()
+            {
+                return Err(Error::msg(format!(
+                    "HW acceleration decoder not supported for codec: {}",
+                    utils::to_string(codec.name())
+                )));
+            }
+            let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap())?;
+            hw_ctx.setup_hw_frames(true, &mut decode_ctx, width, height)?;
+            Some(hw_ctx)
+        } else {
+            None
+        };
+
+        let dict = self.codec_opts.map(|options| options.to_dict());
+        decode_ctx
+            .open(dict)
+            .context("Failed to open decoder for stream")?;
+
+        let stream_info = StreamInfo::from_stream(stream)?;
+        log::info!("{}", stream_info);
+
+        let (resize_width, resize_height) = match self.resize {
+            Some(resize) => resize
+                .compute_for((width as u32, height as u32))
+                .ok_or(Error::msg("Invalid resize parameters"))?,
+            None => (width as u32, height as u32),
+        };
+
         Ok(Decoder {
-            decoder: DecoderSplit::new(
-                &reader,
-                stream_index,
-                codec,
-                self.codec_opts,
-                self.resize,
-                self.hw_device_type,
-            )?,
             reader,
+            decode_ctx,
+            hw_context,
+            time_base: time_base.into(),
+            media_type: self.media_type,
+            size: (width as u32, height as u32),
+            size_out: (resize_width, resize_height),
             stream_index,
             draining: false,
         })
+    }
+
+    pub fn build_with_stream_reader(self) -> Result<Decoder> {
+        let source = self.source.clone();
+        let mut reader_builder = ReaderBuilder::new(source);
+        if let Some(format) = self.format {
+            reader_builder = reader_builder.with_format(format);
+        }
+        if let Some(opts) = self.format_opts {
+            reader_builder = reader_builder.with_options(opts);
+        }
+        self.build_from_reader(reader_builder.build().unwrap())
     }
 }
 
@@ -138,9 +197,14 @@ impl<'a> DecoderBuilder<'a> {
 /// );
 /// ```
 pub struct Decoder {
-    decoder: DecoderSplit,
     reader: Reader,
+    decode_ctx: AVCodecContext,
+    hw_context: Option<HWContext>,
+    time_base: Rational,
+    media_type: MediaType,
     stream_index: usize,
+    size: (u32, u32),
+    size_out: (u32, u32),
     draining: bool,
 }
 
@@ -152,47 +216,49 @@ impl Decoder {
     /// * `source` - Source to decode.
     #[inline]
     pub fn new(source: impl Into<Location>) -> Result<Self> {
-        DecoderBuilder::new(source).build()
+        DecoderBuilder::new(source).build_with_stream_reader()
+    }
+
+    /// Get the decoders input size (resolution dimensions): width * height.
+    #[inline(always)]
+    pub fn size(&self) -> (u32, u32) {
+        self.size
+    }
+
+    /// Get the decoders output size after resizing is applied (resolution dimensions): width * height.
+    #[inline(always)]
+    pub fn size_out(&self) -> (u32, u32) {
+        self.size_out
     }
 
     /// Get decoder time base.
-    #[inline]
+    #[inline(always)]
     pub fn time_base(&self) -> Rational {
-        self.decoder.time_base()
+        self.time_base
     }
 
-    /// Duration of the decoder stream.
-    #[inline]
-    pub fn duration(&self) -> Result<Time> {
-        let reader_stream =
-            self.reader
-                .input
-                .streams()
-                .get(self.stream_index)
-                .ok_or(Error::msg(format!(
-                    "stream: {} not found!",
-                    self.stream_index
-                )))?;
-        Ok(Time::new(
-            Some(reader_stream.duration),
-            reader_stream.time_base.into(),
-        ))
-    }
-
-    /// Number of frames in the decoder stream.
-    #[inline]
-    pub fn frames(&self) -> Result<u64> {
-        Ok(self
-            .reader
+    pub fn current_stream(&self) -> Result<&AVStreamRef> {
+        self.reader
             .input
             .streams()
             .get(self.stream_index)
             .ok_or(Error::msg(format!(
                 "stream: {} not found!",
                 self.stream_index
-            )))?
-            .nb_frames
-            .max(0) as u64)
+            )))
+    }
+
+    /// Duration of the decoder stream.
+    #[inline]
+    pub fn duration(&self) -> Result<Time> {
+        let stream = self.current_stream()?;
+        Ok(Time::new(Some(stream.duration), stream.time_base.into()))
+    }
+
+    /// Number of frames in the decoder stream.
+    #[inline]
+    pub fn frames(&self) -> Result<u64> {
+        Ok(self.current_stream()?.nb_frames.max(0) as u64)
     }
 
     /// Decode frames through iterator interface. This is similar to `decode` but it returns frames
@@ -233,7 +299,7 @@ impl Decoder {
         Ok(loop {
             if !self.draining {
                 match self.reader.read(self.stream_index) {
-                    Ok(packet) => match self.decoder.decode(packet) {
+                    Ok(packet) => match self._decode(packet) {
                         Ok(Some(frame)) => break frame,
                         Ok(None) => {
                             log::debug!("[decode]: no frame decoded.");
@@ -242,23 +308,11 @@ impl Decoder {
                     },
                     Err(err) => return Err(err),
                 }
-                // FIXME: ReadExhausted
-                // if matches!(packet_result, Err(MediaError::ReadExhausted)) {
-                //     self.draining = true;
-                //     continue;
-                // }
             } else {
-                match self.decoder.drain() {
+                match self.drain() {
                     Ok(Some(frame)) => break frame,
-                    // FIXME: ReadExhausted
-                    // Ok(None) | Err(MediaError::ReadExhausted) => {
-                    //     self.decoder.reset();
-                    //     self.draining = false;
-                    //     return Err(MediaError::DecodeExhausted);
-                    // }
                     Ok(None) => {
-                        self.decoder.reset();
-                        self.draining = false;
+                        self.reset();
                     }
                     Err(err) => return Err(err),
                 }
@@ -281,7 +335,7 @@ impl Decoder {
         Ok(loop {
             if !self.draining {
                 match self.reader.read(self.stream_index) {
-                    Ok(packet) => match self.decoder.decode_raw(packet) {
+                    Ok(packet) => match self._decode_raw(packet) {
                         Ok(Some(frame)) => break frame,
                         Ok(None) => {
                             log::debug!("[decode_raw]: no frame decoded.");
@@ -290,23 +344,11 @@ impl Decoder {
                     },
                     Err(err) => return Err(err),
                 }
-                // FIXME: ReadExhausted
-                // if matches!(packet_result, Err(MediaError::ReadExhausted)) {
-                //     self.draining = true;
-                //     continue;
-                // }
             } else {
-                match self.decoder.drain_raw() {
+                match self.drain_raw() {
                     Ok(Some(frame)) => break frame,
-                    // FIXME: ReadExhausted
-                    // Ok(None) | Err(MediaError::ReadExhausted) => {
-                    //     self.decoder.reset();
-                    //     self.draining = false;
-                    //     return Err(MediaError::DecodeExhausted);
-                    // }
                     Ok(None) => {
-                        self.decoder.reset();
-                        self.draining = false;
+                        self.reset();
                     }
                     Err(err) => return Err(err),
                 }
@@ -321,7 +363,7 @@ impl Decoder {
     pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
         self.reader
             .seek(timestamp_milliseconds)
-            .inspect(|_| self.decoder.flush())
+            .inspect(|_| self.flush())
     }
 
     /// Seek to specific frame in reader.
@@ -331,7 +373,7 @@ impl Decoder {
     pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
         self.reader
             .seek_to_frame(frame_number)
-            .inspect(|_| self.decoder.flush())
+            .inspect(|_| self.flush())
     }
 
     /// Seek to start of reader.
@@ -339,157 +381,15 @@ impl Decoder {
     /// See [`Reader::seek_to_start`](crate::io::Reader::seek_to_start) for more information.
     #[inline]
     pub fn seek_to_start(&mut self) -> Result<()> {
-        self.reader
-            .seek_to_start()
-            .inspect(|_| self.decoder.flush())
-    }
-
-    /// Split the decoder into a decoder (of type [`DecoderSplit`]) and a [`Reader`].
-    ///
-    /// This allows the caller to detach stream reading from decoding, which is useful for advanced
-    /// use cases.
-    ///
-    /// # Return value
-    ///
-    /// Tuple of the [`DecoderSplit`], [`Reader`] and the reader stream index.
-    #[inline]
-    pub fn into_parts(self) -> (DecoderSplit, Reader, usize) {
-        (self.decoder, self.reader, self.stream_index)
-    }
-
-    /// Get the decoders input size (resolution dimensions): width and height.
-    #[inline(always)]
-    pub fn size(&self) -> (u32, u32) {
-        self.decoder.size
-    }
-
-    /// Get the decoders output size after resizing is applied (resolution dimensions): width and
-    /// height.
-    #[inline(always)]
-    pub fn size_out(&self) -> (u32, u32) {
-        self.decoder.size_out
+        self.reader.seek_to_start().inspect(|_| self.flush())
     }
 
     /// Get the decoders input frame rate as floating-point value.
     pub fn frame_rate(&self) -> f32 {
-        let frame_rate = self
-            .reader
-            .input
-            .streams()
-            .get(self.stream_index)
-            .map(|stream| Rational::from(stream.r_frame_rate));
-
-        if let Some(frame_rate) = frame_rate {
-            if frame_rate.denominator() > 0 {
-                (frame_rate.numerator() as f32) / (frame_rate.denominator() as f32)
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        }
-    }
-}
-
-/// Decoder part of a split [`Decoder`] and [`Reader`].
-///
-/// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
-/// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
-pub struct DecoderSplit {
-    hw_context: Option<HWContext>,
-    decode_ctx: AVCodecContext,
-    time_base: Rational,
-    size: (u32, u32),
-    size_out: (u32, u32),
-    draining: bool,
-}
-
-impl DecoderSplit {
-    /// Create a new [`DecoderSplit`].
-    ///
-    /// # Arguments
-    ///
-    /// * `reader` - [`Reader`] to initialize decoder from.
-    /// * `resize` - Optional resize strategy to apply to frames.
-    pub fn new(
-        reader: &Reader,
-        stream_index: usize,
-        codec: AVCodecRef,
-        opts: Option<&Options>,
-        resize: Option<Resize>,
-        hw_device_type: Option<HWDeviceType>,
-    ) -> Result<Self> {
-        let reader_stream = reader
-            .input
-            .streams()
-            .get(stream_index)
-            .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
-
-        let mut decode_ctx = AVCodecContext::new(&codec);
-        decode_ctx.set_time_base(reader_stream.time_base);
-        decode_ctx.set_pkt_timebase(reader_stream.time_base);
-        decode_ctx.apply_codecpar(&reader_stream.codecpar())?;
-        let (width, height) = (decode_ctx.width, decode_ctx.height);
-
-        let hw_context = match hw_device_type {
-            Some(device_type) => {
-                if device_type
-                    .find_hw_pixel_format_with_codec(&codec)
-                    .is_none()
-                {
-                    return Err(Error::msg(format!(
-                        "HW acceleration decoder not supported for codec: {}",
-                        utils::to_string(codec.name())
-                    )));
-                }
-                let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap())?;
-                hw_ctx.setup_hw_frames(true, &mut decode_ctx, width, height)?;
-                Some(hw_ctx)
-            }
-            None => None,
-        };
-
-        let dict = opts.map(|options| options.to_dict());
-        decode_ctx
-            .open(dict)
-            .context("Failed to open decoder for stream")?;
-
-        let stream_info = reader.stream_info(stream_index)?;
-        log::info!("{}", stream_info);
-
-        let (resize_width, resize_height) = match resize {
-            Some(resize) => resize
-                .compute_for((width as u32, height as u32))
-                .ok_or(Error::msg("Invalid resize parameters"))?,
-            None => (width as u32, height as u32),
-        };
-
-        Ok(Self {
-            hw_context,
-            decode_ctx,
-            time_base: reader_stream.time_base.into(),
-            size: (width as u32, height as u32),
-            size_out: (resize_width, resize_height),
-            draining: false,
-        })
-    }
-
-    /// Get the decoders input size (resolution dimensions): width * height.
-    #[inline(always)]
-    pub fn size(&self) -> (u32, u32) {
-        self.size
-    }
-
-    /// Get the decoders output size after resizing is applied (resolution dimensions): width * height.
-    #[inline(always)]
-    pub fn size_out(&self) -> (u32, u32) {
-        self.size_out
-    }
-
-    /// Get decoder time base.
-    #[inline(always)]
-    pub fn time_base(&self) -> Rational {
-        self.time_base
+        avutil::av_q2d(
+            self.current_stream()
+                .map_or(avutil::ra(0, 1), |stream| stream.r_frame_rate),
+        ) as f32
     }
 
     /// Decode a [`Packet`].
@@ -506,8 +406,8 @@ impl DecoderSplit {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    pub fn decode(&mut self, packet: Packet) -> Result<Option<(Time, FrameArray)>> {
-        match self.decode_raw(packet)? {
+    fn _decode(&mut self, packet: Packet) -> Result<Option<(Time, FrameArray)>> {
+        match self._decode_raw(packet)? {
             Some(mut frame) => Ok(Some(self.raw_frame_to_time_and_frame(&mut frame)?)),
             None => Ok(None),
         }
@@ -525,7 +425,7 @@ impl DecoderSplit {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    pub fn decode_raw(&mut self, packet: Packet) -> Result<Option<RawFrame>> {
+    fn _decode_raw(&mut self, packet: Packet) -> Result<Option<RawFrame>> {
         assert!(!self.draining);
         self.send_packet_to_decoder(packet)?;
         self.receive_frame_from_decoder()
@@ -600,28 +500,31 @@ impl DecoderSplit {
             return Ok(None);
         };
 
-        let processed_frame = if let Some(hw_ctx) = self.hw_context.as_ref() {
-            if hw_ctx.is_hw_frame(&frame) {
-                match hw_ctx.hw_download(&mut self.decode_ctx, &frame) {
-                    Ok(sw_frame) => sw_frame,
-                    Err(e) => {
-                        log::error!("Failed to download frame from hw_device: {}", e);
-                        return Err(Error::msg(format!(
-                            "Failed to download frame from hw_device: {}",
-                            e
-                        )));
-                    }
+        let sw_frame = self
+            .hw_context
+            .as_ref()
+            .and_then(|hw_ctx| {
+                if hw_ctx.is_hw_frame(&frame) {
+                    Some(hw_ctx.hw_download(&mut self.decode_ctx, &frame))
+                } else {
+                    log::warn!("Hardware acceleration decoding not available!");
+                    None
                 }
-            } else {
-                log::warn!("Hardware acceleration decoding not available!");
-                frame
-            }
-        } else {
-            frame
-        };
+            })
+            .map_or(Ok(frame), |result| {
+                result.map_err(|e| {
+                    log::error!("Failed to download frame from hw_device: {}", e);
+                    Error::msg(format!("HW frame download failed: {}", e))
+                })
+            })?;
+
+        // handle scale frame only for video
+        if self.media_type != MediaType::VIDEO {
+            return Ok(Some(sw_frame));
+        }
 
         // handle scaling frame if needed (if not, size_out is the same as size)
-        Ok(Some(self.rescale_frame(processed_frame)?))
+        Ok(Some(self.rescale_frame(sw_frame)?))
     }
 
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
@@ -672,7 +575,9 @@ impl DecoderSplit {
     }
 }
 
-impl Drop for DecoderSplit {
+/// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
+/// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
+impl Drop for Decoder {
     fn drop(&mut self) {
         // Maximum number of invocations to `decoder_receive_frame` to drain the items still on the
         // queue before giving up.
@@ -722,5 +627,50 @@ impl Drop for DecoderSplit {
     }
 }
 
-unsafe impl Send for DecoderSplit {}
-unsafe impl Sync for DecoderSplit {}
+unsafe impl Send for Decoder {}
+unsafe impl Sync for Decoder {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_video() -> Result<()> {
+        let path = std::path::Path::new("/tmp/bear.mp4");
+        let mut decoder = Decoder::new(path)?;
+        for res in decoder.decode_raw_iter() {
+            match res {
+                Ok(frame) => {
+                    println!("{:?}", frame);
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_audio() -> Result<()> {
+        let path = std::path::Path::new("/tmp/bear.mp4");
+        let mut decoder = DecoderBuilder::new(path)
+            .with_media_type(MediaType::AUDIO)
+            .build_with_stream_reader()?;
+
+        for res in decoder.decode_raw_iter() {
+            match res {
+                Ok(frame) => {
+                    println!("{:?}", frame);
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+}

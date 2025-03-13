@@ -22,6 +22,7 @@ pub mod utils;
 
 pub use decode::{Decoder, DecoderBuilder};
 pub use encode::{Encoder, EncoderBuilder};
+pub use flags::{MediaType, SampleFormat};
 pub use init::init;
 pub use io::{Reader, ReaderBuilder, StreamWriter, StreamWriterBuilder};
 pub use location::{Location, Url};

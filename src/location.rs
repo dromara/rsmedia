@@ -3,7 +3,7 @@ pub use url::Url;
 
 /// Represents a video file or stream location. Can be either a file resource (a path) or a network
 /// resource (a URL).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Location {
     /// File source.
     File(std::path::PathBuf),

@@ -123,6 +123,20 @@ pub enum MediaType {
     ATTACHMENT = ffi::AVMEDIA_TYPE_ATTACHMENT,
 }
 
+impl From<ffi::AVMediaType> for MediaType {
+    fn from(item: ffi::AVMediaType) -> Self {
+        match item {
+            ffi::AVMEDIA_TYPE_UNKNOWN => MediaType::UNKNOWN,
+            ffi::AVMEDIA_TYPE_VIDEO => MediaType::VIDEO,
+            ffi::AVMEDIA_TYPE_AUDIO => MediaType::AUDIO,
+            ffi::AVMEDIA_TYPE_DATA => MediaType::DATA,
+            ffi::AVMEDIA_TYPE_SUBTITLE => MediaType::SUBTITLE,
+            ffi::AVMEDIA_TYPE_ATTACHMENT => MediaType::ATTACHMENT,
+            _ => panic!("Invalid media type"),
+        }
+    }
+}
+
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SampleFormat {

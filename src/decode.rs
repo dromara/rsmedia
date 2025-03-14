@@ -46,6 +46,10 @@ impl<'a> DecoderBuilder<'a> {
         }
     }
 
+    pub fn new_with_location(source: Location) -> Self {
+        Self::new(source)
+    }
+
     /// Set the codec name to use for decoding.
     /// If not set, the decoder will try to guess the codec based on the input.
     pub fn with_codec_name(mut self, codec_name: String) -> Self {
@@ -235,6 +239,16 @@ impl Decoder {
     #[inline(always)]
     pub fn time_base(&self) -> Rational {
         self.time_base
+    }
+
+    #[inline(always)]
+    pub fn media_type(&self) -> MediaType {
+        self.media_type
+    }
+
+    #[inline]
+    pub fn stream_index(&self) -> usize {
+        self.stream_index
     }
 
     pub fn current_stream(&self) -> Result<&AVStreamRef> {

@@ -9,7 +9,9 @@ use crate::pixel::PixelFormat;
 use crate::stream::StreamInfo;
 use crate::time::Time;
 use crate::{utils, MediaType, Rational, RawFrame, SampleFormat};
+use std::hash::{Hash, Hasher};
 
+use rsmpeg::avformat::AVStreamRef;
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef};
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
 use rsmpeg::error::RsmpegError;
@@ -214,8 +216,8 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
-    pub fn with_audio_channels(mut self, channels: u32) -> Self {
-        self.nb_channels = channels as i32;
+    pub fn with_nb_channels(mut self, nb_channels: u32) -> Self {
+        self.nb_channels = nb_channels as i32;
         self
     }
 
@@ -567,6 +569,22 @@ impl<W: Writer> Encoder<W> {
         self.encode_ctx.ch_layout()
     }
 
+    #[inline]
+    pub fn stream_index(&self) -> usize {
+        self.stream_index
+    }
+
+    pub fn current_stream(&self) -> Result<&AVStreamRef> {
+        self.writer
+            .output()
+            .streams()
+            .get(self.stream_index)
+            .ok_or(Error::msg(format!(
+                "stream: {} not found!",
+                self.stream_index
+            )))
+    }
+
     /// Signal to the encoder that writing has finished. This will cause any packets in the encoder
     /// to be flushed and a trailer to be written if the container format has one.
     ///
@@ -624,13 +642,7 @@ impl<W: Writer> Encoder<W> {
 
     /// Acquire the time base of the output stream.
     fn stream_time_base(&mut self) -> Rational {
-        self.writer
-            .output()
-            .streams()
-            .get(self.stream_index)
-            .unwrap()
-            .time_base
-            .into()
+        self.current_stream().unwrap().time_base.into()
     }
 
     /// Write encoded packet to output stream.
@@ -690,6 +702,24 @@ impl<W: Writer> Encoder<W> {
 impl<W: Writer> Drop for Encoder<W> {
     fn drop(&mut self) {
         let _ = self.finish();
+    }
+}
+
+impl<W: Writer> PartialEq for Encoder<W> {
+    fn eq(&self, other: &Self) -> bool {
+        self.encode_ctx.as_ptr() == other.encode_ctx.as_ptr()
+            && self.stream_index == other.stream_index
+            && self.writer.output().as_ptr() == other.writer.output().as_ptr()
+    }
+}
+
+impl<W: Writer> Eq for Encoder<W> {}
+
+impl<W: Writer> Hash for Encoder<W> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.writer.output().as_ptr().hash(state);
+        self.encode_ctx.as_ptr().hash(state);
+        self.stream_index.hash(state);
     }
 }
 
@@ -842,7 +872,7 @@ mod tests {
         let output = Path::new("/tmp/aac_encode_audio.aac");
         let mut encoder = EncoderBuilder::new(output, 0, 0)
             .with_media_type(MediaType::AUDIO) // 指定音频编码
-            .with_audio_channels(2) // 立体声
+            .with_nb_channels(2) // 立体声
             .with_sample_rate(DEFAULT_SAMPLE_RATE) // 采样率
             .with_bit_rate(DEFAULT_BIT_RATE) // 128kbps 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式

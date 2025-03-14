@@ -527,7 +527,7 @@ impl Writer for PacketizedBufWriter {}
 unsafe impl Send for PacketizedBufWriter {}
 unsafe impl Sync for PacketizedBufWriter {}
 
-pub(crate) mod private {
+pub mod private {
     use super::*;
 
     pub trait Write {

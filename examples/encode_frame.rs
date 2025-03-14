@@ -1,20 +1,32 @@
-use rsmedia::colors;
+use rsmedia::{colors, StreamWriter};
 use rsmedia::time::Time;
 use rsmedia::{EncoderBuilder, FrameArray};
+use rsmedia::io::private::{Output, Write};
+
 use std::path::Path;
+use anyhow::Context;
 
 fn main() {
     rsmedia::init().unwrap();
 
-    let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), 1280, 720)
+    let mut encoder = EncoderBuilder::new()
+        .with_video_size(1280, 720)
         .with_format("mp4")
+        .with_gop_size(0)
         // use hwaccel cuda
         // .with_hardware_device(HWDeviceType::CUDA)
         // libx264, libx265, h264_nvenc, h264_vaapi etc.
         // .with_codec_name("h264_nvenc".to_string())
         // .with_codec_options(&Options::preset_h264_nvenc())
-        .build_with_stream_writer()
+        .build()
         .expect("failed to create encoder");
+
+    let output_path = Path::new("output.mp4");
+    let mut stream_writer = StreamWriter::new(output_path).unwrap();
+    let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
+
+    // Write the header to the output file.
+    stream_writer.write_header().unwrap();
 
     let duration: Time = Time::from_nth_of_a_second(24);
     let mut position = Time::zero();
@@ -23,16 +35,30 @@ fn main() {
         // This will create a smooth rainbow animation video!
         let frame = rainbow_frame(i as f32 / 256.0);
 
-        encoder
-            .encode(&frame, position)
-            .expect("failed to encode frame");
+        match encoder.encode(&frame, position) {
+            Ok(Some(mut packet)) => {
+                packet.set_pos(-1);
+                packet.set_stream_index(video_index);
+                packet.rescale_ts(packet.time_base(), encoder.time_base());
+                stream_writer.write_frame(&mut packet).context("failed to write frame").unwrap();
+            }
+            Ok(None) => {
+                println!("No packet received from encoder.");
+            }
+            Err(e) => {
+                println!("Error encoding frame: {:?}", e);
+            }
+        }
+
         println!("Encoded frame {} at position {:?}", i, position);
 
         // Update the current position and add the inter-frame duration to it.
         position = position.aligned_with(duration).add();
     }
 
-    encoder.finish().expect("failed to finish encoder");
+    encoder.flush().expect("failed to finish encoder");
+    stream_writer.write_trailer().unwrap();
+
 }
 
 fn rainbow_frame(p: f32) -> FrameArray {

@@ -1,8 +1,7 @@
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
-use crate::io::{Reader, StreamReader, StreamReaderBuilder};
-use crate::location::Location;
+use crate::io::Reader;
 use crate::options::Options;
 use crate::packet::Packet;
 use crate::resize::Resize;
@@ -12,13 +11,11 @@ use crate::{utils, MediaType, PixelFormat, Rational, RawFrame};
 
 use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avformat::AVStreamRef;
 use rsmpeg::error::RsmpegError;
-use rsmpeg::{avutil, ffi};
+use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
-    source: Location,
     resize: Option<Resize>,
     media_type: MediaType,
     // container format
@@ -33,9 +30,8 @@ impl<'a> DecoderBuilder<'a> {
     /// Create a decoder with the specified source.
     ///
     /// * `source` - Source to decode.
-    pub fn new(source: impl Into<Location>) -> Self {
+    pub fn new() -> Self {
         Self {
-            source: source.into(),
             resize: None,
             media_type: MediaType::VIDEO,
             format: None,
@@ -44,10 +40,6 @@ impl<'a> DecoderBuilder<'a> {
             codec_opts: None,
             hw_device_type: None,
         }
-    }
-
-    pub fn new_with_location(source: Location) -> Self {
-        Self::new(source)
     }
 
     /// Set the codec name to use for decoding.
@@ -98,11 +90,11 @@ impl<'a> DecoderBuilder<'a> {
     }
 
     /// Build [`Decoder`].
-    pub fn build<R: Reader>(self, reader: R) -> Result<Decoder<R>> {
+    pub fn build<R: Reader>(self, reader: &R) -> Result<Decoder> {
         self.build_from_reader(reader)
     }
 
-    pub fn build_from_reader<R: Reader>(self, reader: R) -> Result<Decoder<R>> {
+    pub fn build_from_reader<R: Reader>(self, reader: &R) -> Result<Decoder> {
         let (stream_index, codec_name) = reader.find_best_stream(self.media_type)?;
         let stream = reader
             .input()
@@ -163,7 +155,6 @@ impl<'a> DecoderBuilder<'a> {
         };
 
         Ok(Decoder {
-            reader,
             decode_ctx,
             hw_context,
             time_base: time_base.into(),
@@ -174,17 +165,11 @@ impl<'a> DecoderBuilder<'a> {
             draining: false,
         })
     }
+}
 
-    pub fn build_with_stream_reader(self) -> Result<Decoder<StreamReader>> {
-        let source = self.source.clone();
-        let mut reader_builder = StreamReaderBuilder::new(source);
-        if let Some(format) = self.format {
-            reader_builder = reader_builder.with_format(format);
-        }
-        if let Some(opts) = self.format_opts {
-            reader_builder = reader_builder.with_options(opts);
-        }
-        self.build_from_reader(reader_builder.build().unwrap())
+impl Default for DecoderBuilder<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -200,8 +185,7 @@ impl<'a> DecoderBuilder<'a> {
 ///     .for_each(|frame| println!("Got frame!"),
 /// );
 /// ```
-pub struct Decoder<R: Reader> {
-    reader: R,
+pub struct Decoder {
     decode_ctx: AVCodecContext,
     hw_context: Option<HWContext>,
     time_base: Rational,
@@ -212,15 +196,15 @@ pub struct Decoder<R: Reader> {
     draining: bool,
 }
 
-impl<R: Reader> Decoder<R> {
+impl Decoder {
     /// Create a decoder to decode the specified source.
     ///
     /// # Arguments
     ///
     /// * `source` - Source to decode.
     #[inline]
-    pub fn new(source: impl Into<Location>) -> Result<Decoder<StreamReader>> {
-        DecoderBuilder::new(source).build_with_stream_reader()
+    pub fn new<R: Reader>(reader: &R) -> Result<Decoder> {
+        DecoderBuilder::new().build(reader)
     }
 
     /// Get the decoders input size (resolution dimensions): width * height.
@@ -251,49 +235,6 @@ impl<R: Reader> Decoder<R> {
         self.stream_index
     }
 
-    pub fn current_stream(&self) -> Result<&AVStreamRef> {
-        self.reader
-            .input()
-            .streams()
-            .get(self.stream_index)
-            .ok_or(Error::msg(format!(
-                "stream: {} not found!",
-                self.stream_index
-            )))
-    }
-
-    /// Duration of the decoder stream.
-    #[inline]
-    pub fn duration(&self) -> Result<Time> {
-        let stream = self.current_stream()?;
-        Ok(Time::new(Some(stream.duration), stream.time_base.into()))
-    }
-
-    /// Number of frames in the decoder stream.
-    #[inline]
-    pub fn frames(&self) -> Result<u64> {
-        Ok(self.current_stream()?.nb_frames.max(0) as u64)
-    }
-
-    /// Decode frames through iterator interface. This is similar to `decode` but it returns frames
-    /// through an infinite iterator.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// decoder
-    ///     .decode_iter()
-    ///     .take_while(Result::is_ok)
-    ///     .map(Result::unwrap)
-    ///     .for_each(|(ts, frame)| {
-    ///         // Do something with frame...
-    ///     });
-    /// ```
-    #[cfg(feature = "ndarray")]
-    pub fn decode_iter(&mut self) -> impl Iterator<Item = Result<(Time, FrameArray)>> + '_ {
-        std::iter::from_fn(move || Some(self.decode()))
-    }
-
     /// Decode a single frame.
     ///
     /// # Return value
@@ -309,23 +250,21 @@ impl<R: Reader> Decoder<R> {
     /// }
     /// ```
     #[cfg(feature = "ndarray")]
-    pub fn decode(&mut self) -> Result<(Time, FrameArray)> {
+    pub fn decode(&mut self, packet: &Packet) -> Result<(Time, FrameArray)> {
         Ok(loop {
             if !self.draining {
-                match self.read(self.stream_index) {
-                    Ok(packet) => match self._decode(packet) {
-                        Ok(Some(frame)) => break frame,
-                        Ok(None) => {
-                            log::debug!("[decode]: no frame decoded.");
-                        }
-                        Err(err) => return Err(err),
-                    },
+                match self._decode(packet.clone()) {
+                    Ok(Some(frame)) => break frame,
+                    Ok(None) => {
+                        log::debug!("no frame decoded.");
+                    }
                     Err(err) => return Err(err),
                 }
             } else {
                 match self.drain() {
                     Ok(Some(frame)) => break frame,
                     Ok(None) => {
+                        log::debug!("frame drained decoder.");
                         self.reset();
                     }
                     Err(err) => return Err(err),
@@ -334,34 +273,26 @@ impl<R: Reader> Decoder<R> {
         })
     }
 
-    /// Decode frames through iterator interface. This is similar to `decode_raw` but it returns
-    /// frames through an infinite iterator.
-    pub fn decode_raw_iter(&mut self) -> impl Iterator<Item = Result<RawFrame>> + '_ {
-        std::iter::from_fn(move || Some(self.decode_raw()))
-    }
-
     /// Decode a single frame and return the raw ffmpeg `AvFrame`.
     ///
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`].
-    pub fn decode_raw(&mut self) -> Result<RawFrame> {
+    pub fn decode_raw(&mut self, packet: &Packet) -> Result<RawFrame> {
         Ok(loop {
             if !self.draining {
-                match self.read(self.stream_index) {
-                    Ok(packet) => match self._decode_raw(packet) {
-                        Ok(Some(frame)) => break frame,
-                        Ok(None) => {
-                            log::debug!("[decode_raw]: no frame decoded.");
-                        }
-                        Err(err) => return Err(err),
-                    },
+                match self._decode_raw(packet.clone()) {
+                    Ok(Some(frame)) => break frame,
+                    Ok(None) => {
+                        log::debug!("no rawFrame decoded.");
+                    }
                     Err(err) => return Err(err),
                 }
             } else {
                 match self.drain_raw() {
                     Ok(Some(frame)) => break frame,
                     Ok(None) => {
+                        log::debug!("rawFrame drained decoder.");
                         self.reset();
                     }
                     Err(err) => return Err(err),
@@ -397,14 +328,6 @@ impl<R: Reader> Decoder<R> {
     // pub fn seek_to_start(&mut self) -> Result<()> {
     //     self.reader.seek_to_start().inspect(|_| self.flush())
     // }
-
-    /// Get the decoders input frame rate as floating-point value.
-    pub fn frame_rate(&self) -> f32 {
-        avutil::av_q2d(
-            self.current_stream()
-                .map_or(avutil::ra(0, 1), |stream| stream.r_frame_rate),
-        ) as f32
-    }
 
     /// Decode a [`Packet`].
     ///
@@ -497,49 +420,49 @@ impl<R: Reader> Decoder<R> {
         }
     }
 
-    /// Read a single packet from the source video file.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to read from.
-    ///
-    /// # Example
-    ///
-    /// Read a single packet:
-    ///
-    /// ```ignore
-    /// let mut reader = StreamReader::new(Path::new("my_video.mp4")).unwrap();
-    /// let stream = reader.best_video_stream_index().unwrap();
-    /// let mut packet = reader.read(stream).unwrap();
-    /// ```
-    pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
-        loop {
-            match self.reader.read_packet() {
-                Ok(Some((stream, packet))) => {
-                    if stream.index() == stream_index {
-                        return Ok(Packet::new(packet, stream.time_base()));
-                    }
-                    log::debug!("Skipping packet from stream: {}", stream.index());
-                }
-                Ok(None) => return Err(Error::msg("No more packets")),
-                Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-    }
+    // /// Read a single packet from the source video file.
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `stream_index` - Index of stream to read from.
+    // ///
+    // /// # Example
+    // ///
+    // /// Read a single packet:
+    // ///
+    // /// ```ignore
+    // /// let mut reader = StreamReader::new(Path::new("my_video.mp4")).unwrap();
+    // /// let stream = reader.best_video_stream_index().unwrap();
+    // /// let mut packet = reader.read(stream).unwrap();
+    // /// ```
+    // pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
+    //     loop {
+    //         match self.reader.read_packet() {
+    //             Ok(Some((stream, packet))) => {
+    //                 if stream.index() == stream_index {
+    //                     return Ok(Packet::new(packet, stream.time_base()));
+    //                 }
+    //                 log::debug!("Skipping packet from stream: {}", stream.index());
+    //             }
+    //             Ok(None) => return Err(Error::msg("No more packets")),
+    //             Err(e) => {
+    //                 log::error!("Error reading packet: {}", e);
+    //                 return Err(e);
+    //             }
+    //         }
+    //     }
+    // }
 
-    pub fn read_any(&mut self) -> Result<Packet> {
-        match self.reader.read_packet() {
-            Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
-            Ok(None) => Err(Error::msg("No more packets")),
-            Err(e) => {
-                log::error!("Error reading packet: {}", e);
-                Err(e)
-            }
-        }
-    }
+    // pub fn read_any(&mut self) -> Result<Packet> {
+    //     match self.reader.read_packet() {
+    //         Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
+    //         Ok(None) => Err(Error::msg("No more packets")),
+    //         Err(e) => {
+    //             log::error!("Error reading packet: {}", e);
+    //             Err(e)
+    //         }
+    //     }
+    // }
 
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
     fn send_packet_to_decoder(&mut self, packet: Packet) -> Result<()> {
@@ -635,7 +558,7 @@ impl<R: Reader> Decoder<R> {
 
 /// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
-impl<R: Reader> Drop for Decoder<R> {
+impl Drop for Decoder {
     fn drop(&mut self) {
         // Maximum number of invocations to `decoder_receive_frame` to drain the items still on the
         // queue before giving up.
@@ -685,25 +608,41 @@ impl<R: Reader> Drop for Decoder<R> {
     }
 }
 
-unsafe impl<R: Reader> Send for Decoder<R> {}
-unsafe impl<R: Reader> Sync for Decoder<R> {}
+unsafe impl Send for Decoder {}
+unsafe impl Sync for Decoder {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::io::StreamReader;
 
     #[test]
     fn test_decode_video() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
-        let mut decoder = Decoder::<StreamReader>::new(path)?;
-        for res in decoder.decode_raw_iter() {
-            match res {
-                Ok(frame) => {
-                    println!("{:?}", frame);
+
+        let mut stream_reader = StreamReader::new(path)?;
+        let mut decoder = DecoderBuilder::new()
+            .with_media_type(MediaType::VIDEO)
+            .build(&stream_reader)?;
+
+        loop {
+            match stream_reader.read_packet() {
+                Ok(Some((stream, packet))) => {
+                    println!("packet: {:?}", packet);
+                    // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
+                    // 如果是视频流，需要先判断是否是视频流，然后再decode
+                    if decoder.stream_index() == stream.index() {
+                        let frame = decoder.decode_raw(&packet)?;
+                        println!("video frame: {:?}", frame);
+                    }
+                }
+                Ok(None) => {
+                    println!("No more packets");
+                    break;
                 }
                 Err(e) => {
-                    println!("Error: {}", e);
-                    break;
+                    log::error!("Error reading packet: {}", e);
+                    return Err(e);
                 }
             }
         }
@@ -714,21 +653,34 @@ mod tests {
     #[test]
     fn test_decode_audio() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
-        let mut decoder = DecoderBuilder::new(path)
-            .with_media_type(MediaType::AUDIO)
-            .build_with_stream_reader()?;
 
-        for res in decoder.decode_raw_iter() {
-            match res {
-                Ok(frame) => {
-                    println!("{:?}", frame);
+        let mut stream_reader = StreamReader::new(path)?;
+        let mut decoder = DecoderBuilder::new()
+            .with_media_type(MediaType::AUDIO)
+            .build(&stream_reader)?;
+
+        loop {
+            match stream_reader.read_packet() {
+                Ok(Some((stream, packet))) => {
+                    println!("packet: {:?}", packet);
+                    // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
+                    // 如果是视频流，需要先判断是否是视频流，然后再decode
+                    if decoder.stream_index() == stream.index() {
+                        let frame = decoder.decode_raw(&packet)?;
+                        println!("audio frame: {:?}", frame);
+                    }
+                }
+                Ok(None) => {
+                    println!("No more packets");
+                    break;
                 }
                 Err(e) => {
-                    println!("Error: {}", e);
-                    break;
+                    log::error!("Error reading packet: {}", e);
+                    return Err(e);
                 }
             }
         }
+
         Ok(())
     }
 }

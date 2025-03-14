@@ -1,18 +1,14 @@
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
-use crate::io::{StreamWriter, StreamWriterBuilder, Writer};
-use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
 use crate::pixel::PixelFormat;
-use crate::stream::StreamInfo;
 use crate::time::Time;
 use crate::{utils, MediaType, Rational, RawFrame, SampleFormat};
 use std::hash::{Hash, Hasher};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef};
-use rsmpeg::avformat::AVStreamRef;
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -24,7 +20,6 @@ pub struct EncoderBuilder<'a> {
     /// Video
     width: i32,
     height: i32,
-    destination: Location,
     pixel_format: PixelFormat,
     gop_size: i32,
     interleaved: bool,
@@ -32,6 +27,7 @@ pub struct EncoderBuilder<'a> {
     frame_rate: Rational,
     max_b_frames: i32,
     keyframe_interval: u64,
+    oformat_flags: i32,
     /// Audio
     nb_channels: i32,
     sample_rate: i32,
@@ -77,12 +73,11 @@ impl<'a> EncoderBuilder<'a> {
     /// * `height` - The height of the video stream.
     /// * `pixel_format` - The desired pixel format for the video stream.
     /// * `options` - Custom H264 encoding options.
-    pub fn new(destination: impl Into<Location>, width: u32, height: u32) -> Self {
+    pub fn new() -> Self {
         Self {
             // video
-            width: width as i32,
-            height: height as i32,
-            destination: destination.into(),
+            width: 0,
+            height: 0,
             pixel_format: PixelFormat::YUV420P,
             bit_rate: Self::VIDEO_BIT_RATE,
             gop_size: Self::FRAME_RATE * 2,
@@ -91,6 +86,7 @@ impl<'a> EncoderBuilder<'a> {
             frame_rate: Rational::new(Self::FRAME_RATE, 1),
             max_b_frames: 0,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
+            oformat_flags: 0,
             // audio
             nb_channels: 2,
             sample_rate: 44100,
@@ -104,6 +100,12 @@ impl<'a> EncoderBuilder<'a> {
             codec_opts: None,
             hw_device_type: None,
         }
+    }
+
+    pub fn with_video_size(mut self, width: u32, height: u32) -> Self {
+        self.width = width as i32;
+        self.height = height as i32;
+        self
     }
 
     /// Set the codec name.
@@ -231,6 +233,12 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
+    /// Some formats want stream headers to be separate.
+    pub fn with_oformat_flags(mut self, oformat_flags: i32) -> Self {
+        self.oformat_flags = oformat_flags;
+        self
+    }
+
     /// Get codec, or Try to use the default codec libx264 if none specified.
     pub fn codec(&self) -> AVCodecRef {
         let codec_name = if let Some(codec_name) = &self.codec_name {
@@ -286,10 +294,7 @@ impl<'a> EncoderBuilder<'a> {
     }
 
     /// Build an [`Encoder`].
-    pub fn build<W: Writer>(self, writer: W) -> Result<Encoder<W>> {
-        self.build_from_writer(writer)
-    }
-
+    ///
     /// Create an encoder from a [`StreamWriter`].
     ///
     /// # Arguments
@@ -297,12 +302,12 @@ impl<'a> EncoderBuilder<'a> {
     /// * `writer` - [`StreamWriter`] to create encoder from.
     /// * `interleaved` - Whether or not to use interleaved write.
     /// * `settings` - Encoder settings to use.
-    pub fn build_from_writer<W: Writer>(self, mut writer: W) -> Result<Encoder<W>> {
+    pub fn build(self) -> Result<Encoder> {
         let codec = self.codec();
         let mut encode_ctx = AVCodecContext::new(&codec);
 
         // Some formats want stream headers to be separate.
-        if writer.output().oformat().flags & ffi::AVFMT_GLOBALHEADER as i32 != 0 {
+        if self.oformat_flags & ffi::AVFMT_GLOBALHEADER as i32 != 0 {
             encode_ctx.set_flags(encode_ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
         }
 
@@ -334,33 +339,19 @@ impl<'a> EncoderBuilder<'a> {
             .open(dict)
             .context("Failed to open encode context")?;
 
-        let stream_index = writer.add_stream(encode_ctx.extract_codecpar(), encode_ctx.time_base);
-        let stream_info = StreamInfo::from_writer(&writer, stream_index)?;
-        log::info!("{}", stream_info);
-
         Ok(Encoder {
-            hw_context,
             encode_ctx,
-            writer,
-            media_type: self.media_type,
-            stream_index,
+            hw_context,
             frame_count: 0,
-            interleaved: self.interleaved,
+            media_type: self.media_type,
             keyframe_interval: self.keyframe_interval,
-            have_written_header: false,
-            have_written_trailer: false,
         })
     }
+}
 
-    pub fn build_with_stream_writer(self) -> Result<Encoder<StreamWriter>> {
-        let mut writer_builder = StreamWriterBuilder::new(self.destination.clone());
-        if let Some(format) = self.format {
-            writer_builder = writer_builder.with_format(format);
-        }
-        if let Some(opts) = self.format_opts {
-            writer_builder = writer_builder.with_options(opts);
-        }
-        self.build_from_writer(writer_builder.build().unwrap())
+impl Default for EncoderBuilder<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -384,31 +375,22 @@ impl<'a> EncoderBuilder<'a> {
 ///         .expect("Failed to encode frame."),
 ///     );
 /// ```
-pub struct Encoder<W: Writer> {
-    pub writer: W,
+pub struct Encoder {
     encode_ctx: AVCodecContext,
     hw_context: Option<HWContext>,
     media_type: MediaType,
-    stream_index: usize,
-    interleaved: bool,
     frame_count: u64,
     keyframe_interval: u64,
-    have_written_header: bool,
-    have_written_trailer: bool,
 }
 
-impl<W: Writer> Encoder<W> {
+impl Encoder {
     /// Create an encoder with the specified destination and settings.
     ///
     /// * `destination` - Where to encode to.
     /// * `settings` - Encoding settings.
     #[inline]
-    pub fn new(
-        destination: impl Into<Location>,
-        width: u32,
-        height: u32,
-    ) -> Result<Encoder<StreamWriter>> {
-        EncoderBuilder::new(destination, width, height).build_with_stream_writer()
+    pub fn new() -> Result<Encoder> {
+        EncoderBuilder::new().build()
     }
 
     /// Encode a single `ndarray` frame.
@@ -419,7 +401,7 @@ impl<W: Writer> Encoder<W> {
     /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
-    pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<()> {
+    pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<Option<Packet>> {
         let (height, width, channels) = frame.dim();
         if height != self.encode_ctx.height as usize
             || width != self.encode_ctx.width as usize
@@ -445,7 +427,7 @@ impl<W: Writer> Encoder<W> {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<()> {
+    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<Option<Packet>> {
         log::info!("raw_frame: {:?}", raw_frame);
         if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
             return Err(anyhow::anyhow!(
@@ -456,12 +438,6 @@ impl<W: Writer> Encoder<W> {
                 raw_frame.width,
                 raw_frame.height
             ));
-        }
-
-        // Write file header if we hadn't done that yet.
-        if !self.have_written_header {
-            self.writer.write_header()?;
-            self.have_written_header = true;
         }
 
         let av_frame = if self.media_type == MediaType::VIDEO {
@@ -510,22 +486,7 @@ impl<W: Writer> Encoder<W> {
             .send_frame(Some(&av_frame))
             .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
 
-        match self.encoder_receive_packet() {
-            Ok(Some(packet)) => {
-                self.write(packet)?;
-            }
-            Ok(None) => {
-                log::debug!("No packet received from encoder.")
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!(
-                    "Failed to receive packet from encoder: {}",
-                    e
-                ));
-            }
-        }
-
-        Ok(())
+        self.encoder_receive_packet()
     }
 
     /// Get encoder time base.
@@ -569,38 +530,6 @@ impl<W: Writer> Encoder<W> {
         self.encode_ctx.ch_layout()
     }
 
-    #[inline]
-    pub fn stream_index(&self) -> usize {
-        self.stream_index
-    }
-
-    pub fn current_stream(&self) -> Result<&AVStreamRef> {
-        self.writer
-            .output()
-            .streams()
-            .get(self.stream_index)
-            .ok_or(Error::msg(format!(
-                "stream: {} not found!",
-                self.stream_index
-            )))
-    }
-
-    /// Signal to the encoder that writing has finished. This will cause any packets in the encoder
-    /// to be flushed and a trailer to be written if the container format has one.
-    ///
-    /// Note: If you don't call this function before dropping the encoder, it will be called
-    /// automatically. This will block the caller thread. Any errors cannot be propagated in this
-    /// case.
-    pub fn finish(&mut self) -> Result<()> {
-        if self.have_written_header && !self.have_written_trailer {
-            self.have_written_trailer = true;
-            self.flush().unwrap();
-            self.writer.write_trailer()?;
-        }
-
-        Ok(())
-    }
-
     /// calculate key frame and pts
     fn calc_key_frame_pts(&mut self, frame: &mut RawFrame) {
         // Producer key frame every once in a while
@@ -640,31 +569,8 @@ impl<W: Writer> Encoder<W> {
         Ok(Some(packet))
     }
 
-    /// Acquire the time base of the output stream.
-    fn stream_time_base(&mut self) -> Rational {
-        self.current_stream().unwrap().time_base.into()
-    }
-
-    /// Write encoded packet to output stream.
-    ///
-    /// # Arguments
-    ///
-    /// * `packet` - Encoded packet.
-    fn write(&mut self, mut packet: Packet) -> Result<()> {
-        packet.set_pos(-1);
-        packet.set_stream_index(self.stream_index);
-        packet.rescale_ts(self.time_base(), self.stream_time_base());
-        if self.interleaved {
-            self.writer.write_interleaved(&mut packet)?;
-        } else {
-            self.writer.write_frame(&mut packet)?;
-        };
-
-        Ok(())
-    }
-
     /// Flush the encoder, drain any packets that still need processing.
-    fn flush(&mut self) -> Result<()> {
+    pub fn flush(&mut self) -> Result<()> {
         // 确定编码器是否支持延迟（delay）
         // 如果编码器不支持延迟，那么就没有必要进行 flush 操作，因为在这种情况下，编码器不会保留任何未处理的数据。
         // 如果编码器支持延迟（delay），则在结束编码之前发送 EOS 包是有必要的，
@@ -675,61 +581,60 @@ impl<W: Writer> Encoder<W> {
 
         // Maximum number of invocations to `encoder_receive_packet`
         // to drain the items still on the queue before giving up.
-        const MAX_DRAIN_ITERATIONS: u32 = 100;
+        // const MAX_DRAIN_ITERATIONS: u32 = 100;
 
         // Notify the encoder that the last frame has been sent.
         self.send_eof().context("Send EOF frame failed.")?;
 
-        for i in 0..MAX_DRAIN_ITERATIONS {
-            match self.encoder_receive_packet() {
-                Ok(Some(packet)) => self.write(packet)?,
-                Ok(None) => {
-                    log::debug!("No more packet received, try: {}", i);
-                }
-                Err(e) => return Err(e).context("Receive packet failed.")?,
-            }
-        }
+        // for i in 0..MAX_DRAIN_ITERATIONS {
+        //     match self.encoder_receive_packet() {
+        //         Ok(Some(packet)) => self.write(packet)?,
+        //         Ok(None) => {
+        //             log::debug!("No more packet received, try: {}", i);
+        //         }
+        //         Err(e) => return Err(e).context("Receive packet failed.")?,
+        //     }
+        // }
 
         Ok(())
     }
 
-    /// 发送一个空帧来刷新编码器 EOF
+    /// encode context send EOF for flush encoder
     fn send_eof(&mut self) -> Result<()> {
         Ok(self.encode_ctx.send_frame(None)?)
     }
 }
 
-impl<W: Writer> Drop for Encoder<W> {
+impl Drop for Encoder {
     fn drop(&mut self) {
-        let _ = self.finish();
+        let _ = self.flush();
     }
 }
 
-impl<W: Writer> PartialEq for Encoder<W> {
+impl PartialEq for Encoder {
     fn eq(&self, other: &Self) -> bool {
-        self.encode_ctx.as_ptr() == other.encode_ctx.as_ptr()
-            && self.stream_index == other.stream_index
-            && self.writer.output().as_ptr() == other.writer.output().as_ptr()
+        self.encode_ctx.as_ptr() == other.encode_ctx.as_ptr() && self.media_type == other.media_type
     }
 }
 
-impl<W: Writer> Eq for Encoder<W> {}
+impl Eq for Encoder {}
 
-impl<W: Writer> Hash for Encoder<W> {
+impl Hash for Encoder {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.writer.output().as_ptr().hash(state);
         self.encode_ctx.as_ptr().hash(state);
-        self.stream_index.hash(state);
+        self.media_type.hash(state);
     }
 }
 
-unsafe impl<W: Writer> Send for Encoder<W> {}
-unsafe impl<W: Writer> Sync for Encoder<W> {}
+unsafe impl Send for Encoder {}
+unsafe impl Sync for Encoder {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::colors;
+    use crate::io::StreamWriter;
+    use crate::io::private::{Output, Write};
     use std::path::Path;
 
     fn rainbow_frame(p: f32) -> FrameArray {
@@ -740,23 +645,51 @@ mod tests {
     #[test]
     #[ignore = "ignore video output file"]
     fn test_encode_video() -> Result<()> {
-        let output = Path::new("/tmp/h264_encode_video.mp4");
-        let mut encoder = Encoder::<StreamWriter>::new(output, 1280, 720)?;
+        let output_path = Path::new("/tmp/h264_encode_video.mp4");
+
+        let mut encoder = EncoderBuilder::new()
+            .with_video_size(1280, 720)
+            .with_frame_rate(24)
+            .with_media_type(MediaType::VIDEO)
+            .build()?;
+
+        let mut stream_writer = StreamWriter::new(output_path)?;
+        let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
+
+        // 写入文件头
+        stream_writer.write_header().unwrap();
+
         let duration: Time = Time::from_nth_of_a_second(24);
-        let mut position = Time::zero();
+        let mut position = Time::new(Some(0), encoder.time_base());
 
         for i in 0..256 {
             let frame = rainbow_frame(i as f32 / 256.0);
+            match encoder.encode(&frame, position) {
+                Ok(Some(mut packet)) => {
+                    packet.set_pos(-1);
+                    packet.set_stream_index(video_index);
+                    packet.rescale_ts(packet.time_base(), encoder.time_base());
+                    stream_writer.write_frame(&mut packet)?;
+                }
+                Ok(None) => {
+                    println!("No packet received from encoder.");
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to receive packet from encoder: {}",
+                        e
+                    ));
+                }
+            }
 
-            encoder
-                .encode(&frame, position)
-                .expect("failed to encode frame");
             println!("Encoded frame {} at position {:?}", i, position);
 
             position = position.aligned_with(duration).add();
         }
 
-        encoder.finish().expect("failed to finish encoder");
+        // 写入文件尾
+        encoder.flush().unwrap();
+        stream_writer.write_trailer().unwrap();
 
         Ok(())
     }
@@ -869,16 +802,23 @@ mod tests {
     #[test]
     #[ignore = "ignore audio output file"]
     fn test_encode_audio() -> Result<()> {
-        let output = Path::new("/tmp/aac_encode_audio.aac");
-        let mut encoder = EncoderBuilder::new(output, 0, 0)
+        let output_path = Path::new("/tmp/aac_encode_audio.aac");
+
+        let mut encoder = EncoderBuilder::new()
             .with_media_type(MediaType::AUDIO) // 指定音频编码
             .with_nb_channels(2) // 立体声
             .with_sample_rate(DEFAULT_SAMPLE_RATE) // 采样率
             .with_bit_rate(DEFAULT_BIT_RATE) // 128kbps 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
             .with_codec_name("aac".to_string()) // 指定AAC编码
-            .build_with_stream_writer()
+            .build()
             .unwrap();
+
+        let mut stream_writer = StreamWriter::new(output_path)?;
+        let audio_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
+
+        // 写入文件头
+        stream_writer.write_header().unwrap();
 
         // 音频生成参数
         let duration_secs = 5; // 总时长5秒
@@ -901,9 +841,23 @@ mod tests {
             // 例如：1024 samples/frame => 每帧时间戳增量为1024
             sine_frame.set_pts(frame_idx * samples_per_frame as i64);
 
-            encoder
-                .encode_raw(&sine_frame)
-                .with_context(|| format!("第{}帧编码失败", frame_idx))?;
+            match encoder.encode_raw(&sine_frame) {
+                Ok(Some(mut packet)) => {
+                    packet.set_pos(-1);
+                    packet.set_stream_index(audio_index);
+                    packet.rescale_ts(packet.time_base(), encoder.time_base());
+                    stream_writer.write_frame(&mut packet)?;
+                }
+                Ok(None) => {
+                    println!("No packet received from encoder.");
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to receive packet from encoder: {}",
+                        e
+                    ));
+                }
+            }
         }
 
         // 处理剩余不足一帧的样本
@@ -915,12 +869,17 @@ mod tests {
                 remaining, // 最后剩余的样本数
                 DEFAULT_SAMPLE_RATE,
             )?;
+
             // 设置最后帧的时间戳（总样本数 - 剩余样本数）
             last_frame.set_pts(total_samples - remaining as i64);
+
+            // FIXME:
             encoder.encode_raw(&last_frame)?;
         }
 
-        encoder.finish().expect("failed to finish encoder");
+        // 写入文件尾
+        encoder.flush().unwrap();
+        stream_writer.write_trailer().unwrap();
 
         Ok(())
     }

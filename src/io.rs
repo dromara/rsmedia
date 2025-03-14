@@ -13,7 +13,48 @@ use rsmpeg::ffi;
 use anyhow::{Context, Error, Result};
 use std::ops::{Bound, Deref};
 
-/// Builds a [`Reader`].
+pub trait Reader {
+    fn input(&self) -> &AVFormatContextInput;
+
+    fn input_mut(&mut self) -> &mut AVFormatContextInput;
+
+    fn read_packet(&mut self) -> Result<Option<(Stream, Packet)>> {
+        match self.input_mut().read_packet() {
+            Ok(Some(pkt)) => {
+                let av_stream = self
+                    .input()
+                    .streams()
+                    .get(pkt.stream_index as usize)
+                    .unwrap();
+                let iformat = self.input().iformat();
+                let metadata = self.input().metadata();
+                Ok(Some((
+                    Stream::wrap(av_stream, iformat, metadata),
+                    Packet::new_with_avpacket(pkt),
+                )))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(Error::new(e)),
+        }
+    }
+
+    /// Find the best stream
+    ///
+    /// # Arguments
+    ///
+    /// * `media_type` - MediaType maybe Video, Audio, etc.
+    fn find_best_stream(&self, media_type: MediaType) -> Result<(usize, String)> {
+        self.input()
+            .find_best_stream(media_type as _)?
+            .map(|(index, codec)| (index, utils::to_string(codec.name())))
+            .ok_or(Error::msg(format!(
+                "No stream found for MediaType:{:?}",
+                media_type
+            )))
+    }
+}
+
+/// Builds a [`StreamReader`].
 ///
 /// # Example
 ///
@@ -24,18 +65,18 @@ use std::ops::{Bound, Deref};
 ///     "tcp".to_string(),
 /// );
 ///
-/// let mut reader = ReaderBuilder::new(Path::new("my_file.mp4"))
+/// let mut reader = StreamReaderBuilder::new(Path::new("my_file.mp4"))
 ///    .with_options(&options.into())
 ///    .build()
 ///    .unwrap();
 /// ```
-pub struct ReaderBuilder<'a> {
+pub struct StreamReaderBuilder<'a> {
     source: Location,
     format: Option<&'a str>,
     options: Option<&'a Options>,
 }
 
-impl<'a> ReaderBuilder<'a> {
+impl<'a> StreamReaderBuilder<'a> {
     /// Create a new reader with the specified locator.
     ///
     /// # Arguments
@@ -69,8 +110,8 @@ impl<'a> ReaderBuilder<'a> {
         self
     }
 
-    /// Build [`Reader`].
-    pub fn build(self) -> Result<Reader> {
+    /// Build [`StreamReader`].
+    pub fn build(self) -> Result<StreamReader> {
         let src_path = self.source.as_path().to_str().unwrap();
         let protocol =
             unsafe { ffi::avio_find_protocol_name(utils::to_c_char(src_path) as *const _) };
@@ -96,7 +137,7 @@ impl<'a> ReaderBuilder<'a> {
         ctx_input
             .dump(0, &filename)
             .context("Dump input format context failed.")?;
-        Ok(Reader {
+        Ok(StreamReader {
             source: self.source,
             input: ctx_input,
         })
@@ -104,12 +145,12 @@ impl<'a> ReaderBuilder<'a> {
 }
 
 /// Video reader that can read from files.
-pub struct Reader {
+pub struct StreamReader {
     pub source: Location,
     pub input: AVFormatContextInput,
 }
 
-impl Reader {
+impl StreamReader {
     /// Create a new video file reader on a given source (path, URL, etc.).
     ///
     /// # Arguments
@@ -117,65 +158,7 @@ impl Reader {
     /// * `source` - Source to read from.
     #[inline]
     pub fn new(source: impl Into<Location>) -> Result<Self> {
-        ReaderBuilder::new(source).build()
-    }
-
-    /// Read a single packet from the source video file.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to read from.
-    ///
-    /// # Example
-    ///
-    /// Read a single packet:
-    ///
-    /// ```ignore
-    /// let mut reader = Reader::new(Path::new("my_video.mp4")).unwrap();
-    /// let stream = reader.best_video_stream_index().unwrap();
-    /// let mut packet = reader.read(stream).unwrap();
-    /// ```
-    pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
-        loop {
-            match self.read_packet() {
-                Ok(Some((stream, packet))) => {
-                    if stream.index() == stream_index {
-                        return Ok(Packet::new(packet, stream.time_base()));
-                    }
-                    log::debug!("Skipping packet from stream: {}", stream.index());
-                }
-                Ok(None) => return Err(Error::msg("No more packets")),
-                Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    pub fn read_any(&mut self) -> Result<Packet> {
-        match self.read_packet() {
-            Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
-            Ok(None) => Err(Error::msg("No more packets")),
-            Err(e) => {
-                log::error!("Error reading packet: {}", e);
-                Err(e)
-            }
-        }
-    }
-
-    pub fn read_packet(&mut self) -> Result<Option<(Stream, Packet)>> {
-        match self.input.read_packet() {
-            Ok(Some(pkt)) => {
-                let av_stream = self.input.streams().get(pkt.stream_index as usize).unwrap();
-                Ok(Some((
-                    Stream::wrap(av_stream),
-                    Packet::new_with_avpacket(pkt),
-                )))
-            }
-            Ok(None) => Ok(None),
-            Err(e) => Err(Error::new(e)),
-        }
+        StreamReaderBuilder::new(source).build()
     }
 
     /// Seek in reader. This will change the reader head so that it points to a location within one
@@ -241,27 +224,20 @@ impl Reader {
             }
         }
     }
+}
 
-    /// Find the best stream
-    ///
-    /// # Arguments
-    ///
-    /// * `media_type` - MediaType maybe Video, Audio, etc.
-    pub fn find_best_stream(&self, media_type: MediaType) -> Result<(usize, String)> {
-        let res = self
-            .input
-            .find_best_stream(media_type as _)?
-            .map(|(index, codec)| (index, utils::to_string(codec.name())))
-            .ok_or(Error::msg(format!(
-                "No stream found for MediaType:{:?}",
-                media_type
-            )))?;
-        Ok(res)
+impl Reader for StreamReader {
+    fn input(&self) -> &AVFormatContextInput {
+        &self.input
+    }
+
+    fn input_mut(&mut self) -> &mut AVFormatContextInput {
+        &mut self.input
     }
 }
 
-unsafe impl Send for Reader {}
-unsafe impl Sync for Reader {}
+unsafe impl Send for StreamReader {}
+unsafe impl Sync for StreamReader {}
 
 /// Any type that implements this can write video packets.
 pub trait Writer: private::Write + private::Output {}

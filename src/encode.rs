@@ -11,8 +11,8 @@ use crate::time::Time;
 use crate::{utils, MediaType, Rational, RawFrame, SampleFormat};
 use std::hash::{Hash, Hasher};
 
-use rsmpeg::avformat::AVStreamRef;
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef};
+use rsmpeg::avformat::AVStreamRef;
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -886,7 +886,7 @@ mod tests {
         let total_samples = duration_secs * samples_per_second; // 总采样数
         let samples_per_frame = 1024; // 每帧采样数（AAC标准帧长）
         let frequency = 440.0; // 正弦波基础频率
-                               // 分帧生成与编码
+
         for frame_idx in 0..(total_samples / samples_per_frame as i64) {
             let mut sine_frame = generate_sine_wave_frame(
                 frequency, // A4标准音高（国际标准音）

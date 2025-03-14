@@ -1,7 +1,7 @@
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
-use crate::io::{Reader, ReaderBuilder};
+use crate::io::{Reader, StreamReader, StreamReaderBuilder};
 use crate::location::Location;
 use crate::options::Options;
 use crate::packet::Packet;
@@ -98,14 +98,14 @@ impl<'a> DecoderBuilder<'a> {
     }
 
     /// Build [`Decoder`].
-    pub fn build(self, reader: Reader) -> Result<Decoder> {
+    pub fn build<R: Reader>(self, reader: R) -> Result<Decoder<R>> {
         self.build_from_reader(reader)
     }
 
-    pub fn build_from_reader(self, reader: Reader) -> Result<Decoder> {
+    pub fn build_from_reader<R: Reader>(self, reader: R) -> Result<Decoder<R>> {
         let (stream_index, codec_name) = reader.find_best_stream(self.media_type)?;
         let stream = reader
-            .input
+            .input()
             .streams()
             .get(stream_index)
             .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
@@ -175,9 +175,9 @@ impl<'a> DecoderBuilder<'a> {
         })
     }
 
-    pub fn build_with_stream_reader(self) -> Result<Decoder> {
+    pub fn build_with_stream_reader(self) -> Result<Decoder<StreamReader>> {
         let source = self.source.clone();
-        let mut reader_builder = ReaderBuilder::new(source);
+        let mut reader_builder = StreamReaderBuilder::new(source);
         if let Some(format) = self.format {
             reader_builder = reader_builder.with_format(format);
         }
@@ -200,8 +200,8 @@ impl<'a> DecoderBuilder<'a> {
 ///     .for_each(|frame| println!("Got frame!"),
 /// );
 /// ```
-pub struct Decoder {
-    reader: Reader,
+pub struct Decoder<R: Reader> {
+    reader: R,
     decode_ctx: AVCodecContext,
     hw_context: Option<HWContext>,
     time_base: Rational,
@@ -212,14 +212,14 @@ pub struct Decoder {
     draining: bool,
 }
 
-impl Decoder {
+impl<R: Reader> Decoder<R> {
     /// Create a decoder to decode the specified source.
     ///
     /// # Arguments
     ///
     /// * `source` - Source to decode.
     #[inline]
-    pub fn new(source: impl Into<Location>) -> Result<Self> {
+    pub fn new(source: impl Into<Location>) -> Result<Decoder<StreamReader>> {
         DecoderBuilder::new(source).build_with_stream_reader()
     }
 
@@ -253,7 +253,7 @@ impl Decoder {
 
     pub fn current_stream(&self) -> Result<&AVStreamRef> {
         self.reader
-            .input
+            .input()
             .streams()
             .get(self.stream_index)
             .ok_or(Error::msg(format!(
@@ -312,7 +312,7 @@ impl Decoder {
     pub fn decode(&mut self) -> Result<(Time, FrameArray)> {
         Ok(loop {
             if !self.draining {
-                match self.reader.read(self.stream_index) {
+                match self.read(self.stream_index) {
                     Ok(packet) => match self._decode(packet) {
                         Ok(Some(frame)) => break frame,
                         Ok(None) => {
@@ -348,7 +348,7 @@ impl Decoder {
     pub fn decode_raw(&mut self) -> Result<RawFrame> {
         Ok(loop {
             if !self.draining {
-                match self.reader.read(self.stream_index) {
+                match self.read(self.stream_index) {
                     Ok(packet) => match self._decode_raw(packet) {
                         Ok(Some(frame)) => break frame,
                         Ok(None) => {
@@ -370,33 +370,33 @@ impl Decoder {
         })
     }
 
-    /// Seek in reader.
-    ///
-    /// See [`Reader::seek`](crate::io::Reader::seek) for more information.
-    #[inline]
-    pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
-        self.reader
-            .seek(timestamp_milliseconds)
-            .inspect(|_| self.flush())
-    }
+    // /// Seek in reader.
+    // ///
+    // /// See [`StreamReader::seek`](crate::io::StreamReader::seek) for more information.
+    // #[inline]
+    // pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
+    //     self.reader
+    //         .seek(timestamp_milliseconds)
+    //         .inspect(|_| self.flush())
+    // }
 
-    /// Seek to specific frame in reader.
-    ///
-    /// See [`Reader::seek_to_frame`](crate::io::Reader::seek_to_frame) for more information.
-    #[inline]
-    pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
-        self.reader
-            .seek_to_frame(frame_number)
-            .inspect(|_| self.flush())
-    }
+    // /// Seek to specific frame in reader.
+    // ///
+    // /// See [`StreamReader::seek_to_frame`](crate::io::StreamReader::seek_to_frame) for more information.
+    // #[inline]
+    // pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
+    //     self.reader
+    //         .seek_to_frame(frame_number)
+    //         .inspect(|_| self.flush())
+    // }
 
-    /// Seek to start of reader.
-    ///
-    /// See [`Reader::seek_to_start`](crate::io::Reader::seek_to_start) for more information.
-    #[inline]
-    pub fn seek_to_start(&mut self) -> Result<()> {
-        self.reader.seek_to_start().inspect(|_| self.flush())
-    }
+    // /// Seek to start of reader.
+    // ///
+    // /// See [`StreamReader::seek_to_start`](crate::io::StreamReader::seek_to_start) for more information.
+    // #[inline]
+    // pub fn seek_to_start(&mut self) -> Result<()> {
+    //     self.reader.seek_to_start().inspect(|_| self.flush())
+    // }
 
     /// Get the decoders input frame rate as floating-point value.
     pub fn frame_rate(&self) -> f32 {
@@ -497,6 +497,50 @@ impl Decoder {
         }
     }
 
+    /// Read a single packet from the source video file.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream_index` - Index of stream to read from.
+    ///
+    /// # Example
+    ///
+    /// Read a single packet:
+    ///
+    /// ```ignore
+    /// let mut reader = StreamReader::new(Path::new("my_video.mp4")).unwrap();
+    /// let stream = reader.best_video_stream_index().unwrap();
+    /// let mut packet = reader.read(stream).unwrap();
+    /// ```
+    pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
+        loop {
+            match self.reader.read_packet() {
+                Ok(Some((stream, packet))) => {
+                    if stream.index() == stream_index {
+                        return Ok(Packet::new(packet, stream.time_base()));
+                    }
+                    log::debug!("Skipping packet from stream: {}", stream.index());
+                }
+                Ok(None) => return Err(Error::msg("No more packets")),
+                Err(e) => {
+                    log::error!("Error reading packet: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    pub fn read_any(&mut self) -> Result<Packet> {
+        match self.reader.read_packet() {
+            Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
+            Ok(None) => Err(Error::msg("No more packets")),
+            Err(e) => {
+                log::error!("Error reading packet: {}", e);
+                Err(e)
+            }
+        }
+    }
+
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
     fn send_packet_to_decoder(&mut self, packet: Packet) -> Result<()> {
         let (mut packet, packet_time_base) = packet.into_inner_parts();
@@ -591,7 +635,7 @@ impl Decoder {
 
 /// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
-impl Drop for Decoder {
+impl<R: Reader> Drop for Decoder<R> {
     fn drop(&mut self) {
         // Maximum number of invocations to `decoder_receive_frame` to drain the items still on the
         // queue before giving up.
@@ -641,8 +685,8 @@ impl Drop for Decoder {
     }
 }
 
-unsafe impl Send for Decoder {}
-unsafe impl Sync for Decoder {}
+unsafe impl<R: Reader> Send for Decoder<R> {}
+unsafe impl<R: Reader> Sync for Decoder<R> {}
 
 #[cfg(test)]
 mod tests {
@@ -651,7 +695,7 @@ mod tests {
     #[test]
     fn test_decode_video() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
-        let mut decoder = Decoder::new(path)?;
+        let mut decoder = Decoder::<StreamReader>::new(path)?;
         for res in decoder.decode_raw_iter() {
             match res {
                 Ok(frame) => {

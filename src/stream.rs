@@ -3,7 +3,7 @@ use crate::packet::Packet;
 use crate::{utils, Options, Rational};
 
 use rsmpeg::avcodec::AVCodecParametersRef;
-use rsmpeg::avformat::AVStream;
+use rsmpeg::avformat::{AVInputFormatRef, AVStream};
 use rsmpeg::avutil::{AVDictionaryRef, AVMediaType};
 use rsmpeg::ffi;
 
@@ -108,9 +108,9 @@ impl StreamInfo {
     ///
     /// * `reader` - Reader to find stream information from.
     /// * `stream_index` - Index of stream in reader.
-    pub fn from_reader(reader: &Reader, stream_index: usize) -> Result<Self> {
+    pub fn from_reader<R: Reader>(reader: &R, stream_index: usize) -> Result<Self> {
         let stream = reader
-            .input
+            .input()
             .streams()
             .get(stream_index)
             .ok_or(Error::msg(format!(
@@ -304,11 +304,29 @@ unsafe impl Sync for StreamInfo {}
 
 pub struct Stream<'a> {
     av_stream: &'a AVStream,
+    iformat: AVInputFormatRef<'a>,
+    metadata: Option<AVDictionaryRef<'a>>,
 }
 
 impl<'a> Stream<'a> {
-    pub fn wrap(av_stream: &'a AVStream) -> Stream<'a> {
-        Stream { av_stream }
+    pub fn wrap(
+        av_stream: &'a AVStream,
+        iformat: AVInputFormatRef<'a>,
+        metadata: Option<AVDictionaryRef<'a>>,
+    ) -> Stream<'a> {
+        Stream {
+            av_stream,
+            iformat,
+            metadata,
+        }
+    }
+
+    pub fn iformat(&self) -> &AVInputFormatRef<'a> {
+        &self.iformat
+    }
+
+    pub fn ctx_metadata(&self) -> &Option<AVDictionaryRef<'a>> {
+        &self.metadata
     }
 }
 

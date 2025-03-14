@@ -1,10 +1,10 @@
-use rsmedia::{colors, StreamWriter};
-use rsmedia::time::Time;
-use rsmedia::{EncoderBuilder, FrameArray};
 use rsmedia::io::private::{Output, Write};
+use rsmedia::time::Time;
+use rsmedia::{colors, StreamWriter};
+use rsmedia::{EncoderBuilder, FrameArray};
 
-use std::path::Path;
 use anyhow::Context;
+use std::path::Path;
 
 fn main() {
     rsmedia::init().unwrap();
@@ -40,7 +40,10 @@ fn main() {
                 packet.set_pos(-1);
                 packet.set_stream_index(video_index);
                 packet.rescale_ts(packet.time_base(), encoder.time_base());
-                stream_writer.write_frame(&mut packet).context("failed to write frame").unwrap();
+                stream_writer
+                    .write_frame(&mut packet)
+                    .context("failed to write frame")
+                    .unwrap();
             }
             Ok(None) => {
                 println!("No packet received from encoder.");
@@ -58,7 +61,6 @@ fn main() {
 
     encoder.flush().expect("failed to finish encoder");
     stream_writer.write_trailer().unwrap();
-
 }
 
 fn rainbow_frame(p: f32) -> FrameArray {

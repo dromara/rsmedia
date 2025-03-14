@@ -633,8 +633,8 @@ unsafe impl Sync for Encoder {}
 mod tests {
     use super::*;
     use crate::colors;
-    use crate::io::StreamWriter;
     use crate::io::private::{Output, Write};
+    use crate::io::StreamWriter;
     use std::path::Path;
 
     fn rainbow_frame(p: f32) -> FrameArray {

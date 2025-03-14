@@ -617,6 +617,7 @@ mod tests {
     use crate::io::StreamReader;
 
     #[test]
+    #[ignore = "need a video file"]
     fn test_decode_video() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
 
@@ -651,6 +652,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "need a audio file"]
     fn test_decode_audio() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
 

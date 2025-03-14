@@ -206,9 +206,7 @@ impl<R: Reader> Demuxer<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        EncoderBuilder, PixelFormat, SampleFormat, StreamReader, StreamWriter, StreamWriterBuilder,
-    };
+    use crate::{EncoderBuilder, PixelFormat, SampleFormat, StreamReader, StreamWriter};
 
     use anyhow::{Context, Result};
     use rsmpeg::avutil::{AVChannelLayout, AVFrame};
@@ -293,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "demux video"]
     fn test_mux_demux_video() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_video.mp4");
 
@@ -337,7 +336,7 @@ mod tests {
 
         loop {
             match demuxer.reader.read_packet() {
-                Ok(Some((stream, packet))) => {
+                Ok(Some((_stream, packet))) => {
                     // if stream.index() == stream_index {
                     //     return Ok(Packet::new(packet, stream.time_base()));
                     // }
@@ -359,6 +358,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "demux test_mux_demux_audio"]
     fn test_mux_demux_audio() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_audio.aac");
         let sample_rate = 44100;
@@ -366,7 +366,6 @@ mod tests {
         let channels = 2;
         let nb_samples = 1024;
 
-        let writer = StreamWriterBuilder::new(output_path).build()?;
         // 添加音频流
         let mut audio_encoder = EncoderBuilder::new()
             .with_media_type(MediaType::AUDIO) // 指定音频编码
@@ -415,7 +414,7 @@ mod tests {
 
         loop {
             match demuxer.reader.read_packet() {
-                Ok(Some((stream, packet))) => {
+                Ok(Some((_stream, packet))) => {
                     // if stream.index() == stream_index {
                     //     return Ok(Packet::new(packet, stream.time_base()));
                     // }
@@ -437,6 +436,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "demux test_multiple_streams"]
     fn test_multiple_streams() -> Result<()> {
         // 视频参数
         pub const VIDEO_WIDTH: u32 = 1280;

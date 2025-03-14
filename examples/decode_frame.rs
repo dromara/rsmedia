@@ -1,7 +1,7 @@
-use rsmedia::{frame, DecoderBuilder, MediaType, Reader, Resize, StreamReader};
+use anyhow::{Context, Result};
 use image::{ImageBuffer, Rgb};
+use rsmedia::{frame, DecoderBuilder, MediaType, Reader, Resize, StreamReader};
 use tokio::task;
-use anyhow::{Context, Result, Error};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,15 +40,22 @@ async fn main() -> Result<()> {
                 // 如果是视频流，需要先判断是否是视频流，然后再decode
                 if decoder.stream_index() == stream.index() {
                     let (_t, yuv_frame) = decoder.decode(&packet)?;
-                    println!("{:?} #{}, {:?}",
-                             MediaType::from(stream.parameters().codec_type), stream.index(), packet);
+                    println!(
+                        "{:?} #{}, {:?}",
+                        MediaType::from(stream.parameters().codec_type),
+                        stream.index(),
+                        packet
+                    );
 
                     // Notes: yuv frame
                     let rgb_frame = frame::convert_ndarray_yuv_to_rgb(&yuv_frame).unwrap();
 
-                    let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-                        ImageBuffer::from_raw(width, height, rgb_frame.as_slice().unwrap().to_vec())
-                            .context("failed to create image buffer")?;
+                    let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
+                        width,
+                        height,
+                        rgb_frame.as_slice().unwrap().to_vec(),
+                    )
+                    .context("failed to create image buffer")?;
 
                     let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);
 
@@ -79,8 +86,8 @@ async fn main() -> Result<()> {
     }
 
     println!(
-        "Saved {} frames in the '{}' directory",
-        frame_count, output_folder
+        "Saved {} frames in the '{}' directory, cost: {} seconds",
+        frame_count, output_folder, elapsed_time
     );
 
     Ok(())

@@ -3,7 +3,7 @@ use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::time::Time;
+use crate::time::{self, Time};
 use crate::{utils, MediaType, RawFrame, SampleFormat};
 use std::hash::{Hash, Hasher};
 
@@ -77,8 +77,8 @@ impl<'a> EncoderBuilder<'a> {
             pixel_format: PixelFormat::YUV420P,
             bit_rate: Self::VIDEO_BIT_RATE,
             gop_size: Self::FRAME_RATE * 2,
-            time_base: avutil::ra(1, Self::FRAME_RATE),
-            pkt_time_base: avutil::ra(1, 90_000),
+            time_base: time::TIME_BASE,
+            pkt_time_base: time::TIME_BASE,
             frame_rate: avutil::ra(Self::FRAME_RATE, 1),
             max_b_frames: 0,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
@@ -128,8 +128,12 @@ impl<'a> EncoderBuilder<'a> {
 
     /// Set the frame rate.
     pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
-        self.time_base = avutil::ra(1, frame_rate);
         self.frame_rate = avutil::ra(frame_rate, 1);
+        self
+    }
+
+    pub fn with_time_base(mut self, base: i32) -> Self {
+        self.time_base = avutil::ra(1, base);
         self
     }
 
@@ -389,7 +393,11 @@ impl Encoder {
     ///
     /// * `frame` - Frame to encode.
     pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<Option<AVPacket>> {
-        log::info!("raw_frame: {:?}", raw_frame);
+        log::info!(
+            "raw_frame: {:?}, time_base: {:?}",
+            raw_frame,
+            raw_frame.time_base
+        );
         if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
             return Err(anyhow::anyhow!(
                 "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
@@ -439,10 +447,18 @@ impl Encoder {
             panic!("{}", format!("Unsupport mediaType :{:?}", self.media_type))
         };
 
-        // 计算 关键帧 和 PTS
-        self.calc_key_frame_pts(&mut av_frame);
+        // Producer key frame every once in a while
+        if self.frame_count % self.keyframe_interval == 0 {
+            av_frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
+        }
 
-        // 发送帧到编码器
+        log::debug!(
+            "send encoder {:?}, time_base: {:?}",
+            av_frame,
+            av_frame.time_base
+        );
+
+        // send frame to encoder
         self.encode_ctx
             .send_frame(Some(&av_frame))
             .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
@@ -498,33 +514,6 @@ impl Encoder {
     #[inline]
     pub fn ch_layout(&self) -> AVChannelLayoutRef {
         self.encode_ctx.ch_layout()
-    }
-
-    /// calculate key frame and pts
-    fn calc_key_frame_pts(&mut self, frame: &mut RawFrame) {
-        // Producer key frame every once in a while
-        if self.frame_count % self.keyframe_interval == 0 {
-            frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
-        }
-
-        let pts_increment = {
-            if self.media_type == MediaType::VIDEO {
-                self.time_base().den as i64 / self.frame_rate().num as i64
-            } else {
-                self.time_base().den as i64 / self.sample_rate() as i64
-            }
-        };
-        let pts = self.frame_count as i64 * pts_increment;
-
-        // Update frame pts
-        frame.set_time_base(self.time_base());
-        frame.set_pts(pts);
-
-        log::debug!(
-            "send frame to encoder time_base:{:?}, frame: {:?}",
-            frame.time_base,
-            frame
-        );
     }
 
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`

@@ -373,7 +373,6 @@ mod tests {
         let (width, height) = (1920, 1080);
         let video_encoder = EncoderBuilder::new()
             .with_video_size(width, height)
-            .with_frame_rate(30)
             .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
@@ -528,11 +527,12 @@ mod tests {
 
             // 处理音频帧
             if pts % audio_frame_interval == 0 {
-                let audio_frame = generate_sine_wave_frame(
+                let mut audio_frame = generate_sine_wave_frame(
                     1000.0,
                     SAMPLES_PER_FRAME as usize,
                     AUDIO_SAMPLE_RATE,
                 )?;
+                audio_frame.set_pts(pts as i64);
                 muxer.mux(audio_frame, audio_idx).unwrap();
             }
         }

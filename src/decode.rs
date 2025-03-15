@@ -76,7 +76,7 @@ impl<'a> DecoderBuilder<'a> {
 
     pub fn build_from_reader<R: Reader>(self, reader: &R) -> Result<Decoder> {
         let (stream_index, codec_name) = reader.find_best_stream(self.media_type)?;
-        let stream = reader
+        let input_stream = reader
             .input()
             .streams()
             .get(stream_index)
@@ -94,11 +94,14 @@ impl<'a> DecoderBuilder<'a> {
             ))?
         };
 
-        let time_base = stream.time_base;
+        let time_base = input_stream.time_base;
         let mut decode_ctx = AVCodecContext::new(&codec);
         decode_ctx.set_time_base(time_base);
         decode_ctx.set_pkt_timebase(time_base);
-        decode_ctx.apply_codecpar(&stream.codecpar())?;
+        decode_ctx.apply_codecpar(&input_stream.codecpar())?;
+        if let Some(framerate) = input_stream.guess_framerate() {
+            decode_ctx.set_framerate(framerate);
+        }
 
         let (width, height) = (decode_ctx.width, decode_ctx.height);
         let hw_context = if self.media_type == MediaType::VIDEO && self.hw_device_type.is_some() {
@@ -124,7 +127,7 @@ impl<'a> DecoderBuilder<'a> {
             .open(dict)
             .context("Failed to open decoder for stream")?;
 
-        let stream_info = StreamInfo::from_stream(stream)?;
+        let stream_info = StreamInfo::from_stream(input_stream)?;
         log::info!("{}", stream_info);
 
         let (resize_width, resize_height) = match self.resize {
@@ -560,7 +563,7 @@ mod tests {
         loop {
             match stream_reader.read_packet() {
                 Ok(Some((in_stream, mut packet))) => {
-                    println!("packet: {:?}", packet);
+                    // println!("packet: {:?}", packet);
                     // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
                     // 如果是视频流，需要先判断是否是视频流，然后再decode
                     if decoder.stream_index() == in_stream.index() {

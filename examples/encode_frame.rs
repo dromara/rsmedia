@@ -4,6 +4,7 @@ use rsmedia::{colors, StreamWriter};
 use rsmedia::{EncoderBuilder, FrameArray};
 
 use anyhow::Context;
+use rsmedia::stream::StreamInfo;
 use std::path::Path;
 
 fn main() {
@@ -20,9 +21,10 @@ fn main() {
         .build()
         .expect("failed to create encoder");
 
-    let output_path = Path::new("output.mp4");
+    let output_path = Path::new("/tmp/rainbow.mp4");
     let mut stream_writer = StreamWriter::new(output_path).unwrap();
     let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
+    let stream_info = StreamInfo::from_writer(&stream_writer, video_index).unwrap();
 
     // Write the header to the output file.
     stream_writer.write_header().unwrap();
@@ -38,7 +40,7 @@ fn main() {
             Ok(Some(mut packet)) => {
                 packet.set_pos(-1);
                 packet.set_stream_index(video_index as i32);
-                packet.rescale_ts(packet.time_base, encoder.time_base());
+                packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                 stream_writer
                     .write_frame(&mut packet)
                     .context("failed to write frame")
@@ -51,8 +53,6 @@ fn main() {
                 println!("Error encoding frame: {:?}", e);
             }
         }
-
-        println!("Encoded frame {} at position {:?}", i, position);
 
         // Update the current position and add the inter-frame duration to it.
         position = position.aligned_with(duration).add();

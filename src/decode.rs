@@ -230,7 +230,7 @@ impl Decoder {
     /// }
     /// ```
     #[cfg(feature = "ndarray")]
-    pub fn decode(&mut self, packet: &mut AVPacket) -> Result<(Time, FrameArray)> {
+    pub fn decode(&mut self, packet: &AVPacket) -> Result<(Time, FrameArray)> {
         Ok(loop {
             if !self.draining {
                 match self._decode(packet) {
@@ -258,7 +258,7 @@ impl Decoder {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`].
-    pub fn decode_raw(&mut self, packet: &mut AVPacket) -> Result<RawFrame> {
+    pub fn decode_raw(&mut self, packet: &AVPacket) -> Result<RawFrame> {
         Ok(loop {
             if !self.draining {
                 match self._decode_raw(packet) {
@@ -323,7 +323,7 @@ impl Decoder {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    fn _decode(&mut self, packet: &mut AVPacket) -> Result<Option<(Time, FrameArray)>> {
+    fn _decode(&mut self, packet: &AVPacket) -> Result<Option<(Time, FrameArray)>> {
         match self._decode_raw(packet)? {
             Some(mut frame) => Ok(Some(self.raw_frame_to_time_and_frame(&mut frame)?)),
             None => Ok(None),
@@ -342,7 +342,7 @@ impl Decoder {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    fn _decode_raw(&mut self, packet: &mut AVPacket) -> Result<Option<RawFrame>> {
+    fn _decode_raw(&mut self, packet: &AVPacket) -> Result<Option<RawFrame>> {
         assert!(!self.draining);
         self.send_packet_to_decoder(packet)?;
         self.receive_frame_from_decoder()
@@ -401,10 +401,8 @@ impl Decoder {
     }
 
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
-    fn send_packet_to_decoder(&mut self, packet: &mut AVPacket) -> Result<()> {
-        packet.rescale_ts(packet.time_base, self.time_base());
+    fn send_packet_to_decoder(&mut self, packet: &AVPacket) -> Result<()> {
         self.decode_ctx.send_packet(Some(packet))?;
-
         Ok(())
     }
 
@@ -561,13 +559,16 @@ mod tests {
 
         loop {
             match stream_reader.read_packet() {
-                Ok(Some((stream, mut packet))) => {
+                Ok(Some((in_stream, mut packet))) => {
                     println!("packet: {:?}", packet);
                     // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
                     // 如果是视频流，需要先判断是否是视频流，然后再decode
-                    if decoder.stream_index() == stream.index() {
-                        let frame = decoder.decode_raw(&mut packet)?;
-                        println!("video frame: {:?}", frame);
+                    if decoder.stream_index() == in_stream.index() {
+                        // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
+                        // in_stream->time_base  =>  dec_ctx->time_base
+                        packet.rescale_ts(in_stream.time_base(), decoder.time_base());
+                        let frame = decoder.decode_raw(&packet)?;
+                        println!("video frame: {:?}, timebase:{:?}", frame, frame.time_base);
                     }
                 }
                 Ok(None) => {
@@ -596,12 +597,15 @@ mod tests {
 
         loop {
             match stream_reader.read_packet() {
-                Ok(Some((stream, mut packet))) => {
+                Ok(Some((in_stream, mut packet))) => {
                     println!("packet: {:?}", packet);
                     // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
                     // 如果是视频流，需要先判断是否是视频流，然后再decode
-                    if decoder.stream_index() == stream.index() {
-                        let frame = decoder.decode_raw(&mut packet)?;
+                    if decoder.stream_index() == in_stream.index() {
+                        // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
+                        // in_stream->time_base  =>  dec_ctx->time_base
+                        packet.rescale_ts(in_stream.time_base(), decoder.time_base());
+                        let frame = decoder.decode_raw(&packet)?;
                         println!("audio frame: {:?}", frame);
                     }
                 }

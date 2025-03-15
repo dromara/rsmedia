@@ -54,15 +54,15 @@ pub struct StreamInfo {
     /// Video height
     pub height: i32,
     /// Video frame rate FPS
-    pub frame_rate: f32,
-    pub avg_frame_rate: f32,
-    pub real_frame_rate: f32,
+    pub frame_rate: ffi::AVRational,
+    pub avg_frame_rate: ffi::AVRational,
+    pub real_frame_rate: ffi::AVRational,
+    /// Number of bits in timestamps. Used for wrapping control.
+    pub pts_wrap_bits: i32,
+    /// Flags indicating events happening on the stream, a combination of AVSTREAM_EVENT_FLAG_*.
+    pub event_flags: i32,
     /// video_delay
     pub video_delay: i32,
-    /// Video GOP size
-    pub gop_size: i32,
-    /// Video has B frames
-    pub has_b_frames: i32,
     /// Video sample aspect ratio
     pub sample_aspect_ratio: ffi::AVRational,
     /// Display aspect ratio
@@ -157,12 +157,12 @@ impl StreamInfo {
             width: codecpar.width,
             height: codecpar.height,
             bit_rate: codecpar.bit_rate,
-            frame_rate: ffi::av_q2d(codecpar.framerate) as f32,
-            avg_frame_rate: ffi::av_q2d(stream.avg_frame_rate) as f32,
-            real_frame_rate: ffi::av_q2d(stream.r_frame_rate) as f32,
+            frame_rate: codecpar.framerate,
+            avg_frame_rate: stream.avg_frame_rate,
+            real_frame_rate: stream.r_frame_rate,
+            pts_wrap_bits: stream.pts_wrap_bits,
+            event_flags: stream.event_flags,
             video_delay: codecpar.video_delay,
-            gop_size: 0,
-            has_b_frames: 0,
             sample_aspect_ratio: codecpar.sample_aspect_ratio,
             display_aspect_ratio: stream.sample_aspect_ratio,
             color_space: codecpar.color_space as usize,
@@ -170,7 +170,7 @@ impl StreamInfo {
             color_primaries: codecpar.color_primaries as usize,
             color_transfer: codecpar.color_trc as usize,
             field_order: codecpar.field_order as usize,
-            rotation: Self::get_stream_rotation_angle(stream, &metadata),
+            rotation: Self::get_stream_display_rotation(stream, &metadata),
             // Audio
             sample_rate: codecpar.sample_rate,
             channel_layout: codecpar.ch_layout,
@@ -185,7 +185,7 @@ impl StreamInfo {
         })
     }
 
-    fn get_stream_rotation_angle(stream: &AVStream, map: &HashMap<String, String>) -> f64 {
+    fn get_stream_display_rotation(stream: &AVStream, map: &HashMap<String, String>) -> f64 {
         fn get_rotation_from_metadata(map: &HashMap<String, String>) -> f64 {
             if let Some(value) = map.get("rotate") {
                 value.parse::<f64>().unwrap_or(0.0)
@@ -194,21 +194,21 @@ impl StreamInfo {
             }
         }
 
+        /// av_stream_new_side_data
+        /// av_stream_add_side_data
+        /// av_stream_get_side_data
         unsafe fn get_rotation_from_side_data(stream: &AVStream) -> f64 {
             for i in 0..stream.nb_side_data {
                 let side_data = stream.side_data.offset(i as isize);
                 if (*side_data).type_ == ffi::AV_PKT_DATA_DISPLAYMATRIX {
-                    let matrix = unsafe {
-                        std::slice::from_raw_parts(
-                            (*side_data).data as *const i32,
-                            (*side_data).size,
-                        )
-                    };
-
-                    let rotation = unsafe { ffi::av_display_rotation_get(matrix.as_ptr()) };
-
-                    // av_display_rotation_get 返回的是顺时针角度，我们需要转换为逆时针
-                    return -rotation;
+                    let matrix = ffi::av_stream_get_side_data(
+                        stream.as_ptr(),
+                        (*side_data).type_,
+                        std::ptr::null_mut(),
+                    ) as *const i32;
+                    if !matrix.is_null() {
+                        return ffi::av_display_rotation_get(matrix);
+                    }
                 }
             }
             0.0
@@ -219,6 +219,33 @@ impl StreamInfo {
             return rotation;
         }
         get_rotation_from_metadata(map)
+    }
+
+    #[allow(dead_code)]
+    fn set_stream_display_rotation(stream: &mut AVStream, angle: f64) {
+        // Display matrix in libavcodec is [i32; 9] where each point is 16.16
+        // fixed point, but all this is opaque here..
+        const MATRIX_LEN: usize = 9 * size_of::<i32>();
+        let mut matrix = [0u8; MATRIX_LEN];
+
+        unsafe {
+            ffi::av_display_rotation_set(matrix.as_mut_ptr() as *mut i32, angle);
+
+            let mut data_size: usize = 0;
+            let mut side_data = ffi::av_stream_get_side_data(
+                stream.as_ptr(),
+                ffi::AV_PKT_DATA_DISPLAYMATRIX,
+                &mut data_size,
+            );
+            if side_data.is_null() || data_size != MATRIX_LEN {
+                side_data = ffi::av_stream_new_side_data(
+                    stream.as_mut_ptr(),
+                    ffi::AV_PKT_DATA_DISPLAYMATRIX,
+                    MATRIX_LEN,
+                );
+            }
+            side_data.copy_from(matrix.as_ptr(), MATRIX_LEN);
+        }
     }
 
     fn get_extra_data(stream: &AVStream) -> Option<Vec<u8>> {
@@ -274,7 +301,7 @@ impl std::fmt::Display for StreamInfo {
         };
         write!(
             f,
-            "{} #{}: codec={}, format={}, size={}x{}, fps={:.3}, bit_rate={}, sample_rate={}, video_delay={}",
+            "{} #{}: codec={}, format={}, size={}x{}, fps={:?}, bit_rate={}, sample_rate={}, video_delay={}",
             stream_type,
             self.index,
             codec_name,

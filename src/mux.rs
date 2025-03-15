@@ -5,7 +5,6 @@ use crate::{Decoder, DecoderBuilder, Encoder};
 
 use anyhow::{Context, Error, Result};
 use rsmpeg::avutil::AVFrame;
-use rsmpeg::ffi;
 
 /// Represents a muxer. A muxer allows muxing media packets into a new container format. Muxing does
 /// not require encoding and/or decoding.
@@ -51,19 +50,19 @@ pub struct Muxer<W: Writer> {
 
 pub struct MuxerStream {
     pub encoder: Encoder,
-    pub time_base: ffi::AVRational,
+    pub stream_info: StreamInfo,
     pub media_type: MediaType,
     pub stream_idx: usize,
 }
 
 impl MuxerStream {
-    pub fn new(encoder: Encoder, stream_idx: usize) -> Self {
-        let time_base = encoder.time_base();
+    pub fn new(encoder: Encoder, stream_info: StreamInfo) -> Self {
         let media_type = encoder.media_type();
+        let stream_idx = stream_info.index;
         Self {
             encoder,
+            stream_info,
             stream_idx,
-            time_base,
             media_type,
         }
     }
@@ -80,11 +79,12 @@ impl<W: Writer> Muxer<W> {
         }
     }
 
-    pub fn add_encoder(&mut self, encoder: Encoder) -> Result<usize> {
+    pub fn add_stream(&mut self, encoder: Encoder) -> Result<usize> {
         let stream_idx = self
             .writer
             .add_stream(encoder.codecpar(), encoder.time_base());
-        self.streams.push(MuxerStream::new(encoder, stream_idx));
+        let stream_info = StreamInfo::from_writer(&self.writer, stream_idx)?;
+        self.streams.push(MuxerStream::new(encoder, stream_info));
         Ok(stream_idx)
     }
 
@@ -114,9 +114,13 @@ impl<W: Writer> Muxer<W> {
             match mux_stream.encoder.encode_raw(&frame) {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
-                    packet.set_dts(packet.pts);
                     packet.set_stream_index(mux_stream.stream_idx as i32);
-                    packet.rescale_ts(mux_stream.time_base, mux_stream.encoder.time_base());
+                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                    // encode_ctx_timebase => out_stream_time_base
+                    packet.rescale_ts(
+                        mux_stream.encoder.time_base(),
+                        mux_stream.stream_info.time_base,
+                    );
 
                     Ok(Some({
                         if self.interleaved {
@@ -155,7 +159,12 @@ impl<W: Writer> Muxer<W> {
                     Ok(Some(mut packet)) => {
                         packet.set_pos(-1);
                         packet.set_stream_index(mux_stream.stream_idx as i32);
-                        packet.rescale_ts(mux_stream.time_base, mux_stream.time_base);
+                        // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                        // encode_ctx_timebase => out_stream_time_base
+                        packet.rescale_ts(
+                            mux_stream.encoder.time_base(),
+                            mux_stream.stream_info.time_base,
+                        );
 
                         if self.interleaved {
                             self.writer.write_interleaved(&mut packet)?;
@@ -198,19 +207,18 @@ pub struct Demuxer<R: Reader> {
 
 pub struct DemuxerStream {
     pub decoder: Decoder,
-    pub time_base: ffi::AVRational,
+    pub stream_info: StreamInfo,
     pub media_type: MediaType,
     pub stream_idx: usize,
 }
 
 impl DemuxerStream {
-    pub fn new(decoder: Decoder) -> Self {
-        let time_base = decoder.time_base();
+    pub fn new(decoder: Decoder, stream_info: StreamInfo) -> Self {
         let media_type = decoder.media_type();
-        let stream_idx = decoder.stream_index();
+        let stream_idx = stream_info.index;
         Self {
             decoder,
-            time_base,
+            stream_info,
             media_type,
             stream_idx,
         }
@@ -228,7 +236,7 @@ impl<R: Reader> Demuxer<R> {
                 .with_media_type(media_type)
                 .build(&reader)
                 .context("Failed to build decoder")?;
-            streams.push(DemuxerStream::new(decoder));
+            streams.push(DemuxerStream::new(decoder, stream_info));
         }
 
         Ok(Self { reader, streams })
@@ -249,17 +257,24 @@ impl<R: Reader> Demuxer<R> {
     }
 
     pub fn demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
-        let (stream_index, mut packet) = match self.reader.read_packet() {
-            Ok(Some((stream, pkt))) => (stream.index(), pkt),
-            Ok(None) => return Err(Error::msg("No more packets")),
-            Err(e) => {
-                log::error!("Error reading packet: {}", e);
-                return Err(e);
-            }
+        let (in_stream_index, in_stream_time_base, mut packet) = {
+            let (in_stream, pkt) = match self.reader.read_packet() {
+                Ok(Some((s, p))) => (s, p),
+                Ok(None) => return Err(Error::msg("No more packets")),
+                Err(e) => {
+                    log::error!("Error reading packet: {}", e);
+                    return Err(e);
+                }
+            };
+            (in_stream.index(), in_stream.time_base(), pkt)
         };
-        let demux_stream = self.get_stream_mut(stream_index)?;
-        let frame = demux_stream.decoder.decode_raw(&mut packet)?;
-        Ok(Some((stream_index, frame)))
+
+        let demux_stream = self.get_stream_mut(in_stream_index)?;
+        // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
+        // in_stream->time_base  =>  dec_ctx->time_base
+        packet.rescale_ts(in_stream_time_base, demux_stream.decoder.time_base());
+        let frame = demux_stream.decoder.decode_raw(&packet)?;
+        Ok(Some((in_stream_index, frame)))
     }
 }
 
@@ -363,7 +378,7 @@ mod tests {
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
-        let video_index = muxer.add_encoder(video_encoder)?;
+        let video_index = muxer.add_stream(video_encoder)?;
 
         // 生成测试视频帧 // 10秒视频 30fps
         for pts in 0..300 {
@@ -421,7 +436,7 @@ mod tests {
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
-        let audio_index = muxer.add_encoder(audio_encoder)?;
+        let audio_index = muxer.add_stream(audio_encoder)?;
 
         // 生成测试音频帧 // 5秒音频 440Hz
         for pts in (0..sample_rate * 5).step_by(nb_samples) {
@@ -494,8 +509,8 @@ mod tests {
         let mut muxer = Muxer::from_writer(stream_writer);
 
         // 添加视频流 和 音频流
-        let video_idx = muxer.add_encoder(video_encoder)?;
-        let audio_idx = muxer.add_encoder(audio_encoder)?;
+        let video_idx = muxer.add_stream(video_encoder)?;
+        let audio_idx = muxer.add_stream(audio_encoder)?;
 
         // 计算音频帧间隔
         let audio_frame_interval = {

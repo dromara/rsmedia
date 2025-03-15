@@ -22,6 +22,7 @@ pub struct EncoderBuilder<'a> {
     pixel_format: PixelFormat,
     gop_size: i32,
     time_base: ffi::AVRational,
+    pkt_time_base: ffi::AVRational,
     frame_rate: ffi::AVRational,
     max_b_frames: i32,
     keyframe_interval: u64,
@@ -77,6 +78,7 @@ impl<'a> EncoderBuilder<'a> {
             bit_rate: Self::VIDEO_BIT_RATE,
             gop_size: Self::FRAME_RATE * 2,
             time_base: avutil::ra(1, Self::FRAME_RATE),
+            pkt_time_base: avutil::ra(1, 90_000),
             frame_rate: avutil::ra(Self::FRAME_RATE, 1),
             max_b_frames: 0,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
@@ -128,6 +130,11 @@ impl<'a> EncoderBuilder<'a> {
     pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
         self.time_base = avutil::ra(1, frame_rate);
         self.frame_rate = avutil::ra(frame_rate, 1);
+        self
+    }
+
+    pub fn with_pkt_time_base(mut self, base: i32) -> Self {
+        self.pkt_time_base = avutil::ra(1, base);
         self
     }
 
@@ -226,7 +233,7 @@ impl<'a> EncoderBuilder<'a> {
             encoder.set_max_b_frames(self.max_b_frames);
             encoder.set_framerate(self.frame_rate);
             encoder.set_time_base(self.time_base);
-            encoder.set_pkt_timebase(self.time_base);
+            encoder.set_pkt_timebase(self.pkt_time_base);
             encoder.set_pix_fmt(self.pixel_format.into());
             encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         } else if media_type == MediaType::AUDIO {
@@ -634,6 +641,8 @@ mod tests {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(video_index as i32);
+                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                    // encode_ctx_timebase => out_stream_time_base
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
@@ -662,6 +671,8 @@ mod tests {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(video_index as i32);
+                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                    // encode_ctx_timebase => out_stream_time_base
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
@@ -834,6 +845,8 @@ mod tests {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(audio_index as i32);
+                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                    // encode_ctx_timebase => out_stream_time_base
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
@@ -862,12 +875,44 @@ mod tests {
             // 设置最后帧的时间戳（总样本数 - 剩余样本数）
             last_frame.set_pts(total_samples - remaining as i64);
 
-            // FIXME:
-            encoder.encode_raw(&last_frame)?;
+            // write last frame
+            if let Some(mut packet) = encoder.encode_raw(&last_frame)? {
+                packet.set_pos(-1);
+                packet.set_stream_index(audio_index as i32);
+                // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                // encode_ctx_timebase => out_stream_time_base
+                packet.rescale_ts(encoder.time_base(), stream_info.time_base);
+                stream_writer.write_frame(&mut packet)?;
+            }
         }
 
-        // 写入文件尾
+        // flush encoder and write trailer
         encoder.flush().unwrap();
+
+        // drain the items still on the queue before giving up.
+        loop {
+            match encoder.receive_packet() {
+                Ok(Some(mut packet)) => {
+                    packet.set_pos(-1);
+                    packet.set_stream_index(audio_index as i32);
+                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                    // encode_ctx_timebase => out_stream_time_base
+                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
+                    stream_writer.write_frame(&mut packet)?;
+                }
+                Ok(None) => {
+                    println!("No packet received from encoder.");
+                    break;
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to receive packet from encoder: {}",
+                        e
+                    ));
+                }
+            }
+        }
+
         stream_writer.write_trailer().unwrap();
 
         Ok(())

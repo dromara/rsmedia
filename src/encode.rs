@@ -2,13 +2,12 @@
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::options::Options;
-use crate::packet::Packet;
 use crate::pixel::PixelFormat;
 use crate::time::Time;
-use crate::{utils, MediaType, Rational, RawFrame, SampleFormat};
+use crate::{utils, MediaType, RawFrame, SampleFormat};
 use std::hash::{Hash, Hasher};
 
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef, AVPacket};
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -22,9 +21,8 @@ pub struct EncoderBuilder<'a> {
     height: i32,
     pixel_format: PixelFormat,
     gop_size: i32,
-    interleaved: bool,
-    time_base: Rational,
-    frame_rate: Rational,
+    time_base: ffi::AVRational,
+    frame_rate: ffi::AVRational,
     max_b_frames: i32,
     keyframe_interval: u64,
     oformat_flags: i32,
@@ -36,9 +34,6 @@ pub struct EncoderBuilder<'a> {
     bit_rate: i64,
     media_type: MediaType,
     thread_count: i32,
-    // container format
-    format: Option<&'a str>,
-    format_opts: Option<&'a Options>,
     codec_name: Option<String>,
     codec_opts: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
@@ -81,9 +76,8 @@ impl<'a> EncoderBuilder<'a> {
             pixel_format: PixelFormat::YUV420P,
             bit_rate: Self::VIDEO_BIT_RATE,
             gop_size: Self::FRAME_RATE * 2,
-            interleaved: false,
-            time_base: Rational::new(1, Self::FRAME_RATE),
-            frame_rate: Rational::new(Self::FRAME_RATE, 1),
+            time_base: avutil::ra(1, Self::FRAME_RATE),
+            frame_rate: avutil::ra(Self::FRAME_RATE, 1),
             max_b_frames: 0,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             oformat_flags: 0,
@@ -94,8 +88,6 @@ impl<'a> EncoderBuilder<'a> {
             // common
             media_type: MediaType::VIDEO,
             thread_count: 0,
-            format: None,
-            format_opts: None,
             codec_name: None,
             codec_opts: None,
             hw_device_type: None,
@@ -134,8 +126,8 @@ impl<'a> EncoderBuilder<'a> {
 
     /// Set the frame rate.
     pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
-        self.time_base = Rational::new(1, frame_rate);
-        self.frame_rate = Rational::new(frame_rate, 1);
+        self.time_base = avutil::ra(1, frame_rate);
+        self.frame_rate = avutil::ra(frame_rate, 1);
         self
     }
 
@@ -157,50 +149,8 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
-    /// Set the output options for the encoder.
-    ///
-    /// # Arguments
-    ///
-    /// * `options` - The output options.
-    pub fn with_format_options(mut self, options: &'a Options) -> Self {
-        self.format_opts = Some(options);
-        self
-    }
-
-    pub fn with_codec_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.codec_opts = Some(options);
-        self
-    }
-
-    /// Set the container format for the encoder.
-    ///
-    /// # Arguments
-    ///
-    /// * `format` - Container format to use. eg. `"mp4"`, `"mkv"`, `"mov"`, `"avi"`, `"flv"`.
-    ///
-    /// reference: https://trac.ffmpeg.org/wiki/HWAccelIntro
-    ///
-    /// | Format                          | Filename Extension | H.264/AVC | H.265/HEVC | AV1   |
-    /// |---------------------------------|--------------------|-----------|------------|-------|
-    /// | Matroska                        | .mkv               | Y         | Y          | Y     |
-    /// | MPEG-4 Part 14 (MP4)            | .mp4               | Y         | Y          | Y     |
-    /// | Audio Video Interleave (AVI)    | .avi               | Y         | N          | Y     |
-    /// | Material Exchange Format (MXF)  | .mxf               | Y         | n/a        | n/a   |
-    /// | MPEG transport stream (TS)      | .ts                | Y         | Y          | N     |
-    /// | 3GPP (3GP)                      | .3gp               | Y         | n/a        | n/a   |
-    /// | Flash Video (FLV)               | .flv               | Y         | n/a        | n/a   |
-    /// | WebM                            | .webm              | n/a       | n/a        | Y     |
-    /// | Advanced Systems Format (ASF)   | .asf, .wmv         | Y         | Y          | Y     |
-    /// | QuickTime File Format (QTFF)    | .mov               | Y         | Y          | n/a   |
-    pub fn with_format(mut self, format: &'a str) -> Self {
-        self.format = Some(format);
-        self
-    }
-
-    /// Set interleaved. This will cause the encoder to use interleaved write instead of normal
-    /// write.
-    pub fn with_interleaved(mut self) -> Self {
-        self.interleaved = true;
         self
     }
 
@@ -247,7 +197,7 @@ impl<'a> EncoderBuilder<'a> {
             match self.media_type {
                 MediaType::VIDEO => Self::VIDEO_CODEC_NAME,
                 MediaType::AUDIO => Self::AUDIO_CODEC_NAME,
-                _ => panic!("Unsupported media type"),
+                _ => panic!("Unsupported media type, please specify codec name."),
             }
         };
         AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
@@ -274,9 +224,9 @@ impl<'a> EncoderBuilder<'a> {
             encoder.set_bit_rate(self.bit_rate);
             encoder.set_gop_size(self.gop_size);
             encoder.set_max_b_frames(self.max_b_frames);
-            encoder.set_framerate(self.frame_rate.into());
-            encoder.set_time_base(self.time_base.into());
-            encoder.set_pkt_timebase(self.time_base.into());
+            encoder.set_framerate(self.frame_rate);
+            encoder.set_time_base(self.time_base);
+            encoder.set_pkt_timebase(self.time_base);
             encoder.set_pix_fmt(self.pixel_format.into());
             encoder.set_sample_aspect_ratio(avutil::ra(1, 1));
         } else if media_type == MediaType::AUDIO {
@@ -401,7 +351,11 @@ impl Encoder {
     /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
-    pub fn encode(&mut self, frame: &FrameArray, source_timestamp: Time) -> Result<Option<Packet>> {
+    pub fn encode(
+        &mut self,
+        frame: &FrameArray,
+        source_timestamp: Time,
+    ) -> Result<Option<AVPacket>> {
         let (height, width, channels) = frame.dim();
         if height != self.encode_ctx.height as usize
             || width != self.encode_ctx.width as usize
@@ -427,7 +381,7 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<Option<Packet>> {
+    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<Option<AVPacket>> {
         log::info!("raw_frame: {:?}", raw_frame);
         if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
             return Err(anyhow::anyhow!(
@@ -440,7 +394,7 @@ impl Encoder {
             ));
         }
 
-        let av_frame = if self.media_type == MediaType::VIDEO {
+        let mut av_frame = if self.media_type == MediaType::VIDEO {
             // 根据编码器类型选择目标像素格式
             let target_format = if self.hw_context.is_some() {
                 self.encode_ctx
@@ -452,28 +406,25 @@ impl Encoder {
             };
 
             // Reformat frame to target pixel format if need
-            let mut frame = if raw_frame.format != target_format.into() {
+            let sw_frame = if raw_frame.format != target_format.into() {
                 frame::scale_frame(raw_frame, raw_frame.width, raw_frame.height, target_format)?
             } else {
                 raw_frame.clone()
             };
 
-            // 计算关键帧
-            self.calc_key_frame_pts(&mut frame);
-
             if self.hw_context.is_some() {
                 let hw_ctx = self.hw_context.as_ref().unwrap();
-                if hw_ctx.is_sw_frame(&frame) {
-                    // 上传到硬件内存并获取硬件帧
+                if hw_ctx.is_sw_frame(&sw_frame) {
+                    // 上传到硬件内存并获取硬件帧 (sw_frame -> hw_frame)
                     hw_ctx
-                        .hw_upload(&mut self.encode_ctx, &frame)
+                        .hw_upload(&mut self.encode_ctx, &sw_frame)
                         .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?
                 } else {
                     log::warn!("Invalid sw_frame.");
-                    frame
+                    sw_frame
                 }
             } else {
-                frame
+                sw_frame
             }
         } else if self.media_type == MediaType::AUDIO {
             raw_frame.clone()
@@ -481,23 +432,35 @@ impl Encoder {
             panic!("{}", format!("Unsupport mediaType :{:?}", self.media_type))
         };
 
+        // 计算 关键帧 和 PTS
+        self.calc_key_frame_pts(&mut av_frame);
+
         // 发送帧到编码器
         self.encode_ctx
             .send_frame(Some(&av_frame))
             .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
 
-        self.encoder_receive_packet()
+        // Increment frame count regardless of whether or not frame is written,
+        // see https://github.com/oddity-ai/video-rs/issues/46.
+        self.frame_count += 1;
+
+        self.receive_packet()
     }
 
     /// Get encoder time base.
     #[inline]
-    pub fn time_base(&self) -> Rational {
-        self.encode_ctx.time_base.into()
+    pub fn time_base(&self) -> ffi::AVRational {
+        self.encode_ctx.time_base
     }
 
     #[inline]
-    pub fn frame_rate(&self) -> Rational {
-        self.encode_ctx.framerate.into()
+    pub fn frame_rate(&self) -> ffi::AVRational {
+        self.encode_ctx.framerate
+    }
+
+    #[inline]
+    pub fn sample_rate(&self) -> i32 {
+        self.encode_ctx.sample_rate
     }
 
     #[inline]
@@ -537,17 +500,18 @@ impl Encoder {
             frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
 
-        let pts_increment =
-            self.time_base().denominator() as i64 / self.frame_rate().numerator() as i64;
+        let pts_increment = {
+            if self.media_type == MediaType::VIDEO {
+                self.time_base().den as i64 / self.frame_rate().num as i64
+            } else {
+                self.time_base().den as i64 / self.sample_rate() as i64
+            }
+        };
         let pts = self.frame_count as i64 * pts_increment;
 
         // Update frame pts
-        frame.set_time_base(self.time_base().into());
+        frame.set_time_base(self.time_base());
         frame.set_pts(pts);
-
-        // Increment frame count regardless of whether or not frame is written,
-        // see https://github.com/oddity-ai/video-rs/issues/46.
-        self.frame_count += 1;
 
         log::debug!(
             "send frame to encoder time_base:{:?}, frame: {:?}",
@@ -558,15 +522,12 @@ impl Encoder {
 
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
-    fn encoder_receive_packet(&mut self) -> Result<Option<Packet>> {
-        let packet = match self.encode_ctx.receive_packet() {
-            Ok(p) => Packet::new_with_avpacket(p),
-            Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => {
-                return Ok(None);
-            }
-            Err(err) => return Err(Error::new(err)),
-        };
-        Ok(Some(packet))
+    pub fn receive_packet(&mut self) -> Result<Option<AVPacket>> {
+        match self.encode_ctx.receive_packet() {
+            Ok(pkt) => Ok(Some(pkt)),
+            Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => Ok(None),
+            Err(err) => Err(Error::new(err)),
+        }
     }
 
     /// Flush the encoder, drain any packets that still need processing.
@@ -579,12 +540,12 @@ impl Encoder {
             return Ok(());
         }
 
+        // Notify the encoder that the last frame has been sent.
+        self.send_eof().context("Send EOF frame failed.")?;
+
         // Maximum number of invocations to `encoder_receive_packet`
         // to drain the items still on the queue before giving up.
         // const MAX_DRAIN_ITERATIONS: u32 = 100;
-
-        // Notify the encoder that the last frame has been sent.
-        self.send_eof().context("Send EOF frame failed.")?;
 
         // for i in 0..MAX_DRAIN_ITERATIONS {
         //     match self.encoder_receive_packet() {
@@ -635,6 +596,7 @@ mod tests {
     use crate::colors;
     use crate::io::private::{Output, Write};
     use crate::io::StreamWriter;
+    use crate::stream::StreamInfo;
     use std::path::Path;
 
     fn rainbow_frame(p: f32) -> FrameArray {
@@ -653,22 +615,26 @@ mod tests {
             .with_media_type(MediaType::VIDEO)
             .build()?;
 
+        // build writer
         let mut stream_writer = StreamWriter::new(output_path)?;
-        let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
+        let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());
+        let stream_info = StreamInfo::from_writer(&stream_writer, video_index).unwrap();
 
-        // 写入文件头
+        // write header
         stream_writer.write_header().unwrap();
 
         let duration: Time = Time::from_nth_of_a_second(24);
-        let mut position = Time::new(Some(0), encoder.time_base());
+        let mut position = Time::zero();
 
+        // frame encode and write to file
         for i in 0..256 {
             let frame = rainbow_frame(i as f32 / 256.0);
+
             match encoder.encode(&frame, position) {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
-                    packet.set_stream_index(video_index);
-                    packet.rescale_ts(packet.time_base(), encoder.time_base());
+                    packet.set_stream_index(video_index as i32);
+                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
                 Ok(None) => {
@@ -687,8 +653,31 @@ mod tests {
             position = position.aligned_with(duration).add();
         }
 
-        // 写入文件尾
+        // flush encoder and write trailer
         encoder.flush().unwrap();
+
+        // drain the items still on the queue before giving up.
+        loop {
+            match encoder.receive_packet() {
+                Ok(Some(mut packet)) => {
+                    packet.set_pos(-1);
+                    packet.set_stream_index(video_index as i32);
+                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
+                    stream_writer.write_frame(&mut packet)?;
+                }
+                Ok(None) => {
+                    println!("No packet received from encoder.");
+                    break;
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to receive packet from encoder: {}",
+                        e
+                    ));
+                }
+            }
+        }
+
         stream_writer.write_trailer().unwrap();
 
         Ok(())
@@ -815,8 +804,8 @@ mod tests {
             .unwrap();
 
         let mut stream_writer = StreamWriter::new(output_path)?;
-        let audio_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
-
+        let audio_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());
+        let stream_info = StreamInfo::from_writer(&stream_writer, audio_index)?;
         // 写入文件头
         stream_writer.write_header().unwrap();
 
@@ -844,8 +833,8 @@ mod tests {
             match encoder.encode_raw(&sine_frame) {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
-                    packet.set_stream_index(audio_index);
-                    packet.rescale_ts(packet.time_base(), encoder.time_base());
+                    packet.set_stream_index(audio_index as i32);
+                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
                 Ok(None) => {

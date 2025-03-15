@@ -3,14 +3,13 @@ use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::io::Reader;
 use crate::options::Options;
-use crate::packet::Packet;
 use crate::resize::Resize;
 use crate::stream::StreamInfo;
 use crate::time::Time;
-use crate::{utils, MediaType, PixelFormat, Rational, RawFrame};
+use crate::{utils, MediaType, PixelFormat, RawFrame};
 
 use anyhow::{Context, Error, Result};
-use rsmpeg::avcodec::{AVCodec, AVCodecContext};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
@@ -18,9 +17,6 @@ use rsmpeg::ffi;
 pub struct DecoderBuilder<'a> {
     resize: Option<Resize>,
     media_type: MediaType,
-    // container format
-    format: Option<&'a str>,
-    format_opts: Option<&'a Options>,
     codec_name: Option<String>,
     codec_opts: Option<&'a Options>,
     hw_device_type: Option<HWDeviceType>,
@@ -34,8 +30,6 @@ impl<'a> DecoderBuilder<'a> {
         Self {
             resize: None,
             media_type: MediaType::VIDEO,
-            format: None,
-            format_opts: None,
             codec_name: None,
             codec_opts: None,
             hw_device_type: None,
@@ -49,21 +43,7 @@ impl<'a> DecoderBuilder<'a> {
         self
     }
 
-    /// Set the container format.
-    pub fn with_format(mut self, format: &'a str) -> Self {
-        self.format = Some(format);
-        self
-    }
-
-    /// Set custom options. Options are applied to the input.
-    ///
-    /// * `options` - Custom options.
-    pub fn with_format_options(mut self, options: &'a Options) -> Self {
-        self.format_opts = Some(options);
-        self
-    }
-
-    pub fn with_codec_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: &'a Options) -> Self {
         self.codec_opts = Some(options);
         self
     }
@@ -157,7 +137,7 @@ impl<'a> DecoderBuilder<'a> {
         Ok(Decoder {
             decode_ctx,
             hw_context,
-            time_base: time_base.into(),
+            time_base,
             media_type: self.media_type,
             size: (width as u32, height as u32),
             size_out: (resize_width, resize_height),
@@ -188,7 +168,7 @@ impl Default for DecoderBuilder<'_> {
 pub struct Decoder {
     decode_ctx: AVCodecContext,
     hw_context: Option<HWContext>,
-    time_base: Rational,
+    time_base: ffi::AVRational,
     media_type: MediaType,
     stream_index: usize,
     size: (u32, u32),
@@ -221,7 +201,7 @@ impl Decoder {
 
     /// Get decoder time base.
     #[inline(always)]
-    pub fn time_base(&self) -> Rational {
+    pub fn time_base(&self) -> ffi::AVRational {
         self.time_base
     }
 
@@ -250,10 +230,10 @@ impl Decoder {
     /// }
     /// ```
     #[cfg(feature = "ndarray")]
-    pub fn decode(&mut self, packet: &Packet) -> Result<(Time, FrameArray)> {
+    pub fn decode(&mut self, packet: &mut AVPacket) -> Result<(Time, FrameArray)> {
         Ok(loop {
             if !self.draining {
-                match self._decode(packet.clone()) {
+                match self._decode(packet) {
                     Ok(Some(frame)) => break frame,
                     Ok(None) => {
                         log::debug!("no frame decoded.");
@@ -278,10 +258,10 @@ impl Decoder {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`].
-    pub fn decode_raw(&mut self, packet: &Packet) -> Result<RawFrame> {
+    pub fn decode_raw(&mut self, packet: &mut AVPacket) -> Result<RawFrame> {
         Ok(loop {
             if !self.draining {
-                match self._decode_raw(packet.clone()) {
+                match self._decode_raw(packet) {
                     Ok(Some(frame)) => break frame,
                     Ok(None) => {
                         log::debug!("no rawFrame decoded.");
@@ -343,7 +323,7 @@ impl Decoder {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    fn _decode(&mut self, packet: Packet) -> Result<Option<(Time, FrameArray)>> {
+    fn _decode(&mut self, packet: &mut AVPacket) -> Result<Option<(Time, FrameArray)>> {
         match self._decode_raw(packet)? {
             Some(mut frame) => Ok(Some(self.raw_frame_to_time_and_frame(&mut frame)?)),
             None => Ok(None),
@@ -362,7 +342,7 @@ impl Decoder {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    fn _decode_raw(&mut self, packet: Packet) -> Result<Option<RawFrame>> {
+    fn _decode_raw(&mut self, packet: &mut AVPacket) -> Result<Option<RawFrame>> {
         assert!(!self.draining);
         self.send_packet_to_decoder(packet)?;
         self.receive_frame_from_decoder()
@@ -420,56 +400,10 @@ impl Decoder {
         }
     }
 
-    // /// Read a single packet from the source video file.
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `stream_index` - Index of stream to read from.
-    // ///
-    // /// # Example
-    // ///
-    // /// Read a single packet:
-    // ///
-    // /// ```ignore
-    // /// let mut reader = StreamReader::new(Path::new("my_video.mp4")).unwrap();
-    // /// let stream = reader.best_video_stream_index().unwrap();
-    // /// let mut packet = reader.read(stream).unwrap();
-    // /// ```
-    // pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
-    //     loop {
-    //         match self.reader.read_packet() {
-    //             Ok(Some((stream, packet))) => {
-    //                 if stream.index() == stream_index {
-    //                     return Ok(Packet::new(packet, stream.time_base()));
-    //                 }
-    //                 log::debug!("Skipping packet from stream: {}", stream.index());
-    //             }
-    //             Ok(None) => return Err(Error::msg("No more packets")),
-    //             Err(e) => {
-    //                 log::error!("Error reading packet: {}", e);
-    //                 return Err(e);
-    //             }
-    //         }
-    //     }
-    // }
-
-    // pub fn read_any(&mut self) -> Result<Packet> {
-    //     match self.reader.read_packet() {
-    //         Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
-    //         Ok(None) => Err(Error::msg("No more packets")),
-    //         Err(e) => {
-    //             log::error!("Error reading packet: {}", e);
-    //             Err(e)
-    //         }
-    //     }
-    // }
-
     /// Send packet to decoder. Includes rescaling timestamps accordingly.
-    fn send_packet_to_decoder(&mut self, packet: Packet) -> Result<()> {
-        let (mut packet, packet_time_base) = packet.into_inner_parts();
-        packet.rescale_ts(packet_time_base.into(), self.time_base().into());
-
-        self.decode_ctx.send_packet(Some(&packet))?;
+    fn send_packet_to_decoder(&mut self, packet: &mut AVPacket) -> Result<()> {
+        packet.rescale_ts(packet.time_base, self.time_base());
+        self.decode_ctx.send_packet(Some(packet))?;
 
         Ok(())
     }
@@ -480,6 +414,11 @@ impl Decoder {
         let Some(frame) = frame_result else {
             return Ok(None);
         };
+
+        // handle hwaccel decoding and rescale frame only for video
+        if self.media_type != MediaType::VIDEO {
+            return Ok(Some(frame));
+        }
 
         let sw_frame = self
             .hw_context
@@ -499,11 +438,6 @@ impl Decoder {
                 })
             })?;
 
-        // handle scale frame only for video
-        if self.media_type != MediaType::VIDEO {
-            return Ok(Some(sw_frame));
-        }
-
         // handle scaling frame if needed (if not, size_out is the same as size)
         Ok(Some(self.rescale_frame(sw_frame)?))
     }
@@ -511,8 +445,7 @@ impl Decoder {
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
     /// the decoder signals `EAGAIN`.
     fn decoder_receive_frame(&mut self) -> Result<Option<RawFrame>> {
-        let decode_result = self.decode_ctx.receive_frame();
-        match decode_result {
+        match self.decode_ctx.receive_frame() {
             Ok(frame) => Ok(Some(frame)),
             Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => Ok(None),
             Err(e) => Err(Error::new(e).context("Failed to receive frame from decoder")),
@@ -628,12 +561,12 @@ mod tests {
 
         loop {
             match stream_reader.read_packet() {
-                Ok(Some((stream, packet))) => {
+                Ok(Some((stream, mut packet))) => {
                     println!("packet: {:?}", packet);
                     // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
                     // 如果是视频流，需要先判断是否是视频流，然后再decode
                     if decoder.stream_index() == stream.index() {
-                        let frame = decoder.decode_raw(&packet)?;
+                        let frame = decoder.decode_raw(&mut packet)?;
                         println!("video frame: {:?}", frame);
                     }
                 }
@@ -663,12 +596,12 @@ mod tests {
 
         loop {
             match stream_reader.read_packet() {
-                Ok(Some((stream, packet))) => {
+                Ok(Some((stream, mut packet))) => {
                     println!("packet: {:?}", packet);
                     // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
                     // 如果是视频流，需要先判断是否是视频流，然后再decode
                     if decoder.stream_index() == stream.index() {
-                        let frame = decoder.decode_raw(&packet)?;
+                        let frame = decoder.decode_raw(&mut packet)?;
                         println!("audio frame: {:?}", frame);
                     }
                 }

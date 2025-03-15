@@ -34,12 +34,12 @@ async fn main() -> Result<()> {
 
     loop {
         match stream_reader.read_packet() {
-            Ok(Some((stream, packet))) => {
+            Ok(Some((stream, mut packet))) => {
                 // println!("packet: {:?}", packet);
                 // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
                 // 如果是视频流，需要先判断是否是视频流，然后再decode
                 if decoder.stream_index() == stream.index() {
-                    let (_t, yuv_frame) = decoder.decode(&packet)?;
+                    let (_t, yuv_frame) = decoder.decode(&mut packet)?;
                     println!(
                         "{:?} #{}, {:?}",
                         MediaType::from(stream.parameters().codec_type),

@@ -11,7 +11,6 @@ fn main() {
 
     let mut encoder = EncoderBuilder::new()
         .with_video_size(1280, 720)
-        .with_format("mp4")
         .with_gop_size(0)
         // use hwaccel cuda
         // .with_hardware_device(HWDeviceType::CUDA)
@@ -38,8 +37,8 @@ fn main() {
         match encoder.encode(&frame, position) {
             Ok(Some(mut packet)) => {
                 packet.set_pos(-1);
-                packet.set_stream_index(video_index);
-                packet.rescale_ts(packet.time_base(), encoder.time_base());
+                packet.set_stream_index(video_index as i32);
+                packet.rescale_ts(packet.time_base, encoder.time_base());
                 stream_writer
                     .write_frame(&mut packet)
                     .context("failed to write frame")

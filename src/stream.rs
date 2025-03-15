@@ -1,8 +1,7 @@
 use crate::io::{Reader, Writer};
-use crate::packet::Packet;
-use crate::{utils, Options, Rational};
+use crate::{utils, Options};
 
-use rsmpeg::avcodec::AVCodecParametersRef;
+use rsmpeg::avcodec::{AVCodecParametersRef, AVPacket};
 use rsmpeg::avformat::{AVInputFormatRef, AVStream};
 use rsmpeg::avutil::{AVDictionaryRef, AVMediaType};
 use rsmpeg::ffi;
@@ -31,7 +30,7 @@ pub struct StreamInfo {
     pub format: i32,
 
     /// time_base
-    pub time_base: Rational,
+    pub time_base: ffi::AVRational,
     /// Stream Duration
     pub duration: i64,
     /// Start time
@@ -65,9 +64,9 @@ pub struct StreamInfo {
     /// Video has B frames
     pub has_b_frames: i32,
     /// Video sample aspect ratio
-    pub sample_aspect_ratio: Rational,
+    pub sample_aspect_ratio: ffi::AVRational,
     /// Display aspect ratio
-    pub display_aspect_ratio: Rational,
+    pub display_aspect_ratio: ffi::AVRational,
     /// Video color space, eg: ffi::AVCOL_SPC_*
     pub color_space: usize,
     /// Video color range, eg: ffi::AVCOL_RANGE_*
@@ -146,7 +145,7 @@ impl StreamInfo {
             codec: codecpar.codec_id as isize,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
-            time_base: stream.time_base.into(),
+            time_base: stream.time_base,
             duration: stream.duration,
             start_time: stream.start_time,
             nb_frames: stream.nb_frames,
@@ -164,8 +163,8 @@ impl StreamInfo {
             video_delay: codecpar.video_delay,
             gop_size: 0,
             has_b_frames: 0,
-            sample_aspect_ratio: codecpar.sample_aspect_ratio.into(),
-            display_aspect_ratio: stream.sample_aspect_ratio.into(),
+            sample_aspect_ratio: codecpar.sample_aspect_ratio,
+            display_aspect_ratio: stream.sample_aspect_ratio,
             color_space: codecpar.color_space as usize,
             color_range: codecpar.color_range as usize,
             color_primaries: codecpar.color_primaries as usize,
@@ -247,7 +246,7 @@ impl StreamInfo {
     /// * The stream index.
     /// * Codec parameters.
     /// * Original stream time base.
-    pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, Rational) {
+    pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, ffi::AVRational) {
         (self.index, self.codec_parameters, self.time_base)
     }
 }
@@ -339,8 +338,8 @@ impl Stream<'_> {
         self.av_stream.index as usize
     }
 
-    pub fn time_base(&self) -> Rational {
-        Rational::from(self.av_stream.time_base)
+    pub fn time_base(&self) -> ffi::AVRational {
+        self.av_stream.time_base
     }
 
     pub fn start_time(&self) -> i64 {
@@ -367,12 +366,12 @@ impl Stream<'_> {
         StreamSideDataIter::new(self)
     }
 
-    pub fn r_frame_rate(&self) -> Rational {
-        self.av_stream.r_frame_rate.into()
+    pub fn r_frame_rate(&self) -> ffi::AVRational {
+        self.av_stream.r_frame_rate
     }
 
-    pub fn avg_frame_rate(&self) -> Rational {
-        self.av_stream.avg_frame_rate.into()
+    pub fn avg_frame_rate(&self) -> ffi::AVRational {
+        self.av_stream.avg_frame_rate
     }
 
     pub fn parameters(&self) -> AVCodecParametersRef {
@@ -397,7 +396,7 @@ impl Eq for Stream<'_> {}
 
 pub struct StreamSideData<'a> {
     ptr: *mut ffi::AVPacketSideData,
-    _marker: PhantomData<&'a Packet>,
+    _marker: PhantomData<&'a AVPacket>,
 }
 
 impl StreamSideData<'_> {

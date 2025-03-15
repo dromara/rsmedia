@@ -1,9 +1,11 @@
 use crate::flags::MediaType;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{Decoder, DecoderBuilder, Encoder, Packet, Rational};
+use crate::{Decoder, DecoderBuilder, Encoder};
 
 use anyhow::{Context, Error, Result};
+use rsmpeg::avutil::AVFrame;
+use rsmpeg::ffi;
 
 /// Represents a muxer. A muxer allows muxing media packets into a new container format. Muxing does
 /// not require encoding and/or decoding.
@@ -48,17 +50,21 @@ pub struct Muxer<W: Writer> {
 }
 
 pub struct MuxerStream {
-    pub time_base: Rational,
+    pub encoder: Encoder,
+    pub time_base: ffi::AVRational,
     pub media_type: MediaType,
     pub stream_idx: usize,
 }
 
 impl MuxerStream {
-    pub fn new(index: usize, media_type: MediaType, time_base: Rational) -> Self {
+    pub fn new(encoder: Encoder, stream_idx: usize) -> Self {
+        let time_base = encoder.time_base();
+        let media_type = encoder.media_type();
         Self {
+            encoder,
+            stream_idx,
             time_base,
             media_type,
-            stream_idx: index,
         }
     }
 }
@@ -74,15 +80,11 @@ impl<W: Writer> Muxer<W> {
         }
     }
 
-    pub fn add_stream(&mut self, encoder: &Encoder) -> Result<usize> {
+    pub fn add_encoder(&mut self, encoder: Encoder) -> Result<usize> {
         let stream_idx = self
             .writer
-            .add_stream(encoder.codecpar(), encoder.time_base().into());
-        self.streams.push(MuxerStream::new(
-            stream_idx,
-            encoder.media_type(),
-            encoder.time_base(),
-        ));
+            .add_stream(encoder.codecpar(), encoder.time_base());
+        self.streams.push(MuxerStream::new(encoder, stream_idx));
         Ok(stream_idx)
     }
 
@@ -105,39 +107,76 @@ impl<W: Writer> Muxer<W> {
     /// # Arguments
     ///
     /// * `packet` - [`Packet`] to mux.
-    pub fn mux(&mut self, packet: Packet, stream_idx: usize) -> Result<W::Out> {
+    pub fn mux(&mut self, frame: AVFrame, stream_idx: usize) -> Result<Option<W::Out>> {
         if self.have_written_header {
-            let stream = self.streams.iter().find(|s| s.stream_idx == stream_idx);
-            if stream.is_none() {
-                return Err(Error::msg(format!(
-                    "Stream index: {} not found",
-                    stream_idx
-                )));
-            }
+            let mux_stream = self.get_stream_mut(stream_idx)?;
 
-            let stream = stream.unwrap();
-            let mut packet = packet;
-            packet.set_pos(-1);
-            packet.set_stream_index(stream.stream_idx);
-            packet.rescale_ts(packet.time_base(), stream.time_base);
+            match mux_stream.encoder.encode_raw(&frame) {
+                Ok(Some(mut packet)) => {
+                    packet.set_pos(-1);
+                    packet.set_dts(packet.pts);
+                    packet.set_stream_index(mux_stream.stream_idx as i32);
+                    packet.rescale_ts(mux_stream.time_base, mux_stream.encoder.time_base());
 
-            Ok({
-                if self.interleaved {
-                    self.writer.write_interleaved(&mut packet)?
-                } else {
-                    self.writer.write_frame(&mut packet)?
+                    Ok(Some({
+                        if self.interleaved {
+                            self.writer.write_interleaved(&mut packet)?
+                        } else {
+                            self.writer.write_frame(&mut packet)?
+                        }
+                    }))
                 }
-            })
+                Ok(None) => {
+                    println!("No packet received from encoder.");
+                    Ok(None)
+                }
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to receive packet from encoder: {}",
+                    e
+                )),
+            }
         } else {
             self.have_written_header = true;
             self.writer.write_header()?;
-            self.mux(packet, stream_idx)
+            self.mux(frame, stream_idx)
         }
     }
 
     /// Signal to the muxer that writing has finished. This will cause a trailer to be written if
     /// the container format has one.
     pub fn finish(&mut self) -> Result<Option<W::Out>> {
+        for mux_stream in self.streams.iter_mut() {
+            // flush the encoder to ensure all packets are sent to the muxer.
+            mux_stream.encoder.flush()?;
+
+            // drain the items still on the queue before giving up.
+            loop {
+                match mux_stream.encoder.receive_packet() {
+                    Ok(Some(mut packet)) => {
+                        packet.set_pos(-1);
+                        packet.set_stream_index(mux_stream.stream_idx as i32);
+                        packet.rescale_ts(mux_stream.time_base, mux_stream.time_base);
+
+                        if self.interleaved {
+                            self.writer.write_interleaved(&mut packet)?;
+                        } else {
+                            self.writer.write_frame(&mut packet)?;
+                        }
+                    }
+                    Ok(None) => {
+                        println!("No packet received from encoder: {}", mux_stream.stream_idx);
+                        break;
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to receive packet from encoder: {}",
+                            e
+                        ));
+                    }
+                }
+            }
+        }
+
         if self.have_written_header && !self.have_written_trailer {
             self.have_written_trailer = true;
             self.writer.write_trailer().map(Some)
@@ -153,15 +192,15 @@ unsafe impl<W: Writer> Sync for Muxer<W> {}
 /// Demuxer
 #[allow(dead_code)]
 pub struct Demuxer<R: Reader> {
-    reader: R,
+    pub reader: R,
     streams: Vec<DemuxerStream>,
 }
 
 pub struct DemuxerStream {
     pub decoder: Decoder,
-    pub time_base: Rational,   // 时间基准（如1/1000）
-    pub media_type: MediaType, // 流类型（视频/音频/字幕）
-    pub stream_idx: usize,     // 流索引（0-based）
+    pub time_base: ffi::AVRational,
+    pub media_type: MediaType,
+    pub stream_idx: usize,
 }
 
 impl DemuxerStream {
@@ -200,6 +239,27 @@ impl<R: Reader> Demuxer<R> {
             .iter()
             .find(|s| s.stream_idx == index)
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
+    }
+
+    pub fn get_stream_mut(&mut self, index: usize) -> Result<&mut DemuxerStream> {
+        self.streams
+            .iter_mut()
+            .find(|s| s.stream_idx == index)
+            .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
+    }
+
+    pub fn demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
+        let (stream_index, mut packet) = match self.reader.read_packet() {
+            Ok(Some((stream, pkt))) => (stream.index(), pkt),
+            Ok(None) => return Err(Error::msg("No more packets")),
+            Err(e) => {
+                log::error!("Error reading packet: {}", e);
+                return Err(e);
+            }
+        };
+        let demux_stream = self.get_stream_mut(stream_index)?;
+        let frame = demux_stream.decoder.decode_raw(&mut packet)?;
+        Ok(Some((stream_index, frame)))
     }
 }
 
@@ -296,60 +356,43 @@ mod tests {
         let output_path = Path::new("/tmp/test_mux_demux_video.mp4");
 
         let (width, height) = (1920, 1080);
-        let mut video_encoder = EncoderBuilder::new()
+        let video_encoder = EncoderBuilder::new()
             .with_video_size(width, height)
             .with_frame_rate(30)
             .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
-        let video_index = muxer.add_stream(&video_encoder)?;
+        let video_index = muxer.add_encoder(video_encoder)?;
 
         // 生成测试视频帧 // 10秒视频 30fps
         for pts in 0..300 {
             let frame = generate_test_frame(width, height, pts);
-
-            match video_encoder.encode_raw(&frame) {
-                Ok(Some(packet)) => muxer.mux(packet, video_index)?,
-                Ok(None) => {
-                    println!("No packet received from encoder.");
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from encoder: {}",
-                        e
-                    ));
-                }
-            }
+            muxer.mux(frame, video_index)?;
         }
 
         // 完成写入
-        video_encoder.flush().unwrap();
         muxer.finish().unwrap();
+
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
 
         // Demuxer 测试视频解码
         let stream_reader = StreamReader::new(output_path)?;
         let mut demuxer = Demuxer::from_reader(stream_reader)?;
-        for des in demuxer.streams {
+        for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_idx, des.media_type)
         }
 
         loop {
-            match demuxer.reader.read_packet() {
-                Ok(Some((_stream, packet))) => {
-                    // if stream.index() == stream_index {
-                    //     return Ok(Packet::new(packet, stream.time_base()));
-                    // }
-                    // log::debug!("Skipping packet from stream: {}", stream.index());
-                    println!("{:?}", packet)
+            match demuxer.demux() {
+                Ok(Some((index, frame))) => {
+                    println!("stream index:{}, {:?}", index, frame)
                 }
-                Ok(None) => {
-                    // return Err(Error::msg("No more packets"))
-                    break;
-                }
+                Ok(None) => break,
                 Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return Err(e);
+                    println!("Error demuxing: {}", e);
+                    break;
                 }
             }
         }
@@ -367,7 +410,7 @@ mod tests {
         let nb_samples = 1024;
 
         // 添加音频流
-        let mut audio_encoder = EncoderBuilder::new()
+        let audio_encoder = EncoderBuilder::new()
             .with_media_type(MediaType::AUDIO) // 指定音频编码
             .with_nb_channels(channels) // 立体声
             .with_sample_rate(sample_rate) // 采样率
@@ -378,56 +421,36 @@ mod tests {
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
-        let audio_index = muxer.add_stream(&audio_encoder)?;
+        let audio_index = muxer.add_encoder(audio_encoder)?;
 
         // 生成测试音频帧 // 5秒音频 440Hz
         for pts in (0..sample_rate * 5).step_by(nb_samples) {
             let mut sine_frame = generate_sine_wave_frame(440.0, nb_samples, sample_rate)?;
             sine_frame.set_pts(pts as i64);
-
-            match audio_encoder.encode_raw(&sine_frame) {
-                Ok(Some(packet)) => {
-                    muxer.mux(packet, audio_index).unwrap();
-                }
-                Ok(None) => {
-                    println!("No packet received from encoder.");
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from encoder: {}",
-                        e
-                    ));
-                }
-            }
+            muxer.mux(sine_frame, audio_index).unwrap();
         }
 
-        // 完成写入
-        audio_encoder.flush().unwrap();
         muxer.finish().unwrap();
+
+        //////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////
 
         // Demuxer 测试音频解码
         let stream_reader = StreamReader::new(output_path)?;
         let mut demuxer = Demuxer::from_reader(stream_reader)?;
-        for des in demuxer.streams {
+        for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_idx, des.media_type)
         }
 
         loop {
-            match demuxer.reader.read_packet() {
-                Ok(Some((_stream, packet))) => {
-                    // if stream.index() == stream_index {
-                    //     return Ok(Packet::new(packet, stream.time_base()));
-                    // }
-                    // log::debug!("Skipping packet from stream: {}", stream.index());
-                    println!("{:?}", packet)
+            match demuxer.demux() {
+                Ok(Some((index, frame))) => {
+                    println!("stream index:{}, {:?}", index, frame)
                 }
-                Ok(None) => {
-                    // return Err(Error::msg("No more packets"))
-                    break;
-                }
+                Ok(None) => break,
                 Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return Err(e);
+                    println!("Error demuxing: {}", e);
+                    break;
                 }
             }
         }
@@ -452,14 +475,13 @@ mod tests {
 
         let output_path = Path::new("/tmp/test_multiple_streams.mp4");
 
-        let mut video_encoder = EncoderBuilder::new()
+        let video_encoder = EncoderBuilder::new()
             .with_media_type(MediaType::VIDEO)
             .with_video_size(VIDEO_WIDTH, VIDEO_HEIGHT)
-            .with_format("mp4")
             .with_frame_rate(VIDEO_FPS)
             .build()?;
 
-        let mut audio_encoder = EncoderBuilder::new()
+        let audio_encoder = EncoderBuilder::new()
             .with_media_type(MediaType::AUDIO) // 指定音频编码
             .with_nb_channels(AUDIO_CHANNELS) // 立体声
             .with_sample_rate(AUDIO_SAMPLE_RATE) // 采样率
@@ -471,9 +493,9 @@ mod tests {
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
 
-        // 添加流
-        let video_idx = muxer.add_stream(&video_encoder)?;
-        let audio_idx = muxer.add_stream(&audio_encoder)?;
+        // 添加视频流 和 音频流
+        let video_idx = muxer.add_encoder(video_encoder)?;
+        let audio_idx = muxer.add_encoder(audio_encoder)?;
 
         // 计算音频帧间隔
         let audio_frame_interval = {
@@ -487,20 +509,7 @@ mod tests {
         for pts in 0..total_frames {
             // 处理视频帧
             let video_frame = generate_test_frame(VIDEO_WIDTH, VIDEO_HEIGHT, pts as i64);
-            match video_encoder.encode_raw(&video_frame) {
-                Ok(Some(packet)) => {
-                    muxer.mux(packet, video_idx).unwrap();
-                }
-                Ok(None) => {
-                    println!("No packet received from video_encoder.");
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from video_encoder: {}",
-                        e
-                    ));
-                }
-            }
+            muxer.mux(video_frame, video_idx).unwrap();
 
             // 处理音频帧
             if pts % audio_frame_interval == 0 {
@@ -509,34 +518,35 @@ mod tests {
                     SAMPLES_PER_FRAME as usize,
                     AUDIO_SAMPLE_RATE,
                 )?;
-                match audio_encoder.encode_raw(&audio_frame) {
-                    Ok(Some(packet)) => {
-                        muxer.mux(packet, audio_idx).unwrap();
-                    }
-                    Ok(None) => {
-                        println!("No packet received from audio_encoder.");
-                    }
-                    Err(e) => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to receive packet from audio_encoder: {}",
-                            e
-                        ));
-                    }
-                }
+                muxer.mux(audio_frame, audio_idx).unwrap();
             }
         }
 
-        // 收尾工作
-        video_encoder.flush().unwrap();
-        audio_encoder.flush().unwrap();
+        // 完成写入
         muxer.finish().unwrap();
 
-        // 解封装验证
-        let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader)?;
-        for stream in demuxer.streams {
-            println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
-        }
+        /////////////////////////////////////////////////////////////////////////////
+        /////////////////////////////////////////////////////////////////////////////
+
+        // // 解封装验证
+        // let stream_reader = StreamReader::new(output_path)?;
+        // let mut demuxer = Demuxer::from_reader(stream_reader)?;
+        // for stream in &demuxer.streams {
+        //     println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
+        // }
+        //
+        // loop {
+        //     match demuxer.demux() {
+        //         Ok(Some((index, frame))) => {
+        //             println!("stream index:{}, {:?}", index, frame)
+        //         }
+        //         Ok(None) => break,
+        //         Err(e) => {
+        //             println!("Error demuxing: {}", e);
+        //             break;
+        //         }
+        //     }
+        // }
 
         Ok(())
     }

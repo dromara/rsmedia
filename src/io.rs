@@ -3,9 +3,8 @@ use crate::location::Location;
 use crate::options::Options;
 use crate::stream::Stream;
 use crate::utils;
-use crate::Packet;
 
-use rsmpeg::avcodec::AVCodecParameters;
+use rsmpeg::avcodec::{AVCodecParameters, AVPacket};
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput, AVInputFormat};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -18,7 +17,7 @@ pub trait Reader {
 
     fn input_mut(&mut self) -> &mut AVFormatContextInput;
 
-    fn read_packet(&mut self) -> Result<Option<(Stream, Packet)>> {
+    fn read_packet(&mut self) -> Result<Option<(Stream, AVPacket)>> {
         match self.input_mut().read_packet() {
             Ok(Some(pkt)) => {
                 let av_stream = self
@@ -28,10 +27,7 @@ pub trait Reader {
                     .unwrap();
                 let iformat = self.input().iformat();
                 let metadata = self.input().metadata();
-                Ok(Some((
-                    Stream::wrap(av_stream, iformat, metadata),
-                    Packet::new_with_avpacket(pkt),
-                )))
+                Ok(Some((Stream::wrap(av_stream, iformat, metadata), pkt)))
             }
             Ok(None) => Ok(None),
             Err(e) => Err(Error::new(e)),
@@ -263,11 +259,26 @@ impl<'a> StreamWriterBuilder<'a> {
         }
     }
 
-    /// Specify a custom format for the writer.
+    /// Specify a container format for the writer.
     ///
     /// # Arguments
     ///
-    /// * `format` - Container format to use.
+    /// * `format` - Container format to use. eg. `"mp4"`, `"mkv"`, `"mov"`, `"avi"`, `"flv"`.
+    ///
+    /// reference: https://trac.ffmpeg.org/wiki/HWAccelIntro
+    ///
+    /// | Format                          | Filename Extension | H.264/AVC | H.265/HEVC | AV1   |
+    /// |---------------------------------|--------------------|-----------|------------|-------|
+    /// | Matroska                        | .mkv               | Y         | Y          | Y     |
+    /// | MPEG-4 Part 14 (MP4)            | .mp4               | Y         | Y          | Y     |
+    /// | Audio Video Interleave (AVI)    | .avi               | Y         | N          | Y     |
+    /// | Material Exchange Format (MXF)  | .mxf               | Y         | n/a        | n/a   |
+    /// | MPEG transport stream (TS)      | .ts                | Y         | Y          | N     |
+    /// | 3GPP (3GP)                      | .3gp               | Y         | n/a        | n/a   |
+    /// | Flash Video (FLV)               | .flv               | Y         | n/a        | n/a   |
+    /// | WebM                            | .webm              | n/a       | n/a        | Y     |
+    /// | Advanced Systems Format (ASF)   | .asf, .wmv         | Y         | Y          | Y     |
+    /// | QuickTime File Format (QTFF)    | .mov               | Y         | Y          | n/a   |
     pub fn with_format(mut self, format: &'a str) -> Self {
         self.format = Some(format);
         self
@@ -529,6 +540,7 @@ unsafe impl Sync for PacketizedBufWriter {}
 
 pub mod private {
     use super::*;
+    use rsmpeg::avcodec::AVPacket;
 
     pub trait Write {
         type Out;
@@ -540,15 +552,15 @@ pub mod private {
         ///
         /// # Arguments
         ///
-        /// * `packet` - Packet to write.
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<Self::Out>;
+        /// * `packet` - AVPacket to write.
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<Self::Out>;
 
         /// Write a packet into the container and take care of interleaving.
         ///
         /// # Arguments
         ///
-        /// * `packet` - Packet to write.
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Self::Out>;
+        /// * `packet` - AVPacket to write.
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<Self::Out>;
 
         /// Write the container trailer.
         fn write_trailer(&mut self) -> Result<Self::Out>;
@@ -565,19 +577,13 @@ pub mod private {
             Ok(())
         }
 
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<()> {
-            // packet.write(&mut self.output)?;
-            self.output
-                .write_frame(packet.as_inner())
-                .context("Failed to write frame")?;
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<()> {
+            self.output.write_frame(packet)?;
             Ok(())
         }
 
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<()> {
-            // packet.write_interleaved(&mut self.output)?;
-            self.output
-                .interleaved_write_frame(packet.as_inner())
-                .context("Failed to write interleaved frame")?;
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<()> {
+            self.output.interleaved_write_frame(packet)?;
             Ok(())
         }
 
@@ -599,16 +605,16 @@ pub mod private {
             Ok(self.end_write())
         }
 
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<Buf> {
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<Buf> {
             self.begin_write();
-            packet.write(&mut self.output)?;
+            self.output.write_frame(packet)?;
             flush_output(&mut self.output)?;
             Ok(self.end_write())
         }
 
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Buf> {
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<Buf> {
             self.begin_write();
-            packet.write_interleaved(&mut self.output)?;
+            self.output.interleaved_write_frame(packet)?;
             flush_output(&mut self.output)?;
             Ok(self.end_write())
         }
@@ -631,17 +637,17 @@ pub mod private {
             Ok(self.take_buffers())
         }
 
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<Bufs> {
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<Bufs> {
             self.begin_write();
-            packet.write(&mut self.output)?;
+            self.output.write_frame(packet)?;
             flush_output(&mut self.output)?;
             self.end_write();
             Ok(self.take_buffers())
         }
 
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Bufs> {
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<Bufs> {
             self.begin_write();
-            packet.write_interleaved(&mut self.output)?;
+            self.output.interleaved_write_frame(packet)?;
             flush_output(&mut self.output)?;
             self.end_write();
             Ok(self.take_buffers())

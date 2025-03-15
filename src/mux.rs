@@ -1,9 +1,10 @@
 use crate::flags::MediaType;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{Decoder, DecoderBuilder, Encoder};
+use crate::{Decoder, DecoderBuilder, Encoder, EncoderBuilder, PixelFormat, SampleFormat};
 
 use anyhow::{Context, Error, Result};
+use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
 use rsmpeg::avutil::AVFrame;
 
 /// Represents a muxer. A muxer allows muxing media packets into a new container format. Muxing does
@@ -84,6 +85,35 @@ impl<W: Writer> Muxer<W> {
             .writer
             .add_stream(encoder.codecpar(), encoder.time_base());
         let stream_info = StreamInfo::from_writer(&self.writer, stream_idx)?;
+        self.streams.push(MuxerStream::new(encoder, stream_info));
+        Ok(stream_idx)
+    }
+
+    pub fn add_stream_from_info(&mut self, stream_info: StreamInfo) -> Result<usize> {
+        let stream_idx = unsafe {
+            self.writer.add_stream(
+                AVCodecParameters::from_raw(stream_info.codec_parameters),
+                stream_info.time_base,
+            )
+        };
+
+        let codec =
+            AVCodec::find_encoder(stream_info.codec as u32).context("Failed to find encoder")?;
+        let encoder = EncoderBuilder::new()
+            // other
+            .with_media_type(stream_info.media_type)
+            .with_bit_rate(stream_info.bit_rate)
+            .with_codec_name(codec.name().to_string_lossy().to_string())
+            // video
+            .with_video_size(stream_info.width as u32, stream_info.height as u32)
+            .with_time_base(stream_info.time_base.den)
+            .with_frame_rate(stream_info.frame_rate.den)
+            .with_pixel_format(PixelFormat::from(stream_info.format))
+            // audio
+            .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
+            .with_sample_format(SampleFormat::from(stream_info.format))
+            .with_sample_rate(stream_info.sample_rate as u32)
+            .build()?;
         self.streams.push(MuxerStream::new(encoder, stream_info));
         Ok(stream_idx)
     }
@@ -231,15 +261,18 @@ impl<R: Reader> Demuxer<R> {
         let mut streams = Vec::new();
         for stream_idx in 0..nb_streams {
             let stream_info = StreamInfo::from_reader(&reader, stream_idx)?;
-            let media_type = MediaType::from(stream_info.media_type.0);
             let decoder = DecoderBuilder::new()
-                .with_media_type(media_type)
+                .with_media_type(stream_info.media_type)
                 .build(&reader)
                 .context("Failed to build decoder")?;
             streams.push(DemuxerStream::new(decoder, stream_info));
         }
 
         Ok(Self { reader, streams })
+    }
+
+    pub fn streams(&self) -> &[DemuxerStream] {
+        &self.streams
     }
 
     pub fn get_stream(&self, index: usize) -> Result<&DemuxerStream> {
@@ -260,7 +293,7 @@ impl<R: Reader> Demuxer<R> {
         let (in_stream_index, in_stream_time_base, mut packet) = {
             let (in_stream, pkt) = match self.reader.read_packet() {
                 Ok(Some((s, p))) => (s, p),
-                Ok(None) => return Err(Error::msg("No more packets")),
+                Ok(None) => return Ok(None),
                 Err(e) => {
                     log::error!("Error reading packet: {}", e);
                     return Err(e);
@@ -403,7 +436,10 @@ mod tests {
                 Ok(Some((index, frame))) => {
                     println!("stream index:{}, {:?}", index, frame)
                 }
-                Ok(None) => break,
+                Ok(None) => {
+                    println!("No more frames.");
+                    break;
+                }
                 Err(e) => {
                     println!("Error demuxing: {}", e);
                     break;
@@ -461,7 +497,10 @@ mod tests {
                 Ok(Some((index, frame))) => {
                     println!("stream index:{}, {:?}", index, frame)
                 }
-                Ok(None) => break,
+                Ok(None) => {
+                    println!("No more frames.");
+                    break;
+                }
                 Err(e) => {
                     println!("Error demuxing: {}", e);
                     break;
@@ -543,25 +582,29 @@ mod tests {
         /////////////////////////////////////////////////////////////////////////////
         /////////////////////////////////////////////////////////////////////////////
 
-        // // 解封装验证
-        // let stream_reader = StreamReader::new(output_path)?;
-        // let mut demuxer = Demuxer::from_reader(stream_reader)?;
-        // for stream in &demuxer.streams {
-        //     println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
-        // }
-        //
-        // loop {
-        //     match demuxer.demux() {
-        //         Ok(Some((index, frame))) => {
-        //             println!("stream index:{}, {:?}", index, frame)
-        //         }
-        //         Ok(None) => break,
-        //         Err(e) => {
-        //             println!("Error demuxing: {}", e);
-        //             break;
-        //         }
-        //     }
-        // }
+        // FIXME: 解封装多通道媒体流接收不到 Packet
+        // 解封装验证
+        let stream_reader = StreamReader::new(output_path)?;
+        let mut demuxer = Demuxer::from_reader(stream_reader)?;
+        for stream in &demuxer.streams {
+            println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
+        }
+
+        loop {
+            match demuxer.demux() {
+                Ok(Some((index, frame))) => {
+                    println!("stream index:{}, {:?}", index, frame)
+                }
+                Ok(None) => {
+                    println!("No more frames.");
+                    break;
+                }
+                Err(e) => {
+                    println!("Error demuxing: {}", e);
+                    break;
+                }
+            }
+        }
 
         Ok(())
     }

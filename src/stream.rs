@@ -1,9 +1,9 @@
 use crate::io::{Reader, Writer};
-use crate::{utils, Options};
+use crate::{utils, MediaType, Options};
 
 use rsmpeg::avcodec::{AVCodecParametersRef, AVPacket};
 use rsmpeg::avformat::{AVInputFormatRef, AVStream};
-use rsmpeg::avutil::{AVDictionaryRef, AVMediaType};
+use rsmpeg::avutil::AVDictionaryRef;
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
@@ -14,15 +14,15 @@ use std::ptr::NonNull;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
-// #[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StreamInfo {
     /// id
     pub id: i32,
     /// Stream index
     pub index: usize,
     /// Media type video/audio/subtitle
-    pub media_type: AVMediaType,
-    /// Stream codec
+    pub media_type: MediaType,
+    /// Stream codec `ffi::AVCodecID`
     pub codec: isize,
     /// Codec Additional Info
     pub codec_tag: u32,
@@ -141,7 +141,7 @@ impl StreamInfo {
         Ok(Self {
             id: stream.id,
             index: stream.index as usize,
-            media_type: codecpar.codec_type(),
+            media_type: MediaType::from(codecpar.codec_type),
             codec: codecpar.codec_id as isize,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
@@ -285,9 +285,9 @@ impl std::fmt::Display for StreamInfo {
             utils::from_c_char(ffi::avcodec_get_name(codec_id))
         };
         let format = unsafe {
-            if self.media_type.is_video() {
+            if self.media_type == MediaType::VIDEO {
                 utils::from_c_char(ffi::av_get_pix_fmt_name(self.format as c_int))
-            } else if self.media_type.is_audio() {
+            } else if self.media_type == MediaType::AUDIO {
                 utils::from_c_char(ffi::av_get_sample_fmt_name(self.format as c_int))
             } else {
                 "unknown".to_string()
@@ -296,7 +296,7 @@ impl std::fmt::Display for StreamInfo {
         let stream_type = {
             let unknown = utils::from_str("unknown");
             let media_type_str =
-                rsmpeg::avutil::get_media_type_string(self.media_type.0).unwrap_or(&unknown);
+                rsmpeg::avutil::get_media_type_string(self.media_type as _).unwrap_or(&unknown);
             utils::to_string(media_type_str)
         };
         write!(

@@ -167,3 +167,24 @@ pub enum SampleFormat {
     /// < signed 64 bits, planar
     S64P = ffi::AV_SAMPLE_FMT_S64P,
 }
+
+impl From<ffi::AVSampleFormat> for SampleFormat {
+    fn from(item: ffi::AVSampleFormat) -> Self {
+        match item {
+            ffi::AV_SAMPLE_FMT_NONE => SampleFormat::NONE,
+            ffi::AV_SAMPLE_FMT_U8 => SampleFormat::U8,
+            ffi::AV_SAMPLE_FMT_S16 => SampleFormat::S16,
+            ffi::AV_SAMPLE_FMT_S32 => SampleFormat::S32,
+            ffi::AV_SAMPLE_FMT_FLT => SampleFormat::FLT,
+            ffi::AV_SAMPLE_FMT_DBL => SampleFormat::DBL,
+            ffi::AV_SAMPLE_FMT_U8P => SampleFormat::U8P,
+            ffi::AV_SAMPLE_FMT_S16P => SampleFormat::S16P,
+            ffi::AV_SAMPLE_FMT_S32P => SampleFormat::S32P,
+            ffi::AV_SAMPLE_FMT_FLTP => SampleFormat::FLTP,
+            ffi::AV_SAMPLE_FMT_DBLP => SampleFormat::DBLP,
+            ffi::AV_SAMPLE_FMT_S64 => SampleFormat::S64,
+            ffi::AV_SAMPLE_FMT_S64P => SampleFormat::S64P,
+            _ => panic!("Invalid sample format"),
+        }
+    }
+}

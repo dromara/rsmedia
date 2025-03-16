@@ -620,7 +620,7 @@ mod tests {
                                             break;
                                         }
                                         _ => {
-                                            log::error!("Error decoding frame: {}", e);
+                                            log::error!("Error on decoding frame: {}", e);
                                             return Err(e);
                                         }
                                     }
@@ -686,7 +686,7 @@ mod tests {
                                             break;
                                         }
                                         _ => {
-                                            log::error!("Error decoding frame: {}", e);
+                                            log::error!("Error on decoding frame: {}", e);
                                             return Err(e);
                                         }
                                     }

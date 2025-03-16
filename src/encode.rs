@@ -1,3 +1,4 @@
+use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
@@ -5,7 +6,6 @@ use crate::options::Options;
 use crate::pixel::PixelFormat;
 use crate::time::{self, Time};
 use crate::{utils, MediaType, RawFrame, SampleFormat};
-use std::hash::{Hash, Hasher};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef, AVPacket};
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
@@ -13,6 +13,7 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
+use std::hash::{Hash, Hasher};
 
 /// Builds an [`Encoder`].
 pub struct EncoderBuilder<'a> {
@@ -82,7 +83,7 @@ impl<'a> EncoderBuilder<'a> {
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
             gop_size: 0,
             max_b_frames: 0,
-            oformat_flags: 0,
+            oformat_flags: AvFormatFlags::GLOBAL_HEADER as i32,
             // audio
             nb_channels: 2,
             sample_rate: 44100,
@@ -195,8 +196,8 @@ impl<'a> EncoderBuilder<'a> {
     }
 
     /// Some formats want stream headers to be separate.
-    pub fn with_oformat_flags(mut self, oformat_flags: i32) -> Self {
-        self.oformat_flags = oformat_flags;
+    pub fn with_oformat_flags(mut self, flags: AvFormatFlags) -> Self {
+        self.oformat_flags = flags as i32;
         self
     }
 

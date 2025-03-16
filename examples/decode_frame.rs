@@ -9,10 +9,10 @@ async fn main() -> Result<()> {
     rsmedia::init().unwrap();
 
     // 640x360 mp4
-    let source = std::path::Path::new("/tmp/bear.mp4");
-    // let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
-    //     .parse::<url::Url>()
-    //     .unwrap();
+    // let source = std::path::Path::new("/tmp/bear.mp4");
+    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
+        .parse::<url::Url>()
+        .unwrap();
 
     let mut stream_reader = StreamReader::new(source)?;
     let mut decoder = DecoderBuilder::new()
@@ -83,6 +83,7 @@ async fn main() -> Result<()> {
                                         break;
                                     }
                                     _ => {
+                                        // FIXME: Decoder is already flushed
                                         log::error!("Error decoding frame: {}", e);
                                         return Err(e);
                                     }

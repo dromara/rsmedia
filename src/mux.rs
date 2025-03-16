@@ -308,6 +308,8 @@ impl<R: Reader> Demuxer<R> {
         let demux_stream = self.get_stream_mut(in_stream_index)?;
         // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
         // in_stream->time_base  =>  dec_ctx->time_base
+        packet.set_pos(-1);
+        packet.set_stream_index(in_stream_index as i32);
         packet.rescale_ts(in_stream_time_base, demux_stream.decoder.time_base());
         let frame = demux_stream.decoder.decode_raw(&packet)?;
         Ok(Some((in_stream_index, frame)))
@@ -321,6 +323,7 @@ mod tests {
 
     use anyhow::{Context, Result};
     use rsmpeg::avutil::{AVChannelLayout, AVFrame};
+    use rsmpeg::error::RsmpegError;
     use std::path::Path;
 
     /// 生成YUV420P格式的测试视频帧
@@ -603,8 +606,24 @@ mod tests {
                     break;
                 }
                 Err(e) => {
-                    println!("Error demuxing: {}", e);
-                    break;
+                    if let Some(mpeg_error) = e.downcast_ref::<RsmpegError>() {
+                        match mpeg_error {
+                            RsmpegError::DecoderDrainError => {
+                                continue;
+                            }
+                            RsmpegError::DecoderFlushedError => {
+                                println!("Decoder flushed, no more frames to decode.");
+                                break;
+                            }
+                            _ => {
+                                log::error!("Error on decoding frame: {}", e);
+                                break;
+                            }
+                        }
+                    } else {
+                        log::error!("Error demuxing: {}", e);
+                        break;
+                    }
                 }
             }
         }

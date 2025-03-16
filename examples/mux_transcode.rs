@@ -1,5 +1,6 @@
 use rsmedia::mux::{Demuxer, Muxer};
 use rsmedia::{Options, StreamReader, StreamWriterBuilder};
+use rsmpeg::error::RsmpegError;
 use std::path::Path;
 
 fn main() {
@@ -35,8 +36,24 @@ fn main() {
                 break;
             }
             Err(e) => {
-                println!("Error on demuxing: {}", e);
-                break;
+                if let Some(mpeg_error) = e.downcast_ref::<RsmpegError>() {
+                    match mpeg_error {
+                        RsmpegError::DecoderDrainError => {
+                            continue;
+                        }
+                        RsmpegError::DecoderFlushedError => {
+                            println!("Decoder flushed, no more frames to decode.");
+                            break;
+                        }
+                        _ => {
+                            log::error!("Error decoding frame: {}", e);
+                            break;
+                        }
+                    }
+                } else {
+                    log::error!("Error decoding frame: {}", e);
+                    break;
+                }
             }
         }
     }

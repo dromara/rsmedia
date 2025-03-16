@@ -332,6 +332,7 @@ impl<'a> StreamWriterBuilder<'a> {
 pub struct StreamWriter {
     pub destination: Location,
     pub output: AVFormatContextOutput,
+    #[allow(dead_code)]
     options: Option<AVDictionary>,
 }
 
@@ -407,6 +408,7 @@ impl<'a> BufferWriterBuilder<'a> {
 /// ```
 pub struct BufferWriter {
     pub(crate) output: AVFormatContextOutput,
+    #[allow(dead_code)]
     options: Option<AVDictionary>,
 }
 
@@ -494,6 +496,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 /// ```
 pub struct PacketizedBufWriter {
     pub(crate) output: AVFormatContextOutput,
+    #[allow(dead_code)]
     options: Option<AVDictionary>,
     buffers: Bufs,
 }
@@ -573,9 +576,8 @@ pub mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            let mut dict = self.options.clone();
             self.output
-                .write_header(&mut dict)
+                .write_header(&mut None)
                 .context("Failed to write header")?;
             Ok(())
         }
@@ -603,8 +605,7 @@ pub mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            let mut dict = self.options.clone();
-            self.output.write_header(&mut dict)?;
+            self.output.write_header(&mut None)?;
             Ok(self.end_write())
         }
 
@@ -634,8 +635,7 @@ pub mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            let mut dict = self.options.clone();
-            self.output.write_header(&mut dict)?;
+            self.output.write_header(&mut None)?;
             self.end_write();
             Ok(self.take_buffers())
         }

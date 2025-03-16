@@ -521,7 +521,14 @@ impl Encoder {
     pub fn receive_packet(&mut self) -> Result<Option<AVPacket>> {
         match self.encode_ctx.receive_packet() {
             Ok(pkt) => Ok(Some(pkt)),
-            Err(RsmpegError::EncoderDrainError) | Err(RsmpegError::EncoderFlushedError) => Ok(None),
+            Err(RsmpegError::EncoderDrainError) => {
+                log::debug!("Encoder drained, try send new frame again.");
+                Ok(None)
+            }
+            Err(RsmpegError::EncoderFlushedError) => {
+                log::debug!("Encoder flushed, EOF reached.");
+                Ok(None)
+            }
             Err(err) => Err(Error::new(err)),
         }
     }

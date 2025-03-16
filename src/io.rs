@@ -10,6 +10,7 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
+use rsmpeg::avutil::AVDictionary;
 use std::ops::{Bound, Deref};
 
 pub trait Reader {
@@ -304,7 +305,7 @@ impl<'a> StreamWriterBuilder<'a> {
                 .context("Create output format context failed.")?;
         Ok(StreamWriter {
             destination: self.destination,
-            options: self.options.cloned(),
+            options: opts,
             output: output_ctx,
         })
     }
@@ -330,8 +331,8 @@ impl<'a> StreamWriterBuilder<'a> {
 /// ```
 pub struct StreamWriter {
     pub destination: Location,
-    pub options: Option<Options>,
     pub output: AVFormatContextOutput,
+    options: Option<AVDictionary>,
 }
 
 impl StreamWriter {
@@ -388,9 +389,10 @@ impl<'a> BufferWriterBuilder<'a> {
 
     /// Build [`BufferWriter`].
     pub fn build(self) -> Result<BufferWriter> {
+        let opts = self.options.map(|options| options.to_dict());
         Ok(BufferWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned(),
+            options: opts,
         })
     }
 }
@@ -405,7 +407,7 @@ impl<'a> BufferWriterBuilder<'a> {
 /// ```
 pub struct BufferWriter {
     pub(crate) output: AVFormatContextOutput,
-    options: Option<Options>,
+    options: Option<AVDictionary>,
 }
 
 impl BufferWriter {
@@ -472,9 +474,10 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 
     /// Build [`PacketizedBufWriter`].
     pub fn build(self) -> Result<PacketizedBufWriter> {
+        let opts = self.options.map(|options| options.to_dict());
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned(),
+            options: opts,
             buffers: Vec::new(),
         })
     }
@@ -491,7 +494,7 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 /// ```
 pub struct PacketizedBufWriter {
     pub(crate) output: AVFormatContextOutput,
-    options: Option<Options>,
+    options: Option<AVDictionary>,
     buffers: Bufs,
 }
 
@@ -570,7 +573,7 @@ pub mod private {
         type Out = ();
 
         fn write_header(&mut self) -> Result<()> {
-            let mut dict = self.options.clone().map(|options| options.to_dict());
+            let mut dict = self.options.clone();
             self.output
                 .write_header(&mut dict)
                 .context("Failed to write header")?;
@@ -600,7 +603,7 @@ pub mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            let mut dict = self.options.clone().map(|options| options.to_dict());
+            let mut dict = self.options.clone();
             self.output.write_header(&mut dict)?;
             Ok(self.end_write())
         }
@@ -631,7 +634,7 @@ pub mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            let mut dict = self.options.clone().map(|options| options.to_dict());
+            let mut dict = self.options.clone();
             self.output.write_header(&mut dict)?;
             self.end_write();
             Ok(self.take_buffers())

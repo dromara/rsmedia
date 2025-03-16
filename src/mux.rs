@@ -98,7 +98,7 @@ impl<W: Writer> Muxer<W> {
         };
 
         let codec =
-            AVCodec::find_encoder(stream_info.codec as u32).context("Failed to find encoder")?;
+            AVCodec::find_encoder(stream_info.codec_id).context("Failed to find encoder")?;
         let encoder = EncoderBuilder::new()
             // other
             .with_media_type(stream_info.media_type)
@@ -261,8 +261,11 @@ impl<R: Reader> Demuxer<R> {
         let mut streams = Vec::new();
         for stream_idx in 0..nb_streams {
             let stream_info = StreamInfo::from_reader(&reader, stream_idx)?;
+            let codec =
+                AVCodec::find_decoder(stream_info.codec_id).context("Failed to find decoder")?;
             let decoder = DecoderBuilder::new()
                 .with_media_type(stream_info.media_type)
+                .with_codec_name(codec.name().to_string_lossy().to_string())
                 .build(&reader)
                 .context("Failed to build decoder")?;
             streams.push(DemuxerStream::new(decoder, stream_info));
@@ -437,7 +440,7 @@ mod tests {
                     println!("stream index:{}, {:?}", index, frame)
                 }
                 Ok(None) => {
-                    println!("No more frames.");
+                    println!("No more packets to demux, Reader exhausted.");
                     break;
                 }
                 Err(e) => {
@@ -498,7 +501,7 @@ mod tests {
                     println!("stream index:{}, {:?}", index, frame)
                 }
                 Ok(None) => {
-                    println!("No more frames.");
+                    println!("No more packets to demux, Reader exhausted.");
                     break;
                 }
                 Err(e) => {
@@ -596,7 +599,7 @@ mod tests {
                     println!("stream index:{}, {:?}", index, frame)
                 }
                 Ok(None) => {
-                    println!("No more frames.");
+                    println!("No more packets to demux, Reader exhausted.");
                     break;
                 }
                 Err(e) => {

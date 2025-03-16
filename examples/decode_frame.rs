@@ -70,11 +70,11 @@ async fn main() -> Result<()> {
                 }
             }
             Ok(None) => {
-                println!("No more packets");
+                println!("No more packets, Reader exhausted.");
                 break;
             }
             Err(e) => {
-                log::error!("Error reading packet: {}", e);
+                log::error!("Error on reading packet: {}", e);
                 return Err(e);
             }
         }

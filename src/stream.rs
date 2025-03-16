@@ -23,7 +23,7 @@ pub struct StreamInfo {
     /// Media type video/audio/subtitle
     pub media_type: MediaType,
     /// Stream codec `ffi::AVCodecID`
-    pub codec: isize,
+    pub codec_id: u32,
     /// Codec Additional Info
     pub codec_tag: u32,
     /// Pixel format / Sample format
@@ -89,6 +89,12 @@ pub struct StreamInfo {
     pub frame_size: i32,
     /// Audio block align
     pub block_align: i32,
+    /// Initial padding
+    pub initial_padding: i32,
+    /// Trailing padding
+    pub trailing_padding: i32,
+    /// Seek preroll
+    pub seek_preroll: i32,
     /// The number of bits per code sample
     pub bits_per_coded_sample: i32,
     /// Raw Sample Bit Depth
@@ -142,7 +148,7 @@ impl StreamInfo {
             id: stream.id,
             index: stream.index as usize,
             media_type: MediaType::from(codecpar.codec_type),
-            codec: codecpar.codec_id as isize,
+            codec_id: codecpar.codec_id,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
             time_base: stream.time_base,
@@ -176,6 +182,9 @@ impl StreamInfo {
             channel_layout: codecpar.ch_layout,
             frame_size: codecpar.frame_size,
             block_align: codecpar.block_align,
+            initial_padding: codecpar.initial_padding,
+            trailing_padding: codecpar.trailing_padding,
+            seek_preroll: codecpar.seek_preroll,
             bits_per_coded_sample: codecpar.bits_per_coded_sample,
             bits_per_raw_sample: codecpar.bits_per_raw_sample,
             // extra
@@ -281,7 +290,7 @@ impl StreamInfo {
 impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
-            let codec_id = self.codec as i32 as ffi::AVCodecID;
+            let codec_id = self.codec_id as ffi::AVCodecID;
             utils::from_c_char(ffi::avcodec_get_name(codec_id))
         };
         let format = unsafe {

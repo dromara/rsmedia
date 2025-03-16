@@ -75,13 +75,13 @@ impl<'a> EncoderBuilder<'a> {
             width: 0,
             height: 0,
             pixel_format: PixelFormat::YUV420P,
-            bit_rate: Self::VIDEO_BIT_RATE,
-            gop_size: Self::FRAME_RATE * 2,
             time_base: time::TIME_BASE,
             pkt_time_base: time::TIME_BASE,
+            bit_rate: Self::VIDEO_BIT_RATE,
             frame_rate: avutil::ra(Self::FRAME_RATE, 1),
-            max_b_frames: 0,
             keyframe_interval: Self::KEY_FRAME_INTERVAL,
+            gop_size: 0,
+            max_b_frames: 0,
             oformat_flags: 0,
             // audio
             nb_channels: 2,
@@ -666,7 +666,7 @@ mod tests {
                     stream_writer.write_frame(&mut packet)?;
                 }
                 Ok(None) => {
-                    println!("No packet received from encoder.");
+                    println!("No more packet received from encoder.");
                     break;
                 }
                 Err(e) => {
@@ -890,7 +890,7 @@ mod tests {
                     stream_writer.write_frame(&mut packet)?;
                 }
                 Ok(None) => {
-                    println!("No packet received from encoder.");
+                    println!("No more packet received from encoder.");
                     break;
                 }
                 Err(e) => {

@@ -8,9 +8,10 @@ fn main() {
     let mut demuxer = Demuxer::from_reader(stream_reader).unwrap();
 
     let output_path = Path::new("/tmp/output.mov");
+    let opts = Options::preset_h264();
     let stream_writer = StreamWriterBuilder::new(output_path)
         .with_format("mov")
-        .with_options(&Options::preset_h264())
+        .with_options(&opts)
         .build()
         .unwrap();
     let mut muxer = Muxer::from_writer(stream_writer);
@@ -30,7 +31,7 @@ fn main() {
                 let _ = muxer.mux(frame, stream_index).unwrap();
             }
             Ok(None) => {
-                println!("End of input stream, no more frames.");
+                println!("No more packets to demux, Reader exhausted.");
                 break;
             }
             Err(e) => {

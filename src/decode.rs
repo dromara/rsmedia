@@ -1,3 +1,4 @@
+use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
@@ -15,6 +16,7 @@ use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
 pub struct DecoderBuilder<'a> {
+    flags: AvCodecFlags,
     resize: Option<Resize>,
     media_type: MediaType,
     codec_name: Option<String>,
@@ -28,12 +30,19 @@ impl<'a> DecoderBuilder<'a> {
     /// * `source` - Source to decode.
     pub fn new() -> Self {
         Self {
+            flags: AvCodecFlags::LOW_DELAY,
             resize: None,
             media_type: MediaType::VIDEO,
             codec_name: None,
             codec_opts: None,
             hw_device_type: None,
         }
+    }
+
+    /// Set decoding flags.
+    pub fn with_flags(mut self, flags: AvCodecFlags) -> Self {
+        self.flags = flags;
+        self
     }
 
     /// Set the codec name to use for decoding.
@@ -98,6 +107,7 @@ impl<'a> DecoderBuilder<'a> {
         let mut decode_ctx = AVCodecContext::new(&codec);
         decode_ctx.set_time_base(time_base);
         decode_ctx.set_pkt_timebase(time_base);
+        decode_ctx.set_flags(self.flags as i32);
         decode_ctx.apply_codecpar(&input_stream.codecpar())?;
         if let Some(framerate) = input_stream.guess_framerate() {
             decode_ctx.set_framerate(framerate);
@@ -247,7 +257,7 @@ impl Decoder {
                 match self.drain() {
                     Ok(Some(frame)) => break frame,
                     Ok(None) => {
-                        log::debug!("frame drained decoder.");
+                        log::debug!("Decoder frame Drained Or Flushed.");
                         self.reset();
                     }
                     Err(err) => return Err(err),
@@ -275,7 +285,7 @@ impl Decoder {
                 match self.drain_raw() {
                     Ok(Some(frame)) => break frame,
                     Ok(None) => {
-                        log::debug!("rawFrame drained decoder.");
+                        log::debug!("Decoder rawFrame Drained Or Flushed.");
                         self.reset();
                     }
                     Err(err) => return Err(err),
@@ -575,7 +585,7 @@ mod tests {
                     }
                 }
                 Ok(None) => {
-                    println!("No more packets");
+                    println!("No more packets, Reader exhausted.");
                     break;
                 }
                 Err(e) => {
@@ -598,6 +608,7 @@ mod tests {
             .with_media_type(MediaType::AUDIO)
             .build(&stream_reader)?;
 
+        // FIXME: 解封装媒体音频流接收不到 Packet
         loop {
             match stream_reader.read_packet() {
                 Ok(Some((in_stream, mut packet))) => {
@@ -613,7 +624,7 @@ mod tests {
                     }
                 }
                 Ok(None) => {
-                    println!("No more packets");
+                    println!("No more packets, Reader exhausted.");
                     break;
                 }
                 Err(e) => {

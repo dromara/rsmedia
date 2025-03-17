@@ -121,7 +121,7 @@ impl<'a> DecoderBuilder<'a> {
             {
                 return Err(Error::msg(format!(
                     "HW acceleration decoder not supported for codec: {}",
-                    utils::to_string(codec.name())
+                    utils::to_string(codec.name()).unwrap()
                 )));
             }
             let mut hw_ctx = HWContext::new(device_type.auto_best_device().unwrap())?;

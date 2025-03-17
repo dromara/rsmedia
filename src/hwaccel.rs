@@ -102,7 +102,7 @@ pub struct HWContext {
 
 impl HWContext {
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
-        let device_path = utils::str_opt(config.device_path.as_ref());
+        let device_path = utils::from_str_opt(config.device_path.as_ref());
         let device_ctx = AVHWDeviceContext::create(
             config.device_type.into(),
             device_path.as_deref(),

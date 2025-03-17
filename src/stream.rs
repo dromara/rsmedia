@@ -306,7 +306,7 @@ impl std::fmt::Display for StreamInfo {
             let unknown = utils::from_str("unknown");
             let media_type_str =
                 rsmpeg::avutil::get_media_type_string(self.media_type as _).unwrap_or(&unknown);
-            utils::to_string(media_type_str)
+            utils::to_string(media_type_str).unwrap()
         };
         write!(
             f,

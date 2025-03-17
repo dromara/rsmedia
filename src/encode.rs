@@ -284,7 +284,7 @@ impl<'a> EncoderBuilder<'a> {
             {
                 return Err(Error::msg(format!(
                     "HW acceleration encoder not supported for codec: {}",
-                    utils::to_string(codec.name())
+                    utils::to_string(codec.name()).unwrap()
                 )));
             }
             let (width, height) = (encode_ctx.width, encode_ctx.height);

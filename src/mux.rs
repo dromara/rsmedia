@@ -1,11 +1,17 @@
 use crate::flags::MediaType;
+use crate::io::private::Output;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{Decoder, DecoderBuilder, Encoder, EncoderBuilder, PixelFormat, SampleFormat};
+use crate::{
+    utils, Decoder, DecoderBuilder, Encoder, EncoderBuilder, PixelFormat, SampleFormat,
+    StreamReader, StreamWriter,
+};
 
-use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
 use rsmpeg::avutil::AVFrame;
+
+use anyhow::{Context, Error, Result};
+use std::path::Path;
 
 /// Represents a muxer. A muxer allows muxing media packets into a new container format. Muxing does
 /// not require encoding and/or decoding.
@@ -314,6 +320,60 @@ impl<R: Reader> Demuxer<R> {
         let frame = demux_stream.decoder.decode_raw(&packet)?;
         Ok(Some((in_stream_index, frame)))
     }
+}
+
+pub fn transcode(input_path: &str, output_path: &str) -> Result<()> {
+    let mut input_reader = StreamReader::new(Path::new(input_path))?;
+    let input = input_reader.input();
+
+    let mut output_writer = StreamWriter::new(Path::new(output_path))?;
+    let output = output_writer.output_mut();
+
+    let stream_mapping: Vec<_> = {
+        let mut stream_index = 0usize;
+        input
+            .streams()
+            .iter()
+            .map(|stream| {
+                let codec_type = stream.codecpar().codec_type();
+                if !codec_type.is_video() && !codec_type.is_audio() && !codec_type.is_subtitle() {
+                    None
+                } else {
+                    output.new_stream().set_codecpar(stream.codecpar().clone());
+                    stream_index += 1;
+                    Some(stream_index - 1)
+                }
+            })
+            .collect()
+    };
+
+    output
+        .dump(0, utils::from_str(output_path).as_c_str())
+        .context("Dump output format context failed.")?;
+
+    output
+        .write_header(&mut None)
+        .context("Writer header failed.")?;
+
+    while let Some((in_stream, mut packet)) =
+        input_reader.read_packet().context("Read packet failed.")?
+    {
+        let input_stream_index = in_stream.index();
+        let Some(output_stream_index) = stream_mapping[input_stream_index] else {
+            continue;
+        };
+        {
+            let output_stream = &output.streams()[output_stream_index];
+            packet.rescale_ts(in_stream.time_base(), output_stream.time_base);
+            packet.set_stream_index(output_stream_index as i32);
+            packet.set_pos(-1);
+        }
+        output
+            .interleaved_write_frame(&mut packet)
+            .context("Interleaved write frame failed.")?;
+    }
+
+    output.write_trailer().context("Write trailer failed.")
 }
 
 #[cfg(test)]

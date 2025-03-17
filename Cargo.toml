@@ -12,9 +12,13 @@ repository = "https://github.com/phial3/rsmedia"
 readme = "README.md"
 
 [features]
-default = ["ffmpeg7", "ndarray"]
-ffmpeg6 = ["rsmpeg/ffmpeg6", "rsmpeg/link_system_ffmpeg"]
-ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
+default = ["ndarray", "ffmpeg7", "link_system_ffmpeg"]
+ffmpeg6 = ["rsmpeg/ffmpeg6"]
+ffmpeg7 = ["rsmpeg/ffmpeg7"]
+## unxi linking ffmpeg with pkg-config.
+link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg"]
+## windows linking ffmpeg with vcpkg.
+link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
 
 [dependencies]
 url = "2"

@@ -43,7 +43,7 @@ pub trait Reader {
     fn find_best_stream(&self, media_type: MediaType) -> Result<(usize, String)> {
         self.input()
             .find_best_stream(media_type as _)?
-            .map(|(index, codec)| (index, utils::to_string(codec.name())))
+            .map(|(index, codec)| (index, utils::to_string(codec.name()).unwrap()))
             .ok_or(Error::msg(format!(
                 "No stream found for MediaType:{:?}",
                 media_type

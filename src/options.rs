@@ -181,8 +181,8 @@ impl From<&Options> for HashMap<String, String> {
             .into_iter()
             .map(|entry| {
                 (
-                    utils::to_string(entry.key()),
-                    utils::to_string(entry.value()),
+                    utils::to_string(entry.key()).unwrap(),
+                    utils::to_string(entry.value()).unwrap(),
                 )
             })
             .collect()

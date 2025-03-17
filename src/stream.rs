@@ -148,7 +148,8 @@ impl StreamInfo {
             id: stream.id,
             index: stream.index as usize,
             media_type: MediaType::from(codecpar.codec_type),
-            codec_id: codecpar.codec_id,
+            #[allow(clippy::unnecessary_cast)]
+            codec_id: codecpar.codec_id as u32,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
             time_base: stream.time_base,

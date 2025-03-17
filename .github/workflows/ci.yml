@@ -118,13 +118,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Install dependencies
         run: |
           brew install ffmpeg pkg-config
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-    
       - name: Build
         run: cargo build --verbose
 
@@ -146,8 +157,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
 
       # Using this since it's used by clang-sys's CI
       - name: Install LLVM and Clang
@@ -254,7 +276,7 @@ jobs:
           EOF
 
       - name: Test
-        run: cargo test --verbose -- --nocapture
+        run: cargo test --all-features --verbose -- --nocapture
 
   lints:
     runs-on: ubuntu-latest
@@ -263,6 +285,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
 
       - name: Install dependencies
         run: |
@@ -302,14 +330,8 @@ jobs:
             libvorbis-dev \
             libfdk-aac-dev
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
       - name: Rustfmt
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --all -- -D warnings
+        run: cargo clippy --all --all-features  -- -D warnings

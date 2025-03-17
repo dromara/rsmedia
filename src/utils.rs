@@ -15,7 +15,7 @@ pub fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
         use std::os::windows::ffi::OsStrExt;
         let wide: Vec<u16> = path.as_ref().as_os_str().encode_wide().collect();
         let bytes: Vec<u8> = wide.iter().flat_map(|c| c.to_le_bytes().to_vec()).collect();
-        CString::new(bytes)
+        CString::new(bytes).unwrap()
     }
 }
 
@@ -36,7 +36,6 @@ pub fn to_path<C: AsRef<CStr> + ?Sized>(cstr: &C) -> &Path {
 
     #[cfg(not(unix))]
     {
-        use std::os::windows::ffi::OsStringExt;
         let bytes = cstr.as_ref().to_bytes();
         match std::str::from_utf8(bytes) {
             Ok(s) => Path::new(s),

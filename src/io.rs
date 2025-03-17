@@ -10,7 +10,6 @@ use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
-use rsmpeg::avutil::AVDictionary;
 use std::ops::{Bound, Deref};
 
 pub trait Reader {
@@ -305,7 +304,6 @@ impl<'a> StreamWriterBuilder<'a> {
                 .context("Create output format context failed.")?;
         Ok(StreamWriter {
             destination: self.destination,
-            options: opts,
             output: output_ctx,
         })
     }
@@ -332,8 +330,6 @@ impl<'a> StreamWriterBuilder<'a> {
 pub struct StreamWriter {
     pub destination: Location,
     pub output: AVFormatContextOutput,
-    #[allow(dead_code)]
-    options: Option<AVDictionary>,
 }
 
 impl StreamWriter {
@@ -390,10 +386,9 @@ impl<'a> BufferWriterBuilder<'a> {
 
     /// Build [`BufferWriter`].
     pub fn build(self) -> Result<BufferWriter> {
-        let opts = self.options.map(|options| options.to_dict());
+        let _opts = self.options.map(|options| options.to_dict());
         Ok(BufferWriter {
             output: output_raw(self.format)?,
-            options: opts,
         })
     }
 }
@@ -408,8 +403,6 @@ impl<'a> BufferWriterBuilder<'a> {
 /// ```
 pub struct BufferWriter {
     pub(crate) output: AVFormatContextOutput,
-    #[allow(dead_code)]
-    options: Option<AVDictionary>,
 }
 
 impl BufferWriter {
@@ -476,10 +469,9 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 
     /// Build [`PacketizedBufWriter`].
     pub fn build(self) -> Result<PacketizedBufWriter> {
-        let opts = self.options.map(|options| options.to_dict());
+        let _opts = self.options.map(|options| options.to_dict());
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
-            options: opts,
             buffers: Vec::new(),
         })
     }
@@ -496,8 +488,6 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 /// ```
 pub struct PacketizedBufWriter {
     pub(crate) output: AVFormatContextOutput,
-    #[allow(dead_code)]
-    options: Option<AVDictionary>,
     buffers: Bufs,
 }
 

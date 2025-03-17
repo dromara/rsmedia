@@ -489,7 +489,8 @@ impl HWDeviceType {
             unsafe {
                 let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
                 if !hw_config.is_null() {
-                    let hw_config_supports_codec = (((*hw_config).methods) as i32
+                    #[allow(clippy::unnecessary_cast)]
+                    let hw_config_supports_codec = ((*hw_config).methods as i32
                         & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
                         != 0;
                     if hw_config_supports_codec && (*hw_config).device_type == (*self).into() {

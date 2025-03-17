@@ -27,13 +27,9 @@ jobs:
       matrix:
         include:
           # FFmpeg 6.x
-          - ffmpeg_version: "6.0"
-            feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           # FFmpeg 7.x
-          - ffmpeg_version: "7.0"
-            feature: "ndarray,ffmpeg7,link_system_ffmpeg"
           - ffmpeg_version: "7.1"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
       fail-fast: false
@@ -74,6 +70,7 @@ jobs:
             librtmp-dev \
             libvpx-dev \
             libaom-dev \
+            libsvtav1-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
@@ -251,6 +248,7 @@ jobs:
             librtmp-dev \
             libvpx-dev \
             libaom-dev \
+            libsvtav1-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
@@ -286,12 +284,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
       - name: Install dependencies
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
@@ -324,13 +316,20 @@ jobs:
             librtmp-dev \
             libvpx-dev \
             libaom-dev \
+            libsvtav1-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
             libvorbis-dev \
             libfdk-aac-dev
 
-      - name: Rustfmt
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Rust fmt
         run: cargo fmt --all -- --check
 
       - name: Clippy

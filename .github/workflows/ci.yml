@@ -73,7 +73,6 @@ jobs:
             libssl-dev \
             librtmp-dev \
             libvpx-dev \
-            libsvtav1-dev \
             libaom-dev \
             libxvidcore-dev \
             libmp3lame-dev \
@@ -83,8 +82,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy, rust-src, llvm-tools-preview, rust-analysis
 
-      - name: Configure Rust linker settings
+      - name: Configure Rust linker
         run: |
           mkdir -p .cargo
           cat > .cargo/config.toml << EOF
@@ -226,7 +228,6 @@ jobs:
             libssl-dev \
             librtmp-dev \
             libvpx-dev \
-            libsvtav1-dev \
             libaom-dev \
             libxvidcore-dev \
             libmp3lame-dev \
@@ -294,7 +295,6 @@ jobs:
             libssl-dev \
             librtmp-dev \
             libvpx-dev \
-            libsvtav1-dev \
             libaom-dev \
             libxvidcore-dev \
             libmp3lame-dev \
@@ -305,8 +305,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
-    
+
       - name: Rustfmt
         run: cargo fmt --all -- --check
 

@@ -60,26 +60,21 @@ of the API have not been flushed out yet. Use with caution.
 
 ## ⚙️ Setup
 
-1、static linking:
+dynamic linking with pkg-config(unix) or vcpkg(windows):
 ```bash
 export FFMPEG_DIR=/path/to/ffmpeg
 export FFMPEG_LIBS_DIR=$FFMPEG_DIR/lib
 export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
-## static linking for linux(linux or macos):
+## (unix recommended):
 export FFMPEG_PKG_CONFIG_PATH=$FFMPEG_DIR/lib/pkgconfig
-## static linking for windows:
-export VCPKG_ROOT=/path/to/vcpkg
-```
-
-2、dynamic linking with pkg-config(unix) or vcpkg(windows):
-```bash
-export FFMPEG_DIR=/path/to/ffmpeg
-export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
+## manually set dylib path:
 ## dynamic linking for linux:
 export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.so
 ## dynamic linking for macos:
 export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.dylib
 ## dynamic linking for windows:
+export VCPKG_ROOT=/path/to/vcpkg
+vcpkg install ffmpeg:x64-windows-static
 export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 ```
 

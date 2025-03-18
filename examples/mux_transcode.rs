@@ -1,6 +1,12 @@
 use rsmedia::mux::{Demuxer, Muxer};
-use rsmedia::{StreamReader, StreamWriterBuilder};
+use rsmedia::{
+    EncoderBuilder, MediaType, PixelFormat, SampleFormat, StreamReader, StreamWriterBuilder,
+};
+use rsmpeg::avcodec::AVCodec;
 use rsmpeg::error::RsmpegError;
+use rsmpeg::ffi;
+
+use anyhow::Context;
 use std::path::Path;
 
 fn main() {
@@ -17,9 +23,56 @@ fn main() {
 
     // add all streams from input to output muxer
     for in_stream in demuxer.streams() {
-        let _stream_index = muxer
-            .add_stream_from_info(in_stream.stream_info.clone())
-            .unwrap();
+        let stream_info = &in_stream.stream_info;
+
+        let encoder = {
+            if stream_info.media_type == MediaType::VIDEO {
+                // build video encoder
+                let codec = {
+                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
+                    AVCodec::find_encoder(codec_id)
+                        .context("Failed to find decoder")
+                        .unwrap()
+                };
+
+                EncoderBuilder::new()
+                    // other
+                    .with_media_type(stream_info.media_type)
+                    .with_bit_rate(stream_info.bit_rate)
+                    .with_codec_name(codec.name().to_string_lossy().to_string())
+                    // video
+                    .with_video_size(stream_info.width as u32, stream_info.height as u32)
+                    .with_time_base(stream_info.time_base.den)
+                    .with_frame_rate(stream_info.frame_rate.den)
+                    .with_pixel_format(PixelFormat::from(stream_info.format))
+                    .build()
+                    .unwrap()
+            } else if stream_info.media_type == MediaType::AUDIO {
+                // build audio encoder
+                let codec = {
+                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
+                    AVCodec::find_encoder(codec_id)
+                        .context("Failed to find decoder")
+                        .unwrap()
+                };
+
+                EncoderBuilder::new()
+                    // other
+                    .with_media_type(stream_info.media_type)
+                    .with_bit_rate(stream_info.bit_rate)
+                    .with_codec_name(codec.name().to_string_lossy().to_string())
+                    // audio
+                    .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
+                    .with_sample_format(SampleFormat::from(stream_info.format))
+                    .with_sample_rate(stream_info.sample_rate as u32)
+                    .build()
+                    .unwrap()
+            } else {
+                panic!("Unsupported media type: {:?}", stream_info.media_type);
+            }
+        };
+
+        let _stream_index = muxer.add_stream(encoder).unwrap();
     }
 
     // demux and mux all frames from input to output muxer

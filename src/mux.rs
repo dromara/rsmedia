@@ -2,12 +2,9 @@ use crate::flags::MediaType;
 use crate::io::private::Output;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{
-    utils, Decoder, DecoderBuilder, Encoder, EncoderBuilder, PixelFormat, SampleFormat,
-    StreamReader, StreamWriter,
-};
+use crate::{utils, Decoder, DecoderBuilder, Encoder, StreamReader, StreamWriter};
 
-use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
+use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 
@@ -92,37 +89,6 @@ impl<W: Writer> Muxer<W> {
             .writer
             .add_stream(encoder.codecpar(), encoder.time_base());
         let stream_info = StreamInfo::from_writer(&self.writer, stream_idx)?;
-        self.streams.push(MuxerStream::new(encoder, stream_info));
-        Ok(stream_idx)
-    }
-
-    pub fn add_stream_from_info(&mut self, stream_info: StreamInfo) -> Result<usize> {
-        let stream_idx = unsafe {
-            self.writer.add_stream(
-                AVCodecParameters::from_raw(stream_info.codec_parameters),
-                stream_info.time_base,
-            )
-        };
-
-        let codec = {
-            let codec_id = stream_info.codec_id as ffi::AVCodecID;
-            AVCodec::find_encoder(codec_id).context("Failed to find encoder")?
-        };
-        let encoder = EncoderBuilder::new()
-            // other
-            .with_media_type(stream_info.media_type)
-            .with_bit_rate(stream_info.bit_rate)
-            .with_codec_name(codec.name().to_string_lossy().to_string())
-            // video
-            .with_video_size(stream_info.width as u32, stream_info.height as u32)
-            .with_time_base(stream_info.time_base.den)
-            .with_frame_rate(stream_info.frame_rate.den)
-            .with_pixel_format(PixelFormat::from(stream_info.format))
-            // audio
-            .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
-            .with_sample_format(SampleFormat::from(stream_info.format))
-            .with_sample_rate(stream_info.sample_rate as u32)
-            .build()?;
         self.streams.push(MuxerStream::new(encoder, stream_info));
         Ok(stream_idx)
     }
@@ -692,6 +658,12 @@ mod tests {
             }
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_transcode() -> Result<()> {
+        transcode("/tmp/bear.mp4", "/tmp/bear_transcode.mov")?;
         Ok(())
     }
 }

@@ -1,9 +1,8 @@
-use rsmedia::mux::{Demuxer, Muxer};
+use rsmedia::mux::{DemuxResult, Demuxer, Muxer};
 use rsmedia::{
     EncoderBuilder, MediaType, PixelFormat, SampleFormat, StreamReader, StreamWriterBuilder,
 };
 use rsmpeg::avcodec::AVCodec;
-use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::Context;
@@ -12,7 +11,7 @@ use std::path::Path;
 fn main() {
     let input_path = Path::new("/tmp/bear.mp4");
     let stream_reader = StreamReader::new(input_path).unwrap();
-    let mut demuxer = Demuxer::from_reader(stream_reader).unwrap();
+    let mut demuxer = Demuxer::from_reader(stream_reader, None).unwrap();
 
     let output_path = Path::new("/tmp/output.mov");
     let stream_writer = StreamWriterBuilder::new(output_path)
@@ -78,33 +77,24 @@ fn main() {
     // demux and mux all frames from input to output muxer
     loop {
         match demuxer.demux() {
-            Ok(Some((stream_index, frame))) => {
+            DemuxResult::Frame {
+                stream_index,
+                frame,
+            } => {
                 println!("stream index:{}, {:?}", stream_index, frame);
                 let _ = muxer.mux(frame, stream_index).unwrap();
             }
-            Ok(None) => {
-                println!("No more packets to demux, Reader exhausted.");
+            DemuxResult::NeedMore => {
+                println!("Need more data, continuing...");
+                continue;
+            }
+            DemuxResult::Eof => {
+                println!("End of stream reached");
                 break;
             }
-            Err(e) => {
-                if let Some(mpeg_error) = e.downcast_ref::<RsmpegError>() {
-                    match mpeg_error {
-                        RsmpegError::DecoderDrainError => {
-                            continue;
-                        }
-                        RsmpegError::DecoderFlushedError => {
-                            println!("Decoder flushed, no more frames to decode.");
-                            break;
-                        }
-                        _ => {
-                            log::error!("Error decoding frame: {}", e);
-                            break;
-                        }
-                    }
-                } else {
-                    log::error!("Error decoding frame: {}", e);
-                    break;
-                }
+            DemuxResult::Error(e) => {
+                eprintln!("Demuxing error: {}", e);
+                break;
             }
         }
     }

@@ -12,7 +12,6 @@ fn main() {
 
     let mut encoder = EncoderBuilder::new()
         .with_video_size(1280, 720)
-        .with_gop_size(0)
         // use hwaccel cuda
         // .with_hardware_device(HWDeviceType::CUDA)
         // libx264, libx265, h264_nvenc, h264_vaapi etc.

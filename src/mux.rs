@@ -1,4 +1,5 @@
 use crate::flags::MediaType;
+use crate::hwaccel::HWDeviceType;
 use crate::io::private::Output;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
@@ -6,6 +7,7 @@ use crate::{utils, Decoder, DecoderBuilder, Encoder, StreamReader, StreamWriter}
 
 use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avutil::AVFrame;
+use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -209,6 +211,7 @@ pub struct Demuxer<R: Reader> {
     streams: Vec<DemuxerStream>,
 }
 
+/// stream definition for demuxer
 pub struct DemuxerStream {
     pub decoder: Decoder,
     pub stream_info: StreamInfo,
@@ -229,8 +232,21 @@ impl DemuxerStream {
     }
 }
 
+/// Demux result
+#[derive(Debug)]
+pub enum DemuxResult {
+    /// decoded frame
+    Frame { stream_index: usize, frame: AVFrame },
+    /// need more data
+    NeedMore,
+    /// EOF of input
+    Eof,
+    /// error
+    Error(Error),
+}
+
 impl<R: Reader> Demuxer<R> {
-    pub fn from_reader(reader: R) -> Result<Self> {
+    pub fn from_reader(reader: R, device_type: Option<HWDeviceType>) -> Result<Self> {
         let nb_streams = reader.input().nb_streams as usize;
         let mut streams = Vec::new();
         for stream_idx in 0..nb_streams {
@@ -240,6 +256,7 @@ impl<R: Reader> Demuxer<R> {
                 AVCodec::find_decoder(codec_id).context("Failed to find decoder")?
             };
             let decoder = DecoderBuilder::new()
+                .with_hardware_device(device_type)
                 .with_media_type(stream_info.media_type)
                 .with_codec_name(codec.name().to_string_lossy().to_string())
                 .build(&reader)
@@ -268,7 +285,32 @@ impl<R: Reader> Demuxer<R> {
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
     }
 
-    pub fn demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
+    pub fn demux(&mut self) -> DemuxResult {
+        match self.internal_demux() {
+            Ok(Some((index, frame))) => DemuxResult::Frame {
+                stream_index: index,
+                frame,
+            },
+            Ok(None) => DemuxResult::Eof,
+            Err(e) => {
+                if let Some(mpeg_error) = e.downcast_ref::<RsmpegError>() {
+                    match mpeg_error {
+                        RsmpegError::DecoderDrainError => DemuxResult::NeedMore,
+                        RsmpegError::DecoderFlushedError => DemuxResult::Eof,
+                        _ => {
+                            log::error!("Error decoding frame: {}", e);
+                            DemuxResult::Error(e)
+                        }
+                    }
+                } else {
+                    DemuxResult::Error(e)
+                }
+            }
+        }
+    }
+
+    /// handle demux internal logic
+    fn internal_demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
         let (in_stream_index, in_stream_time_base, mut packet) = {
             let (in_stream, pkt) = match self.reader.read_packet() {
                 Ok(Some((s, p))) => (s, p),
@@ -292,6 +334,39 @@ impl<R: Reader> Demuxer<R> {
     }
 }
 
+/// Demuxer iterator
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let mut demuxer = Demuxer::from_reader(StreamReader::new(Path::new("my_file.mp4"))?)?;
+/// for (stream_index, frame) in demuxer {
+///     println!("stream_index: {}, frame: {}", stream_index, frame.width());
+/// }
+/// ```
+impl<R: Reader> Iterator for Demuxer<R> {
+    type Item = Result<(usize, AVFrame)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.demux() {
+            DemuxResult::Frame {
+                stream_index,
+                frame,
+            } => Some(Ok((stream_index, frame))),
+            DemuxResult::NeedMore => self.next(),
+            DemuxResult::Eof => None,
+            DemuxResult::Error(e) => Some(Err(e)),
+        }
+    }
+}
+
+/// transcode from one container format to another
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// transcode("input.mp4", "output.mov").unwrap();
+/// ```
 pub fn transcode(input_path: &str, output_path: &str) -> Result<()> {
     let mut input_reader = StreamReader::new(Path::new(input_path))?;
     let input = input_reader.input();
@@ -353,7 +428,6 @@ mod tests {
 
     use anyhow::{Context, Result};
     use rsmpeg::avutil::{AVChannelLayout, AVFrame};
-    use rsmpeg::error::RsmpegError;
     use std::path::Path;
 
     /// 生成YUV420P格式的测试视频帧
@@ -462,23 +536,18 @@ mod tests {
 
         // Demuxer 测试视频解码
         let stream_reader = StreamReader::new(output_path)?;
-        let mut demuxer = Demuxer::from_reader(stream_reader)?;
+        let demuxer = Demuxer::from_reader(stream_reader, None)?;
         for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_idx, des.media_type)
         }
 
-        loop {
-            match demuxer.demux() {
-                Ok(Some((index, frame))) => {
-                    println!("stream index:{}, {:?}", index, frame)
-                }
-                Ok(None) => {
-                    println!("No more packets to demux, Reader exhausted.");
-                    break;
+        for res in demuxer {
+            match res {
+                Ok((index, frame)) => {
+                    println!("stream index:{}, {:?}", index, frame);
                 }
                 Err(e) => {
-                    println!("Error demuxing: {}", e);
-                    break;
+                    println!("Error decoding frame: {}", e)
                 }
             }
         }
@@ -523,23 +592,18 @@ mod tests {
 
         // Demuxer 测试音频解码
         let stream_reader = StreamReader::new(output_path)?;
-        let mut demuxer = Demuxer::from_reader(stream_reader)?;
+        let demuxer = Demuxer::from_reader(stream_reader, None)?;
         for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_idx, des.media_type)
         }
 
-        loop {
-            match demuxer.demux() {
-                Ok(Some((index, frame))) => {
+        for res in demuxer {
+            match res {
+                Ok((index, frame)) => {
                     println!("stream index:{}, {:?}", index, frame)
                 }
-                Ok(None) => {
-                    println!("No more packets to demux, Reader exhausted.");
-                    break;
-                }
                 Err(e) => {
-                    println!("Error demuxing: {}", e);
-                    break;
+                    println!("Error decoding frame: {}", e)
                 }
             }
         }
@@ -621,39 +685,18 @@ mod tests {
         // FIXME: 解封装多通道媒体流接收不到 Packet
         // 解封装验证
         let stream_reader = StreamReader::new(output_path)?;
-        let mut demuxer = Demuxer::from_reader(stream_reader)?;
+        let demuxer = Demuxer::from_reader(stream_reader, None)?;
         for stream in &demuxer.streams {
             println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
         }
 
-        loop {
-            match demuxer.demux() {
-                Ok(Some((index, frame))) => {
+        for res in demuxer {
+            match res {
+                Ok((index, frame)) => {
                     println!("stream index:{}, {:?}", index, frame)
                 }
-                Ok(None) => {
-                    println!("No more packets to demux, Reader exhausted.");
-                    break;
-                }
                 Err(e) => {
-                    if let Some(mpeg_error) = e.downcast_ref::<RsmpegError>() {
-                        match mpeg_error {
-                            RsmpegError::DecoderDrainError => {
-                                continue;
-                            }
-                            RsmpegError::DecoderFlushedError => {
-                                println!("Decoder flushed, no more frames to decode.");
-                                break;
-                            }
-                            _ => {
-                                log::error!("Error on decoding frame: {}", e);
-                                break;
-                            }
-                        }
-                    } else {
-                        log::error!("Error demuxing: {}", e);
-                        break;
-                    }
+                    println!("Error decoding frame: {}", e)
                 }
             }
         }

@@ -67,8 +67,8 @@ impl<'a> DecoderBuilder<'a> {
     /// Enable hardware acceleration with the specified device type.
     ///
     /// * `device_type` - Device to use for hardware acceleration.
-    pub fn with_hardware_device(mut self, device_type: HWDeviceType) -> Self {
-        self.hw_device_type = Some(device_type);
+    pub fn with_hardware_device(mut self, device_type: Option<HWDeviceType>) -> Self {
+        self.hw_device_type = device_type;
         self
     }
 

@@ -662,6 +662,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "mux transcode need a file"]
     fn test_transcode() -> Result<()> {
         transcode("/tmp/bear.mp4", "/tmp/bear_transcode.mov")?;
         Ok(())

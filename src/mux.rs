@@ -1,3 +1,5 @@
+use crate::decode::DecodeRawResult;
+use crate::encode::EncodeRawResult;
 use crate::flags::MediaType;
 use crate::hwaccel::HWDeviceType;
 use crate::io::private::Output;
@@ -7,7 +9,6 @@ use crate::{utils, Decoder, DecoderBuilder, Encoder, StreamReader, StreamWriter}
 
 use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avutil::AVFrame;
-use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -119,7 +120,7 @@ impl<W: Writer> Muxer<W> {
             let mux_stream = self.get_stream_mut(stream_idx)?;
 
             match mux_stream.encoder.encode_raw(&frame) {
-                Ok(Some(mut packet)) => {
+                EncodeRawResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(mux_stream.stream_idx as i32);
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
@@ -137,14 +138,11 @@ impl<W: Writer> Muxer<W> {
                         }
                     }))
                 }
-                Ok(None) => {
-                    println!("No packet received from encoder.");
+                EncodeRawResult::Drain | EncodeRawResult::Flushed => {
+                    log::debug!("Encoder Drain or Flushed.");
                     Ok(None)
                 }
-                Err(e) => Err(anyhow::anyhow!(
-                    "Failed to receive packet from encoder: {}",
-                    e
-                )),
+                EncodeRawResult::Error(e) => Err(e),
             }
         } else {
             self.have_written_header = true;
@@ -158,39 +156,14 @@ impl<W: Writer> Muxer<W> {
     pub fn finish(&mut self) -> Result<Option<W::Out>> {
         for mux_stream in self.streams.iter_mut() {
             // flush the encoder to ensure all packets are sent to the muxer.
-            mux_stream.encoder.flush()?;
-
-            // drain the items still on the queue before giving up.
-            loop {
-                match mux_stream.encoder.receive_packet() {
-                    Ok(Some(mut packet)) => {
-                        packet.set_pos(-1);
-                        packet.set_stream_index(mux_stream.stream_idx as i32);
-                        // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
-                        // encode_ctx_timebase => out_stream_time_base
-                        packet.rescale_ts(
-                            mux_stream.encoder.time_base(),
-                            mux_stream.stream_info.time_base,
-                        );
-
-                        if self.interleaved {
-                            self.writer.write_interleaved(&mut packet)?;
-                        } else {
-                            self.writer.write_frame(&mut packet)?;
-                        }
-                    }
-                    Ok(None) => {
-                        println!("No packet received from encoder: {}", mux_stream.stream_idx);
-                        break;
-                    }
-                    Err(e) => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to receive packet from encoder: {}",
-                            e
-                        ));
-                    }
-                }
-            }
+            let out_stream_index = mux_stream.stream_idx;
+            let out_stream_time_base = mux_stream.stream_info.time_base;
+            mux_stream.encoder.flush(
+                &mut self.writer,
+                self.interleaved,
+                out_stream_index,
+                out_stream_time_base,
+            )?;
         }
 
         if self.have_written_header && !self.have_written_trailer {
@@ -236,11 +209,11 @@ impl DemuxerStream {
 #[derive(Debug)]
 pub enum DemuxResult {
     /// decoded frame
-    Frame { stream_index: usize, frame: AVFrame },
+    Frame(usize, AVFrame),
     /// need more data
-    NeedMore,
+    Drain,
     /// EOF of input
-    Eof,
+    Flushed,
     /// error
     Error(Error),
 }
@@ -287,50 +260,34 @@ impl<R: Reader> Demuxer<R> {
 
     pub fn demux(&mut self) -> DemuxResult {
         match self.internal_demux() {
-            Ok(Some((index, frame))) => DemuxResult::Frame {
-                stream_index: index,
-                frame,
-            },
-            Ok(None) => DemuxResult::Eof,
-            Err(e) => {
-                if let Some(mpeg_error) = e.downcast_ref::<RsmpegError>() {
-                    match mpeg_error {
-                        RsmpegError::DecoderDrainError => DemuxResult::NeedMore,
-                        RsmpegError::DecoderFlushedError => DemuxResult::Eof,
-                        _ => {
-                            log::error!("Error decoding frame: {}", e);
-                            DemuxResult::Error(e)
-                        }
-                    }
-                } else {
-                    DemuxResult::Error(e)
-                }
-            }
+            (index, DecodeRawResult::Frame(frame)) => DemuxResult::Frame(index, frame),
+            (_i, DecodeRawResult::Drain) => DemuxResult::Drain,
+            (_i, DecodeRawResult::Flushed) => DemuxResult::Flushed,
+            (_i, DecodeRawResult::Error(e)) => DemuxResult::Error(e),
         }
     }
 
     /// handle demux internal logic
-    fn internal_demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
+    fn internal_demux(&mut self) -> (usize, DecodeRawResult) {
         let (in_stream_index, in_stream_time_base, mut packet) = {
             let (in_stream, pkt) = match self.reader.read_packet() {
                 Ok(Some((s, p))) => (s, p),
-                Ok(None) => return Ok(None),
+                Ok(None) => return (0, DecodeRawResult::Flushed),
                 Err(e) => {
                     log::error!("Error reading packet: {}", e);
-                    return Err(e);
+                    return (0, DecodeRawResult::Error(e));
                 }
             };
             (in_stream.index(), in_stream.time_base(), pkt)
         };
 
-        let demux_stream = self.get_stream_mut(in_stream_index)?;
+        let demux_stream = self.get_stream_mut(in_stream_index).unwrap();
         // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
         // in_stream->time_base  =>  dec_ctx->time_base
         packet.set_pos(-1);
         packet.set_stream_index(in_stream_index as i32);
         packet.rescale_ts(in_stream_time_base, demux_stream.decoder.time_base());
-        let frame = demux_stream.decoder.decode_raw(&packet)?;
-        Ok(Some((in_stream_index, frame)))
+        (in_stream_index, demux_stream.decoder.decode_raw(&packet))
     }
 }
 
@@ -349,12 +306,9 @@ impl<R: Reader> Iterator for Demuxer<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.demux() {
-            DemuxResult::Frame {
-                stream_index,
-                frame,
-            } => Some(Ok((stream_index, frame))),
-            DemuxResult::NeedMore => self.next(),
-            DemuxResult::Eof => None,
+            DemuxResult::Frame(stream_index, frame) => Some(Ok((stream_index, frame))),
+            DemuxResult::Drain => self.next(),
+            DemuxResult::Flushed => None,
             DemuxResult::Error(e) => Some(Err(e)),
         }
     }
@@ -682,7 +636,6 @@ mod tests {
         /////////////////////////////////////////////////////////////////////////////
         /////////////////////////////////////////////////////////////////////////////
 
-        // FIXME: 解封装多通道媒体流接收不到 Packet
         // 解封装验证
         let stream_reader = StreamReader::new(output_path)?;
         let demuxer = Demuxer::from_reader(stream_reader, None)?;

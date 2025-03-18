@@ -4,6 +4,7 @@ pub mod encode;
 pub mod frame;
 #[cfg(feature = "ndarray")]
 pub use frame::FrameArray;
+pub mod avimg;
 pub mod colors;
 pub mod flags;
 pub mod hwaccel;
@@ -15,6 +16,7 @@ pub mod options;
 pub mod pixel;
 pub mod resize;
 pub mod stream;
+pub mod swctx;
 pub mod time;
 pub mod utils;
 

@@ -1,7 +1,11 @@
-use rsmedia::io::private::{Output, Write};
-use rsmedia::time::Time;
-use rsmedia::{colors, StreamWriter};
-use rsmedia::{EncoderBuilder, FrameArray};
+use rsmedia::{
+    colors,
+    encode::EncodeResult,
+    frame::FrameArray,
+    io::private::{Output, Write},
+    time::Time,
+    EncoderBuilder, StreamWriter,
+};
 
 use anyhow::Context;
 use rsmedia::stream::StreamInfo;
@@ -36,7 +40,7 @@ fn main() {
         let frame = rainbow_frame(i as f32 / 256.0);
 
         match encoder.encode(&frame, position) {
-            Ok(Some(mut packet)) => {
+            EncodeResult::Packet(mut packet) => {
                 packet.set_pos(-1);
                 packet.set_stream_index(video_index as i32);
                 packet.rescale_ts(encoder.time_base(), stream_info.time_base);
@@ -45,19 +49,35 @@ fn main() {
                     .context("failed to write frame")
                     .unwrap();
             }
-            Ok(None) => {
-                println!("No packet received from encoder.");
+            EncodeResult::Drain => {
+                println!("Encoder drained, try send new frame again.");
+                continue;
             }
-            Err(e) => {
+            EncodeResult::Flushed => {
+                println!("Encoder flushed, EOF reached.");
+                break;
+            }
+            EncodeResult::Error(e) => {
                 println!("Error encoding frame: {:?}", e);
+                break;
             }
         }
+
+        println!("Encoded frame {} at position {}", i, position);
 
         // Update the current position and add the inter-frame duration to it.
         position = position.aligned_with(duration).add();
     }
 
-    encoder.flush().expect("failed to finish encoder");
+    encoder
+        .flush(
+            &mut stream_writer,
+            false,
+            video_index,
+            stream_info.time_base,
+        )
+        .expect("failed to finish encoder");
+
     stream_writer.write_trailer().unwrap();
 }
 

@@ -4,12 +4,12 @@ use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceType};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::time::{self, Time};
-use crate::{utils, MediaType, RawFrame, SampleFormat};
+use crate::swctx;
+use crate::time;
+use crate::{utils, MediaType, RawFrame, SampleFormat, Writer};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef, AVPacket};
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
-use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -363,20 +363,16 @@ impl Encoder {
     /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
-    pub fn encode(
-        &mut self,
-        frame: &FrameArray,
-        source_timestamp: Time,
-    ) -> Result<Option<AVPacket>> {
+    pub fn encode(&mut self, frame: &FrameArray, source_timestamp: crate::Time) -> EncodeResult {
         let (height, width, channels) = frame.dim();
         if height != self.encode_ctx.height as usize
             || width != self.encode_ctx.width as usize
             || channels != 3
         {
-            return Err(Error::msg("Invalid frame format."));
+            return EncodeResult::Error(Error::msg("Invalid frame format."));
         }
 
-        let mut frame = frame::ndarray_yuv_to_avframe(frame)?;
+        let mut frame = frame::ndarray_yuv_to_avframe(frame).unwrap();
 
         frame.set_pts(
             source_timestamp
@@ -385,7 +381,12 @@ impl Encoder {
                 .unwrap(),
         );
 
-        self.encode_raw(&frame)
+        match self.encode_raw(&frame) {
+            EncodeRawResult::Packet(pkt) => EncodeResult::Packet(pkt),
+            EncodeRawResult::Drain => EncodeResult::Drain,
+            EncodeRawResult::Flushed => EncodeResult::Flushed,
+            EncodeRawResult::Error(e) => EncodeResult::Error(e),
+        }
     }
 
     /// Encode a single raw frame.
@@ -393,21 +394,21 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> Result<Option<AVPacket>> {
+    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> EncodeRawResult {
         log::info!(
             "raw_frame: {:?}, time_base: {:?}",
             raw_frame,
             raw_frame.time_base
         );
         if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
-            return Err(anyhow::anyhow!(
+            return EncodeRawResult::Error(Error::msg(format!(
                 "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
                 PixelFormat::from(raw_frame.format),
                 self.encode_ctx.width,
                 self.encode_ctx.height,
                 raw_frame.width,
                 raw_frame.height
-            ));
+            )));
         }
 
         let mut av_frame = if self.media_type == MediaType::VIDEO {
@@ -423,7 +424,8 @@ impl Encoder {
 
             // Reformat frame to target pixel format if need
             let sw_frame = if raw_frame.format != target_format.into() {
-                frame::scale_frame(raw_frame, raw_frame.width, raw_frame.height, target_format)?
+                swctx::scale_frame(raw_frame, raw_frame.width, raw_frame.height, target_format)
+                    .unwrap()
             } else {
                 raw_frame.clone()
             };
@@ -434,7 +436,8 @@ impl Encoder {
                     // 上传到硬件内存并获取硬件帧 (sw_frame -> hw_frame)
                     hw_ctx
                         .hw_upload(&mut self.encode_ctx, &sw_frame)
-                        .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))?
+                        .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))
+                        .unwrap()
                 } else {
                     log::warn!("Invalid sw_frame.");
                     sw_frame
@@ -462,7 +465,8 @@ impl Encoder {
         // send frame to encoder
         self.encode_ctx
             .send_frame(Some(&av_frame))
-            .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))?;
+            .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))
+            .unwrap();
 
         // Increment frame count regardless of whether or not frame is written,
         // see https://github.com/oddity-ai/video-rs/issues/46.
@@ -519,23 +523,29 @@ impl Encoder {
 
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
-    pub fn receive_packet(&mut self) -> Result<Option<AVPacket>> {
+    fn receive_packet(&mut self) -> EncodeRawResult {
         match self.encode_ctx.receive_packet() {
-            Ok(pkt) => Ok(Some(pkt)),
-            Err(RsmpegError::EncoderDrainError) => {
+            Ok(pkt) => EncodeRawResult::Packet(pkt),
+            Err(rsmpeg::error::RsmpegError::EncoderDrainError) => {
                 log::debug!("Encoder drained, try send new frame again.");
-                Ok(None)
+                EncodeRawResult::Drain
             }
-            Err(RsmpegError::EncoderFlushedError) => {
+            Err(rsmpeg::error::RsmpegError::EncoderFlushedError) => {
                 log::debug!("Encoder flushed, EOF reached.");
-                Ok(None)
+                EncodeRawResult::Flushed
             }
-            Err(err) => Err(Error::new(err)),
+            Err(err) => EncodeRawResult::Error(Error::new(err)),
         }
     }
 
     /// Flush the encoder, drain any packets that still need processing.
-    pub fn flush(&mut self) -> Result<()> {
+    pub fn flush<W: Writer>(
+        &mut self,
+        writer: &mut W,
+        interleaved: bool,
+        index: usize,
+        out_stream_time_base: ffi::AVRational,
+    ) -> Result<()> {
         // 确定编码器是否支持延迟（delay）
         // 如果编码器不支持延迟，那么就没有必要进行 flush 操作，因为在这种情况下，编码器不会保留任何未处理的数据。
         // 如果编码器支持延迟（delay），则在结束编码之前发送 EOS 包是有必要的，
@@ -547,19 +557,35 @@ impl Encoder {
         // Notify the encoder that the last frame has been sent.
         self.send_eof().context("Send EOF frame failed.")?;
 
-        // Maximum number of invocations to `encoder_receive_packet`
-        // to drain the items still on the queue before giving up.
-        // const MAX_DRAIN_ITERATIONS: u32 = 100;
-
-        // for i in 0..MAX_DRAIN_ITERATIONS {
-        //     match self.encoder_receive_packet() {
-        //         Ok(Some(packet)) => self.write(packet)?,
-        //         Ok(None) => {
-        //             log::debug!("No more packet received, try: {}", i);
-        //         }
-        //         Err(e) => return Err(e).context("Receive packet failed.")?,
-        //     }
-        // }
+        // drain the items still on the queue before giving up.
+        loop {
+            match self.receive_packet() {
+                EncodeRawResult::Packet(mut packet) => {
+                    packet.set_pos(-1);
+                    packet.set_stream_index(index as i32);
+                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
+                    // encode_ctx_timebase => out_stream_time_base
+                    packet.rescale_ts(self.time_base(), out_stream_time_base);
+                    if interleaved {
+                        writer.write_interleaved(&mut packet)?;
+                    } else {
+                        writer.write_frame(&mut packet)?;
+                    }
+                }
+                EncodeRawResult::Drain => {
+                    log::debug!("Encoder drained, try send new frame again.");
+                    continue;
+                }
+                EncodeRawResult::Flushed => {
+                    log::debug!("Encoder flushed, EOF reached.");
+                    break;
+                }
+                EncodeRawResult::Error(e) => {
+                    log::debug!("Encode error: {}", e);
+                    break;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -572,7 +598,7 @@ impl Encoder {
 
 impl Drop for Encoder {
     fn drop(&mut self) {
-        let _ = self.flush();
+        // let _ = self.flush();
     }
 }
 
@@ -594,28 +620,42 @@ impl Hash for Encoder {
 unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
 
+/// encode_raw result
+#[derive(Debug)]
+pub enum EncodeRawResult {
+    /// encoder packet
+    Packet(AVPacket),
+    /// encoder drained
+    Drain,
+    /// encoder
+    Flushed,
+    /// encoder error
+    Error(Error),
+}
+
+/// encode result
+#[cfg(feature = "ndarray")]
+pub type EncodeResult = EncodeRawResult;
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::colors;
     use crate::io::private::{Output, Write};
     use crate::io::StreamWriter;
     use crate::stream::StreamInfo;
     use std::path::Path;
 
-    fn rainbow_frame(p: f32) -> FrameArray {
-        let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-        FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
-    }
-
     #[test]
+    #[cfg(feature = "ndarray")]
     #[ignore = "ignore video output file"]
     fn test_encode_video() -> Result<()> {
+        use crate::time::Time;
+        use crate::FrameArray;
+
         let output_path = Path::new("/tmp/h264_encode_video.mp4");
 
         let mut encoder = EncoderBuilder::new()
             .with_video_size(1280, 720)
-            .with_frame_rate(24)
             .with_media_type(MediaType::VIDEO)
             .build()?;
 
@@ -630,12 +670,18 @@ mod tests {
         let duration: Time = Time::from_nth_of_a_second(24);
         let mut position = Time::zero();
 
+        fn rainbow_frame(p: f32) -> FrameArray {
+            use crate::colors;
+            let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
+            FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
+        }
+
         // frame encode and write to file
         for i in 0..256 {
             let frame = rainbow_frame(i as f32 / 256.0);
 
             match encoder.encode(&frame, position) {
-                Ok(Some(mut packet)) => {
+                EncodeResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(video_index as i32);
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
@@ -643,14 +689,17 @@ mod tests {
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
-                Ok(None) => {
-                    println!("No packet received from encoder.");
+                EncodeResult::Drain => {
+                    println!("Encoder drained, try send new frame again.");
+                    continue;
                 }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from encoder: {}",
-                        e
-                    ));
+                EncodeResult::Flushed => {
+                    println!("Encoder flushed, EOF reached.");
+                    break;
+                }
+                EncodeResult::Error(e) => {
+                    println!("Encode error: {}", e);
+                    break;
                 }
             }
 
@@ -660,32 +709,16 @@ mod tests {
         }
 
         // flush encoder and write trailer
-        encoder.flush().unwrap();
+        encoder
+            .flush(
+                &mut stream_writer,
+                false,
+                video_index,
+                stream_info.time_base,
+            )
+            .unwrap();
 
-        // drain the items still on the queue before giving up.
-        loop {
-            match encoder.receive_packet() {
-                Ok(Some(mut packet)) => {
-                    packet.set_pos(-1);
-                    packet.set_stream_index(video_index as i32);
-                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
-                    // encode_ctx_timebase => out_stream_time_base
-                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
-                    stream_writer.write_frame(&mut packet)?;
-                }
-                Ok(None) => {
-                    println!("No more packet received from encoder.");
-                    break;
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from encoder: {}",
-                        e
-                    ));
-                }
-            }
-        }
-
+        // write trailer
         stream_writer.write_trailer().unwrap();
 
         Ok(())
@@ -839,7 +872,7 @@ mod tests {
             sine_frame.set_pts(frame_idx * samples_per_frame as i64);
 
             match encoder.encode_raw(&sine_frame) {
-                Ok(Some(mut packet)) => {
+                EncodeRawResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(audio_index as i32);
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
@@ -847,14 +880,17 @@ mod tests {
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
-                Ok(None) => {
-                    println!("No packet received from encoder.");
+                EncodeRawResult::Drain => {
+                    println!("Encoder drained, try send new frame again.");
+                    continue;
                 }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from encoder: {}",
-                        e
-                    ));
+                EncodeRawResult::Flushed => {
+                    println!("Encoder flushed, EOF reached.");
+                    break;
+                }
+                EncodeRawResult::Error(e) => {
+                    println!("Encode error: {}", e);
+                    break;
                 }
             }
         }
@@ -873,7 +909,7 @@ mod tests {
             last_frame.set_pts(total_samples - remaining as i64);
 
             // write last frame
-            if let Some(mut packet) = encoder.encode_raw(&last_frame)? {
+            if let EncodeRawResult::Packet(mut packet) = encoder.encode_raw(&last_frame) {
                 packet.set_pos(-1);
                 packet.set_stream_index(audio_index as i32);
                 // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
@@ -884,32 +920,16 @@ mod tests {
         }
 
         // flush encoder and write trailer
-        encoder.flush().unwrap();
+        encoder
+            .flush(
+                &mut stream_writer,
+                false,
+                audio_index,
+                stream_info.time_base,
+            )
+            .unwrap();
 
-        // drain the items still on the queue before giving up.
-        loop {
-            match encoder.receive_packet() {
-                Ok(Some(mut packet)) => {
-                    packet.set_pos(-1);
-                    packet.set_stream_index(audio_index as i32);
-                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
-                    // encode_ctx_timebase => out_stream_time_base
-                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
-                    stream_writer.write_frame(&mut packet)?;
-                }
-                Ok(None) => {
-                    println!("No more packet received from encoder.");
-                    break;
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!(
-                        "Failed to receive packet from encoder: {}",
-                        e
-                    ));
-                }
-            }
-        }
-
+        // write trailer
         stream_writer.write_trailer().unwrap();
 
         Ok(())

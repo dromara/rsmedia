@@ -1,3 +1,4 @@
+use anyhow::{Error, Result};
 use rsmpeg::ffi;
 
 /// Number of pixel formats
@@ -1236,5 +1237,106 @@ impl From<PixelFormat> for ffi::AVPixelFormat {
             #[cfg(feature = "ffmpeg7")]
             PixelFormat::D3D12 => ffi::AV_PIX_FMT_D3D12,
         }
+    }
+}
+
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+
+/// 返回最佳像素格式，或错误
+pub fn find_best_pix_fmt(
+    dst_pix_fmt1: PixelFormat,
+    dst_pix_fmt2: PixelFormat,
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<PixelFormat> {
+    let best = unsafe {
+        ffi::av_find_best_pix_fmt_of_2(
+            dst_pix_fmt1.into(),
+            dst_pix_fmt2.into(),
+            src_pix_fmt.into(),
+            has_alpha as i32,
+            // 这里可以添加指针参数，如果需要返回损失值
+            std::ptr::null_mut(),
+        )
+    };
+
+    match PixelFormat::from(best) {
+        PixelFormat::NONE => Err(Error::msg("Failed to find best pix fmt")),
+        fmt => Ok(fmt),
+    }
+}
+
+/// 计算像素格式转换的损失值（封装 av_get_pix_fmt_loss）
+///
+/// # 参数
+/// - `dst_pix_fmt`: 目标像素格式
+/// - `src_pix_fmt`: 源像素格式
+/// - `has_alpha`:   是否考虑 alpha 通道
+///
+/// # 返回值
+/// 返回非负损失值，或错误
+pub fn get_pix_fmt_loss(
+    dst_pix_fmt: PixelFormat,
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<i32> {
+    let loss = unsafe {
+        ffi::av_get_pix_fmt_loss(dst_pix_fmt.into(), src_pix_fmt.into(), has_alpha as i32)
+    };
+
+    if loss < 0 {
+        return Err(Error::msg(format!(
+            "Failed to get pix fmt loss, ret: {}",
+            loss
+        )));
+    }
+
+    Ok(loss)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pixel_format() -> Result<()> {
+        // 9. 测试最佳像素格式查找
+        let best_fmt = find_best_pix_fmt(
+            PixelFormat::RGB24,
+            PixelFormat::BGR24,
+            PixelFormat::YUV420P,
+            false,
+        )?;
+        println!("Best pixel format: {:?}", best_fmt);
+        assert_ne!(best_fmt, PixelFormat::NONE);
+
+        // 10. 测试像素格式损失计算
+        let loss = get_pix_fmt_loss(PixelFormat::RGB24, PixelFormat::YUV420P, false)?;
+        println!("Pixel format loss: {}", loss);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_conversion() -> Result<()> {
+        let formats = vec![
+            PixelFormat::RGB24,
+            PixelFormat::BGR24,
+            PixelFormat::YUV420P,
+            PixelFormat::RGBA,
+        ];
+
+        // 测试所有格式组合的转换
+        for &src_fmt in &formats {
+            for &dst_fmt in &formats {
+                if src_fmt != dst_fmt {
+                    let loss = get_pix_fmt_loss(dst_fmt, src_fmt, true)?;
+                    println!("Convert {:?} to {:?}, loss: {}", src_fmt, dst_fmt, loss);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

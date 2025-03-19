@@ -8,7 +8,7 @@ use crate::swctx;
 use crate::time;
 use crate::{utils, MediaType, RawFrame, SampleFormat, Writer};
 
-use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVCodecRef, AVPacket};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
 use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
 use rsmpeg::ffi;
 
@@ -16,7 +16,8 @@ use anyhow::{Context, Error, Result};
 use std::hash::{Hash, Hasher};
 
 /// Builds an [`Encoder`].
-pub struct EncoderBuilder<'a> {
+#[derive(Clone, Debug)]
+pub struct EncoderBuilder {
     /// Video
     width: i32,
     height: i32,
@@ -37,11 +38,11 @@ pub struct EncoderBuilder<'a> {
     media_type: MediaType,
     thread_count: i32,
     codec_name: Option<String>,
-    codec_opts: Option<&'a Options>,
+    codec_opts: Option<Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
-impl<'a> EncoderBuilder<'a> {
+impl EncoderBuilder {
     /// Default keyframe interval.
     const KEY_FRAME_INTERVAL: u64 = 12;
 
@@ -178,7 +179,7 @@ impl<'a> EncoderBuilder<'a> {
         self
     }
 
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.codec_opts = Some(options);
         self
     }
@@ -216,25 +217,6 @@ impl<'a> EncoderBuilder<'a> {
     pub fn with_oformat_flags(mut self, flags: AvFormatFlags) -> Self {
         self.oformat_flags = flags as i32;
         self
-    }
-
-    /// Get codec, or Try to use the default codec libx264 if none specified.
-    pub fn codec(&self) -> AVCodecRef {
-        let codec_name = if let Some(codec_name) = &self.codec_name {
-            codec_name.as_ref()
-        } else {
-            match self.media_type {
-                MediaType::VIDEO => Self::VIDEO_CODEC_NAME,
-                MediaType::AUDIO => Self::AUDIO_CODEC_NAME,
-                _ => panic!("Unsupported media type, please specify codec name."),
-            }
-        };
-        AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
-            .context(format!(
-                "Failed to find encoder for codec: '{}'",
-                codec_name
-            ))
-            .unwrap()
     }
 
     /// Apply the settings to an encoder.
@@ -282,7 +264,24 @@ impl<'a> EncoderBuilder<'a> {
     /// * `interleaved` - Whether or not to use interleaved write.
     /// * `settings` - Encoder settings to use.
     pub fn build(self) -> Result<Encoder> {
-        let codec = self.codec();
+        let codec = {
+            let codec_name = if let Some(codec_name) = &self.codec_name {
+                codec_name.as_ref()
+            } else {
+                match self.media_type {
+                    MediaType::VIDEO => Self::VIDEO_CODEC_NAME,
+                    MediaType::AUDIO => Self::AUDIO_CODEC_NAME,
+                    _ => panic!("Unsupported media type, please specify codec name."),
+                }
+            };
+            AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
+                .context(format!(
+                    "Failed to find encoder for codec: '{}'",
+                    codec_name
+                ))
+                .unwrap()
+        };
+
         let mut encode_ctx = AVCodecContext::new(&codec);
 
         // Some formats want stream headers to be separate.
@@ -313,7 +312,7 @@ impl<'a> EncoderBuilder<'a> {
             None
         };
 
-        let dict = self.codec_opts.map(|options| options.to_dict());
+        let dict = self.codec_opts.map(|opts| opts.into_dict());
         encode_ctx
             .open(dict)
             .context("Failed to open encode context")?;
@@ -328,7 +327,7 @@ impl<'a> EncoderBuilder<'a> {
     }
 }
 
-impl Default for EncoderBuilder<'_> {
+impl Default for EncoderBuilder {
     fn default() -> Self {
         Self::new()
     }

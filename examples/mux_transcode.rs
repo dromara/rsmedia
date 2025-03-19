@@ -35,6 +35,10 @@ fn main() {
                 };
 
                 EncoderBuilder::new()
+                    // cuda accel
+                    // .with_hardware_device(Some(HWDeviceType::CUDA))
+                    // .with_codec_name("h264_nvenc".to_string())
+                    // .with_options(Options::preset_h264_nvenc())
                     // other
                     .with_media_type(stream_info.media_type)
                     .with_bit_rate(stream_info.bit_rate)

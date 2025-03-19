@@ -15,16 +15,17 @@ use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::ffi;
 
 /// Builds a [`Decoder`].
-pub struct DecoderBuilder<'a> {
+#[derive(Debug, Clone)]
+pub struct DecoderBuilder {
     flags: AvCodecFlags,
     resize: Option<Resize>,
     media_type: MediaType,
     codec_name: Option<String>,
-    codec_opts: Option<&'a Options>,
+    codec_opts: Option<Options>,
     hw_device_type: Option<HWDeviceType>,
 }
 
-impl<'a> DecoderBuilder<'a> {
+impl DecoderBuilder {
     /// Create a decoder with the specified source.
     ///
     /// * `source` - Source to decode.
@@ -52,7 +53,7 @@ impl<'a> DecoderBuilder<'a> {
         self
     }
 
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.codec_opts = Some(options);
         self
     }
@@ -132,7 +133,7 @@ impl<'a> DecoderBuilder<'a> {
             None
         };
 
-        let dict = self.codec_opts.map(|options| options.to_dict());
+        let dict = self.codec_opts.map(|opts| opts.into_dict());
         decode_ctx
             .open(dict)
             .context("Failed to open decoder for stream")?;
@@ -160,7 +161,7 @@ impl<'a> DecoderBuilder<'a> {
     }
 }
 
-impl Default for DecoderBuilder<'_> {
+impl Default for DecoderBuilder {
     fn default() -> Self {
         Self::new()
     }

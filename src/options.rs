@@ -53,6 +53,18 @@ impl Options {
         Self(opts)
     }
 
+    /// Creates options for a FLV muxer.
+    pub fn preset_avformat_flv() -> Self {
+        let mut opts = HashMap::new();
+        opts.insert("flvflags".to_string(), "no_duration_filesize".to_string());
+        opts.insert("fflags".to_string(), "nobuffer".to_string());
+        opts.insert("write_header".to_string(), "0".to_string());
+        opts.insert("update_flv_metadata".to_string(), "0".to_string());
+
+        // HashMap<String, String> -> Options
+        opts.into()
+    }
+
     /// Default avcodec options for a libx264 encoder.
     pub fn preset_h264() -> Self {
         let mut opts = HashMap::new();
@@ -141,7 +153,17 @@ impl Options {
         opts.into()
     }
 
-    /// Convert back to ffmpeg native dictionary, which can be used with `ffmpeg` functions.
+    /// 转换为 AVDictionary 但不转移所有权
+    pub fn as_dict(&self) -> &AVDictionary {
+        &self.0
+    }
+
+    /// 转换为 AVDictionary 并转移所有权
+    pub fn into_dict(self) -> AVDictionary {
+        self.0
+    }
+
+    /// 创建一个 AVDictionary 的副本
     pub fn to_dict(&self) -> AVDictionary {
         self.0.clone()
     }

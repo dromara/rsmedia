@@ -69,7 +69,7 @@ pub trait Reader {
 pub struct StreamReaderBuilder<'a> {
     source: Location,
     format: Option<&'a str>,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> StreamReaderBuilder<'a> {
@@ -101,7 +101,7 @@ impl<'a> StreamReaderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to input.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -127,8 +127,8 @@ impl<'a> StreamReaderBuilder<'a> {
         let fmt_opt = self
             .format
             .and_then(|str| AVInputFormat::find(&utils::from_str(str)));
-        let mut opts = self.options.map(|opts| opts.to_dict());
-        let mut ctx_input = AVFormatContextInput::open(&filename, fmt_opt.as_deref(), &mut opts)
+        let mut dict = self.options.map(|opts| opts.into_dict());
+        let mut ctx_input = AVFormatContextInput::open(&filename, fmt_opt.as_deref(), &mut dict)
             .context("Create input format context failed.")?;
         ctx_input
             .dump(0, &filename)
@@ -242,7 +242,7 @@ pub trait Writer: private::Write + private::Output {}
 pub struct StreamWriterBuilder<'a> {
     destination: Location,
     format: Option<&'a str>,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> StreamWriterBuilder<'a> {
@@ -289,7 +289,7 @@ impl<'a> StreamWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -298,10 +298,14 @@ impl<'a> StreamWriterBuilder<'a> {
     pub fn build(self) -> Result<StreamWriter> {
         let filename = utils::from_path(&self.destination.as_path());
         let format = self.format.map(utils::from_str);
-        let mut opts = self.options.map(|opts| opts.to_dict());
+        let mut dict = self.options.map(|opts| opts.into_dict());
         let output_ctx =
-            AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut opts, None)
+            AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut dict, None)
                 .context("Create output format context failed.")?;
+
+        // delay call `av_dict_free`
+        std::mem::forget(dict);
+
         Ok(StreamWriter {
             destination: self.destination,
             output: output_ctx,
@@ -358,7 +362,7 @@ pub type Bufs = Vec<Buf>;
 /// Build a [`BufferWriter`].
 pub struct BufferWriterBuilder<'a> {
     format: &'a str,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> BufferWriterBuilder<'a> {
@@ -379,14 +383,14 @@ impl<'a> BufferWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
 
     /// Build [`BufferWriter`].
     pub fn build(self) -> Result<BufferWriter> {
-        let _opts = self.options.map(|options| options.to_dict());
+        let _dict = self.options.map(|opts| opts.into_dict());
         Ok(BufferWriter {
             output: output_raw(self.format)?,
         })
@@ -441,7 +445,7 @@ unsafe impl Sync for BufferWriter {}
 /// Build a [`PacketizedBufWriter`].
 pub struct PacketizedBufWriterBuilder<'a> {
     format: &'a str,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> PacketizedBufWriterBuilder<'a> {
@@ -462,14 +466,14 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
 
     /// Build [`PacketizedBufWriter`].
     pub fn build(self) -> Result<PacketizedBufWriter> {
-        let _opts = self.options.map(|options| options.to_dict());
+        let _dict = self.options.map(|opts| opts.into_dict());
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
             buffers: Vec::new(),

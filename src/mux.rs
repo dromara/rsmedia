@@ -491,12 +491,21 @@ mod tests {
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
+
+        let encoder_frame_rate = video_encoder.frame_rate();
+        let encoder_time_base = video_encoder.time_base();
         let video_index = muxer.add_stream(video_encoder)?;
 
         // 生成测试视频帧 // 10秒视频 30fps
-        for index in 0..300 {
+        for index in 0..10 * encoder_frame_rate.den as i64 {
             let mut frame = generate_video_frame(width, height, index);
-            frame.set_pts(index);
+            frame.set_pts(index * encoder_time_base.den as i64);
+            frame.set_time_base(encoder_time_base);
+
+            println!(
+                "encode video frame:{:?}, time_base:{:?}, encoder_time_base:{:?}",
+                frame, frame.time_base, encoder_time_base
+            );
             muxer.mux(frame, video_index)?;
         }
 
@@ -516,7 +525,10 @@ mod tests {
         for res in demuxer {
             match res {
                 Ok((index, frame)) => {
-                    println!("stream index:{}, {:?}", index, frame);
+                    println!(
+                        "stream index:{}, {:?}, timebase:{:?}",
+                        index, frame, frame.time_base
+                    );
                 }
                 Err(e) => {
                     println!("Error decoding frame: {}", e)
@@ -528,19 +540,22 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "demux test_mux_demux_audio"]
-    fn test_mux_demux_audio() -> Result<()> {
-        let output_path = Path::new("/tmp/test_mux_demux_audio.aac");
-        let sample_rate = 44100;
-        let bit_rate = 128000;
-        let channels = 2;
+    #[ignore = "test_mux_demux_audio_aac 需要写文件操作"]
+    fn test_mux_demux_audio_aac() -> Result<()> {
+        let output_path = Path::new("/tmp/test_mux_demux_audio_aac.aac");
+        let sample_rate = 44_100;
+        let bit_rate = 128_000;
+        // aac 要求输入的样本数必须是1024
         let nb_samples = 1024;
+        let channels = 2;
 
         // 添加音频流
         let audio_encoder = EncoderBuilder::new()
             .with_media_type(MediaType::AUDIO) // 指定音频编码
             .with_nb_channels(channels) // 立体声
             .with_sample_rate(sample_rate) // 采样率
+            // 音频的时间基通常设置为1/采样率，这样PTS值就直接对应于样本数
+            .with_time_base(1, sample_rate as i32) // 设置时间基为1/采样率
             .with_bit_rate(bit_rate) // 128kbps 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
             .with_codec_name("aac".to_string()) // 指定AAC编码
@@ -548,14 +563,35 @@ mod tests {
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
+
+        let encoder_time_base = audio_encoder.time_base();
         let audio_index = muxer.add_stream(audio_encoder)?;
 
+        // 累积的样本数，用于计算PTS
+        let mut total_samples = 0;
+
         // 生成测试音频帧 // 5秒音频 440Hz
-        for pts in (0..sample_rate * 5).step_by(nb_samples) {
-            let mut sine_frame =
-                generate_audio_sine_wave_frame(440.0, channels as usize, nb_samples, sample_rate)?;
-            sine_frame.set_pts(pts as i64);
-            muxer.mux(sine_frame, audio_index).unwrap();
+        for _ in 0..(sample_rate * 5 / nb_samples) {
+            let mut sine_frame = generate_audio_sine_wave_frame(
+                440.0,
+                channels as usize,
+                nb_samples as usize,
+                sample_rate,
+            )?;
+
+            // 设置正确的PTS和时间基
+            sine_frame.set_pts(total_samples);
+            sine_frame.set_time_base(encoder_time_base);
+
+            println!(
+                "audio frame: {:?}, time_base={:?}",
+                sine_frame, encoder_time_base
+            );
+
+            muxer.mux(sine_frame, audio_index)?;
+
+            // 更新累积的样本数
+            total_samples += nb_samples as i64;
         }
 
         muxer.finish().unwrap();
@@ -573,13 +609,75 @@ mod tests {
         for res in demuxer {
             match res {
                 Ok((index, frame)) => {
-                    println!("stream index:{}, {:?}", index, frame)
+                    println!(
+                        "stream index:{}, {:?}, time_base:{:?}",
+                        index, frame, frame.time_base
+                    )
                 }
                 Err(e) => {
                     println!("Error decoding frame: {}", e)
                 }
             }
         }
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "test_mux_demux_audio_mp3 需要写文件操作"]
+    fn test_mux_demux_audio_mp3() -> Result<()> {
+        let output_path = Path::new("/tmp/test_mux_demux_audio_aac_mp3.mp3");
+        let sample_rate = 44_100;
+        let bit_rate = 128_000;
+        // MP3通常使用1152个样本/帧
+        let nb_samples = 1152;
+        let channels = 2;
+
+        // 修改音频编码器为MP3
+        let audio_encoder = EncoderBuilder::new()
+            .with_media_type(MediaType::AUDIO)
+            .with_nb_channels(channels)
+            .with_sample_rate(sample_rate)
+            .with_bit_rate(bit_rate)
+            .with_sample_format(SampleFormat::FLTP) // MP3也支持平面浮点格式
+            .with_time_base(1, sample_rate as i32)
+            .with_codec_name("libmp3lame".to_string()) // 使用LAME MP3编码器
+            .build()?;
+
+        let stream_writer = StreamWriter::new(output_path)?;
+        let mut muxer = Muxer::from_writer(stream_writer);
+
+        let encoder_time_base = audio_encoder.time_base();
+        let audio_index = muxer.add_stream(audio_encoder)?;
+
+        // 累积的样本数，用于计算PTS
+        let mut total_samples = 0;
+
+        // 生成测试音频帧 // 5秒音频 440Hz
+        for _ in 0..(sample_rate * 5 / nb_samples) {
+            let mut sine_frame = generate_audio_sine_wave_frame(
+                440.0,
+                channels as usize,
+                nb_samples as usize,
+                sample_rate,
+            )?;
+
+            // 设置正确的PTS和时间基
+            sine_frame.set_pts(total_samples);
+            sine_frame.set_time_base(encoder_time_base);
+
+            println!(
+                "audio frame: {:?}, time_base={:?}",
+                sine_frame, encoder_time_base
+            );
+
+            muxer.mux(sine_frame, audio_index)?;
+
+            // 更新累积的样本数
+            total_samples += nb_samples as i64;
+        }
+
+        muxer.finish().unwrap();
 
         Ok(())
     }

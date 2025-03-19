@@ -1250,21 +1250,50 @@ pub fn find_best_pix_fmt(
     src_pix_fmt: PixelFormat,
     has_alpha: bool,
 ) -> Result<PixelFormat> {
-    let best = unsafe {
+    let alpha = if has_alpha { 1 } else { 0 };
+
+    // Combination of flags informing you what kind of losses will occur (maximum loss for an invalid dst_pix_fmt).
+    let flags = unsafe {
         ffi::av_find_best_pix_fmt_of_2(
             dst_pix_fmt1.into(),
             dst_pix_fmt2.into(),
             src_pix_fmt.into(),
-            has_alpha as i32,
-            // 这里可以添加指针参数，如果需要返回损失值
+            alpha,
             std::ptr::null_mut(),
         )
     };
 
-    match PixelFormat::from(best) {
-        PixelFormat::NONE => Err(Error::msg("Failed to find best pix fmt")),
+    match PixelFormat::from(flags) {
+        PixelFormat::NONE => Err(Error::msg(format!("Failed to find best pix fmt:{}", flags))),
         fmt => Ok(fmt),
     }
+}
+
+/// Find the best pixel format to convert to given a certain source pixel format.
+/// this function searches which of the given pixel formats should be used to suffer the least amount of loss.
+/// The pixel formats from which it chooses one, are determined by the pix_fmt_list parameter.
+pub fn find_codec_best_pix_fmt(
+    pix_fmt_list: &[PixelFormat],
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<PixelFormat> {
+    let pix_fmts = pix_fmt_list.as_ptr() as *const _;
+    let alpha = if has_alpha { 1 } else { 0 };
+    let ret = unsafe {
+        ffi::avcodec_find_best_pix_fmt_of_list(
+            pix_fmts,
+            src_pix_fmt.into(),
+            alpha,
+            std::ptr::null_mut(),
+        )
+    };
+    if ret < 0 {
+        return Err(Error::msg(format!(
+            "Failed to find codec best pix fmt, ret: {}",
+            ret
+        )));
+    }
+    Ok(PixelFormat::from(ret))
 }
 
 /// 计算像素格式转换的损失值（封装 av_get_pix_fmt_loss）
@@ -1293,6 +1322,15 @@ pub fn get_pix_fmt_loss(
     }
 
     Ok(loss)
+}
+
+/// See ffi::av_pix_fmt_count_planes
+pub fn pix_fmt_count_planes(pix_fmt: PixelFormat) -> Result<i32> {
+    let cnt = unsafe { ffi::av_pix_fmt_count_planes(pix_fmt as _) };
+    if cnt < 0 {
+        return Err(Error::msg(format!("Failed to get plane count:{}", cnt)));
+    }
+    Ok(cnt)
 }
 
 #[cfg(test)]

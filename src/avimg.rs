@@ -54,115 +54,120 @@ impl MyAVImage {
         Ok(MyAVImage(img))
     }
 
-    pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 4]> {
-        let mut linesizes = [0; 4];
-        let ret =
-            unsafe { ffi::av_image_fill_linesizes(linesizes.as_mut_ptr(), pix_fmt.into(), width) };
-
-        // >= 0 in case of success, a negative error code otherwise
-        if ret < 0 {
-            return Err(Error::msg(format!("Failed to fill linesizes: {}", ret)));
-        }
-
-        Ok(linesizes)
-    }
-
-    /// See ffi::av_image_get_linesize
-    pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> anyhow::Result<usize> {
-        // Safe because format is a valid format and this function is pure computation.
-        let ret = unsafe { ffi::av_image_get_linesize(pix_fmt.into(), width as _, plane as _) };
-
-        // returns the computed size in bytes
-        if ret <= 0 {
-            return Err(Error::msg(format!("Failed to get line size, ret: {}", ret)));
-        }
-
-        Ok(ret as usize)
-    }
-
-    /// See ffi::av_image_fill_plane_sizes.
-    pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
-        format: PixelFormat,
-        linesizes: I,
-        height: u32,
-    ) -> anyhow::Result<Vec<usize>> {
-        const MAX_FFMPEG_PLANES: usize = 4;
-
-        let mut linesizes_buf = [0; MAX_FFMPEG_PLANES];
-        let mut planes = 0;
-        for (i, linesize) in linesizes.into_iter().take(MAX_FFMPEG_PLANES).enumerate() {
-            linesizes_buf[i] = linesize as _;
-            planes += 1;
-        }
-        let mut plane_sizes_buf = [0; MAX_FFMPEG_PLANES];
-
-        // Safe because plane_sizes_buf and linesizes_buf have the size specified by the API, format is
-        // valid, and this function doesn't have any side effects other than writing to plane_sizes_buf.
-        let ret = unsafe {
-            ffi::av_image_fill_plane_sizes(
-                plane_sizes_buf.as_mut_ptr(),
-                format.into(),
-                height as _,
-                linesizes_buf.as_ptr(),
-            )
-        };
-
-        // >= 0 in case of success, a negative error code otherwise
-        if ret < 0 {
-            return Err(Error::msg(format!(
-                "Failed to fill plane sizes, ret: {}",
-                ret
-            )));
-        }
-
-        Ok(plane_sizes_buf
-            .into_iter()
-            .map(|x| x as _)
-            .take(planes)
-            .collect())
-    }
-
-    /// 封装 `av_image_check_size`
-    pub fn check_size(width: u32, height: u32) -> anyhow::Result<()> {
-        let ret = unsafe { ffi::av_image_check_size(width, height, 0, std::ptr::null_mut()) };
-
-        // >= 0 if valid, a negative error code otherwise
-        if ret < 0 {
-            return Err(Error::msg(format!("Failed to check size, ret: {}", ret)));
-        }
-
-        Ok(())
-    }
-
-    /// 封装 `av_image_check_size2`
-    /// 检查图像的给定维度是否有效，这意味着具有指定pix_fmt的图像平面的所有字节都可以用带符号的int寻址。
-    pub fn check_size2(
-        width: u32,
-        height: u32,
-        max_pixels: i64,
-        pix_fmt: PixelFormat,
-    ) -> anyhow::Result<()> {
-        let ret = unsafe {
-            ffi::av_image_check_size2(
-                width,
-                height,
-                max_pixels,
-                pix_fmt.into(),
-                0,
-                std::ptr::null_mut(),
-            )
-        };
-
-        // >= 0 if valid, a negative error code otherwise
-        if ret < 0 {
-            return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
-        }
-        Ok(())
+    pub fn new(img: AVImage) -> Self {
+        Self(img)
     }
 
     pub fn into_inner(self) -> AVImage {
         self.0
     }
+}
+
+/// See ffi::av_image_fill_linesizes
+pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 4]> {
+    let mut linesizes = [0; 4];
+    let ret =
+        unsafe { ffi::av_image_fill_linesizes(linesizes.as_mut_ptr(), pix_fmt.into(), width) };
+
+    // >= 0 in case of success, a negative error code otherwise
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to fill linesizes: {}", ret)));
+    }
+
+    Ok(linesizes)
+}
+
+/// See ffi::av_image_get_linesize
+pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> anyhow::Result<usize> {
+    // Safe because format is a valid format and this function is pure computation.
+    let ret = unsafe { ffi::av_image_get_linesize(pix_fmt.into(), width as _, plane as _) };
+
+    // returns the computed size in bytes
+    if ret <= 0 {
+        return Err(Error::msg(format!("Failed to get line size, ret: {}", ret)));
+    }
+
+    Ok(ret as usize)
+}
+
+/// See ffi::av_image_fill_plane_sizes.
+pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
+    format: PixelFormat,
+    linesizes: I,
+    height: u32,
+) -> anyhow::Result<Vec<usize>> {
+    const MAX_FFMPEG_PLANES: usize = 4;
+
+    let mut linesizes_buf = [0; MAX_FFMPEG_PLANES];
+    let mut planes = 0;
+    for (i, linesize) in linesizes.into_iter().take(MAX_FFMPEG_PLANES).enumerate() {
+        linesizes_buf[i] = linesize as _;
+        planes += 1;
+    }
+    let mut plane_sizes_buf = [0; MAX_FFMPEG_PLANES];
+
+    // Safe because plane_sizes_buf and linesizes_buf have the size specified by the API, format is
+    // valid, and this function doesn't have any side effects other than writing to plane_sizes_buf.
+    let ret = unsafe {
+        ffi::av_image_fill_plane_sizes(
+            plane_sizes_buf.as_mut_ptr(),
+            format.into(),
+            height as _,
+            linesizes_buf.as_ptr(),
+        )
+    };
+
+    // >= 0 in case of success, a negative error code otherwise
+    if ret < 0 {
+        return Err(Error::msg(format!(
+            "Failed to fill plane sizes, ret: {}",
+            ret
+        )));
+    }
+
+    Ok(plane_sizes_buf
+        .into_iter()
+        .map(|x| x as _)
+        .take(planes)
+        .collect())
+}
+
+/// see ffi::av_image_check_size
+pub fn check_size(width: u32, height: u32) -> anyhow::Result<()> {
+    let ret = unsafe { ffi::av_image_check_size(width, height, 0, std::ptr::null_mut()) };
+
+    // >= 0 if valid, a negative error code otherwise
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to check size, ret: {}", ret)));
+    }
+
+    Ok(())
+}
+
+/// see ffi::av_image_check_size2
+/// 检查图像的给定维度是否有效，这意味着具有指定pix_fmt的图像平面的所有字节都可以用带符号的int寻址。
+pub fn check_size2(
+    width: u32,
+    height: u32,
+    max_pixels: i64,
+    pix_fmt: PixelFormat,
+) -> anyhow::Result<()> {
+    let ret = unsafe {
+        ffi::av_image_check_size2(
+            width,
+            height,
+            max_pixels,
+            pix_fmt.into(),
+            0,
+            std::ptr::null_mut(),
+        )
+    };
+
+    // >= 0 if valid, a negative error code otherwise
+    if ret < 0 {
+        return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
+    }
+    Ok(())
 }
 
 impl std::ops::Deref for MyAVImage {
@@ -192,8 +197,8 @@ mod tests {
         let align = 32;
 
         // 1. 测试图像大小检查
-        MyAVImage::check_size(width as u32, height as u32)?;
-        MyAVImage::check_size2(
+        check_size(width as u32, height as u32)?;
+        check_size2(
             width as u32,
             height as u32,
             (width * height * 3) as i64,
@@ -229,7 +234,7 @@ mod tests {
         let yuv_height = 480;
 
         // 步骤1：获取各平面行大小
-        let yuv_linesizes = MyAVImage::fill_linesizes(yuv_fmt, yuv_width)?;
+        let yuv_linesizes = fill_linesizes(yuv_fmt, yuv_width)?;
         assert_eq!(
             yuv_linesizes,
             [640, 320, 320, 0],
@@ -238,23 +243,23 @@ mod tests {
 
         // 步骤2：验证 av_image_line_size 返回值
         assert_eq!(
-            MyAVImage::get_linesize(yuv_fmt, yuv_width as u32, 0)?,
+            get_linesize(yuv_fmt, yuv_width as u32, 0)?,
             640,
             "Y plane linesize incorrect"
         );
         assert_eq!(
-            MyAVImage::get_linesize(yuv_fmt, yuv_width as u32, 1)?,
+            get_linesize(yuv_fmt, yuv_width as u32, 1)?,
             320,
             "U plane linesize incorrect"
         );
         assert_eq!(
-            MyAVImage::get_linesize(yuv_fmt, yuv_width as u32, 2)?,
+            get_linesize(yuv_fmt, yuv_width as u32, 2)?,
             320,
             "V plane linesize incorrect"
         );
 
         // 步骤3：计算平面大小
-        let plane_sizes = MyAVImage::fill_plane_sizes(
+        let plane_sizes = fill_plane_sizes(
             yuv_fmt,
             yuv_linesizes[..3].iter().map(|&x| x as u32),
             yuv_height as u32,
@@ -278,22 +283,19 @@ mod tests {
         let rgba_height = 720;
 
         // 步骤1：获取行大小（单平面）
-        let rgba_linesizes = MyAVImage::fill_linesizes(rgba_fmt, rgba_width)?;
+        let rgba_linesizes = fill_linesizes(rgba_fmt, rgba_width)?;
         assert_eq!(rgba_linesizes, [1280, 0, 0, 0], "RGBA linesizes mismatch");
 
         // 步骤2：验证 av_image_line_size
         assert_eq!(
-            MyAVImage::get_linesize(rgba_fmt, rgba_width as u32, 0)?,
+            get_linesize(rgba_fmt, rgba_width as u32, 0)?,
             1280,
             "RGBA plane linesize incorrect"
         );
 
         // 步骤3：计算平面大小
-        let plane_sizes = MyAVImage::fill_plane_sizes(
-            rgba_fmt,
-            vec![rgba_linesizes[0] as u32],
-            rgba_height as u32,
-        )?;
+        let plane_sizes =
+            fill_plane_sizes(rgba_fmt, vec![rgba_linesizes[0] as u32], rgba_height as u32)?;
         // 预期结果：1280 * 720 = 921600
         assert_eq!(plane_sizes.len(), 1);
         assert_eq!(plane_sizes[0], 921600);
@@ -306,7 +308,7 @@ mod tests {
         let nv12_height = 480;
 
         // 步骤1：获取各平面行大小
-        let linesizes = MyAVImage::fill_linesizes(nv12_fmt, nv12_width)?;
+        let linesizes = fill_linesizes(nv12_fmt, nv12_width)?;
         assert_eq!(
             linesizes,
             [640, 640, 0, 0], // NV12只有两个平面：Y（行640）、UV（行640）
@@ -315,24 +317,24 @@ mod tests {
 
         // 步骤2：验证 av_image_line_size 返回值
         assert_eq!(
-            MyAVImage::get_linesize(nv12_fmt, nv12_width as u32, 0)?,
+            get_linesize(nv12_fmt, nv12_width as u32, 0)?,
             640,
             "NV12 Y plane linesize incorrect"
         );
         assert_eq!(
-            MyAVImage::get_linesize(nv12_fmt, nv12_width as u32, 1)?,
+            get_linesize(nv12_fmt, nv12_width as u32, 1)?,
             640,
             "NV12 UV plane linesize incorrect"
         );
 
         // 错误测试：访问不存在的平面（索引2）
         assert!(
-            MyAVImage::get_linesize(nv12_fmt, nv12_width as u32, 2).is_err(),
+            get_linesize(nv12_fmt, nv12_width as u32, 2).is_err(),
             "NV12 should reject plane index 2"
         );
 
         // 步骤3：计算平面大小
-        let plane_sizes = MyAVImage::fill_plane_sizes(
+        let plane_sizes = fill_plane_sizes(
             nv12_fmt,
             vec![linesizes[0] as u32, linesizes[1] as u32], // 传入两个平面
             nv12_height as u32,
@@ -357,26 +359,23 @@ mod tests {
         // --------------------------
         // 错误1：无效像素格式
         assert!(
-            MyAVImage::get_linesize(PixelFormat::NONE, 640, 0).is_err(),
+            get_linesize(PixelFormat::NONE, 640, 0).is_err(),
             "None format should fail"
         );
 
         // 错误2：越界平面索引（YUV420P只有3个平面）
         assert!(
-            MyAVImage::get_linesize(yuv_fmt, 640, 3).is_err(),
+            get_linesize(yuv_fmt, 640, 3).is_err(),
             "Plane index 3 should be invalid for YUV420P"
         );
 
         // 错误3：非法宽度（0或负数）
-        assert!(
-            MyAVImage::get_linesize(yuv_fmt, 0, 0).is_err(),
-            "Width 0 should fail"
-        );
+        assert!(get_linesize(yuv_fmt, 0, 0).is_err(), "Width 0 should fail");
 
         // 错误4：传入过多平面（超过4个）
         let oversized_input = vec![640, 320, 320, 128, 64];
         assert!(
-            MyAVImage::fill_plane_sizes(yuv_fmt, oversized_input, 480).is_ok(),
+            fill_plane_sizes(yuv_fmt, oversized_input, 480).is_ok(),
             "Should truncate to first 4 planes"
         );
 

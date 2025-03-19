@@ -13,9 +13,9 @@ fn main() {
     let stream_reader = StreamReader::new(input_path).unwrap();
     let mut demuxer = Demuxer::from_reader(stream_reader, None).unwrap();
 
-    let output_path = Path::new("/tmp/output.mp4");
+    let output_path = Path::new("/tmp/output.mov");
     let stream_writer = StreamWriterBuilder::new(output_path)
-        .with_format("mp4")
+        .with_format("mov")
         .build()
         .unwrap();
     let mut muxer = Muxer::from_writer(stream_writer);

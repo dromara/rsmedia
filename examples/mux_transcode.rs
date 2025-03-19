@@ -41,8 +41,8 @@ fn main() {
                     .with_codec_name(codec.name().to_string_lossy().to_string())
                     // video
                     .with_video_size(stream_info.width as u32, stream_info.height as u32)
-                    .with_time_base(stream_info.time_base.den)
-                    .with_frame_rate(stream_info.frame_rate.den)
+                    .with_time_base_ra(stream_info.time_base)
+                    .with_frame_rate_ra(stream_info.frame_rate)
                     .with_pixel_format(PixelFormat::from(stream_info.format))
                     .build()
                     .unwrap()

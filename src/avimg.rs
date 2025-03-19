@@ -132,20 +132,18 @@ pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
         .collect())
 }
 
-/// see ffi::av_image_check_size
-pub fn check_size(width: u32, height: u32) -> anyhow::Result<()> {
-    let ret = unsafe { ffi::av_image_check_size(width, height, 0, std::ptr::null_mut()) };
-
-    // >= 0 if valid, a negative error code otherwise
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to check size, ret: {}", ret)));
-    }
-
-    Ok(())
-}
-
-/// see ffi::av_image_check_size2
-/// 检查图像的给定维度是否有效，这意味着具有指定pix_fmt的图像平面的所有字节都可以用带符号的int寻址。
+/// Check if the given dimension of an image is valid, meaning that all
+/// bytes of a plane of an image with the specified pix_fmt can be addressed with a signed int.
+///
+/// # Arguments
+///
+/// * @param w the width of the picture
+/// * @param h the height of the picture
+/// * @param max_pixels the maximum number of pixels the user wants to accept
+/// * @param pix_fmt the pixel format, can be AV_PIX_FMT_NONE if unknown.
+/// * @param log_offset the offset to sum to the log level for logging with log_ctx
+/// * @param log_ctx the parent logging context, it may be NULL
+/// * @return >= 0 if valid, a negative error code otherwise
 pub fn check_size2(
     width: u32,
     height: u32,
@@ -197,11 +195,10 @@ mod tests {
         let align = 32;
 
         // 1. 测试图像大小检查
-        check_size(width as u32, height as u32)?;
         check_size2(
             width as u32,
             height as u32,
-            (width * height * 3) as i64,
+            (width * height) as i64,
             pix_fmt,
         )?;
 

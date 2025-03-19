@@ -384,12 +384,11 @@ mod tests {
     use rsmpeg::avutil::{AVChannelLayout, AVFrame};
     use std::path::Path;
 
-    /// 生成YUV420P格式的测试视频帧
-    fn generate_test_frame(width: u32, height: u32, pts: i64) -> AVFrame {
+    /// 生成YUV420P格式的视频帧,彩色渐变测试图
+    fn generate_video_frame(width: u32, height: u32, frame_index: i64) -> AVFrame {
         let mut frame = AVFrame::new();
         frame.set_width(width as i32);
         frame.set_height(height as i32);
-        frame.set_pts(pts);
         frame.set_format(PixelFormat::YUV420P.into());
         frame
             .alloc_buffer()
@@ -397,31 +396,46 @@ mod tests {
             .unwrap();
 
         // 获取各平面参数 (YUV420P布局)
-        let y_stride = frame.linesize[0] as usize;
-        let u_stride = frame.linesize[1] as usize;
-        let v_stride = frame.linesize[2] as usize;
+        let y_plane = frame.data_mut()[0];
+        let u_plane = frame.data_mut()[1];
+        let v_plane = frame.data_mut()[2];
 
-        // 安全访问数据指针
-        unsafe {
-            let y_data = frame.data[0];
-            // Y平面填充渐变
-            for y in 0..height {
-                for x in 0..width {
-                    let y_val = ((x + y) % 256) as u8;
-                    let idx = y as usize * y_stride + x as usize;
-                    *y_data.add(idx) = y_val;
+        let y_linesize = frame.linesize[0];
+        let u_linesize = frame.linesize[1];
+        let v_linesize = frame.linesize[2];
+
+        // 基于帧索引创建动态效果
+        let time_factor = (frame_index as f32 * 0.05).sin() * 0.5 + 0.5;
+
+        // 填充Y平面 (亮度)
+        for y in 0..height {
+            for x in 0..width {
+                let index = (y * y_linesize as u32 + x) as usize;
+                let gradient = (x as f32 / width as f32 * 255.0) as u8;
+                unsafe {
+                    *y_plane.add(index) = gradient;
                 }
             }
+        }
 
-            // UV平面填充灰色 (128)
-            let u_data = frame.data[1];
-            let v_data = frame.data[2];
-            for y in 0..(height / 2) {
-                for x in 0..(width / 2) {
-                    let u_idx = y as usize * u_stride + x as usize;
-                    let v_idx = y as usize * v_stride + x as usize;
-                    *u_data.add(u_idx) = 128;
-                    *v_data.add(v_idx) = 128;
+        // 填充U平面 (蓝色分量)
+        for y in 0..(height / 2) {
+            for x in 0..(width / 2) {
+                let index = (y * u_linesize as u32 + x) as usize;
+                let u_value = ((time_factor * 128.0) as u8).wrapping_add(128);
+                unsafe {
+                    *u_plane.add(index) = u_value;
+                }
+            }
+        }
+
+        // 填充V平面 (红色分量)
+        for y in 0..(height / 2) {
+            for x in 0..(width / 2) {
+                let index = (y * v_linesize as u32 + x) as usize;
+                let v_value = (((1.0 - time_factor) * 128.0) as u8).wrapping_add(128);
+                unsafe {
+                    *v_plane.add(index) = v_value;
                 }
             }
         }
@@ -430,8 +444,12 @@ mod tests {
     }
 
     /// 生成FLTP格式的正弦波音频帧
-    fn generate_sine_wave_frame(freq: f32, nb_samples: usize, sample_rate: u32) -> Result<AVFrame> {
-        let channels: usize = 2;
+    fn generate_audio_sine_wave_frame(
+        freq: f32,
+        channels: usize,
+        nb_samples: usize,
+        sample_rate: u32,
+    ) -> Result<AVFrame> {
         let mut frame = AVFrame::new();
         frame.set_format(SampleFormat::FLTP as _);
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(channels as i32).into_inner());
@@ -446,17 +464,16 @@ mod tests {
 
         for ch in 0..channels {
             let data_ptr = unsafe {
-                std::slice::from_raw_parts_mut(
-                    (*frame.as_mut_ptr()).data[ch] as *mut f32,
-                    nb_samples,
-                )
+                let ptr = (*frame.as_mut_ptr()).data[ch] as *mut f32;
+                anyhow::ensure!(!ptr.is_null(), "Audio data pointer is null");
+                std::slice::from_raw_parts_mut(ptr, nb_samples)
             };
 
-            for (i, sample) in data_ptr.iter_mut().enumerate() {
+            // 生成正弦波
+            data_ptr.iter_mut().enumerate().for_each(|(i, sample)| {
                 let t = i as f32 * sample_interval;
-                let value = (two_pi_f * t).sin() * 0.8;
-                *sample = value;
-            }
+                *sample = (two_pi_f * t).sin() * 0.8;
+            });
         }
 
         Ok(frame)
@@ -477,8 +494,9 @@ mod tests {
         let video_index = muxer.add_stream(video_encoder)?;
 
         // 生成测试视频帧 // 10秒视频 30fps
-        for pts in 0..300 {
-            let frame = generate_test_frame(width, height, pts);
+        for index in 0..300 {
+            let mut frame = generate_video_frame(width, height, index);
+            frame.set_pts(index);
             muxer.mux(frame, video_index)?;
         }
 
@@ -534,7 +552,8 @@ mod tests {
 
         // 生成测试音频帧 // 5秒音频 440Hz
         for pts in (0..sample_rate * 5).step_by(nb_samples) {
-            let mut sine_frame = generate_sine_wave_frame(440.0, nb_samples, sample_rate)?;
+            let mut sine_frame =
+                generate_audio_sine_wave_frame(440.0, channels as usize, nb_samples, sample_rate)?;
             sine_frame.set_pts(pts as i64);
             muxer.mux(sine_frame, audio_index).unwrap();
         }
@@ -571,11 +590,11 @@ mod tests {
         // 视频参数
         pub const VIDEO_WIDTH: u32 = 1280;
         pub const VIDEO_HEIGHT: u32 = 720;
-        pub const VIDEO_FPS: i32 = 30;
-        pub const VIDEO_DURATION: i32 = 10; // 视频延时 单位：秒
+        pub const VIDEO_FPS: u32 = 30;
+        pub const VIDEO_DURATION_SEC: u32 = 10;
 
         // 音频参数
-        pub const AUDIO_SAMPLE_RATE: u32 = 48000;
+        pub const AUDIO_SAMPLE_RATE: u32 = 48_000;
         pub const AUDIO_CHANNELS: u32 = 2;
         pub const AUDIO_BITRATE: i64 = 128_000;
         pub const SAMPLES_PER_FRAME: u32 = 1024;
@@ -585,7 +604,10 @@ mod tests {
         let video_encoder = EncoderBuilder::new()
             .with_media_type(MediaType::VIDEO)
             .with_video_size(VIDEO_WIDTH, VIDEO_HEIGHT)
-            .with_frame_rate(VIDEO_FPS)
+            .with_frame_rate(VIDEO_FPS as i32, 1)
+            .with_time_base(1, 90_000) // 使用标准的90kHz时间基
+            .with_gop_size(VIDEO_FPS as i32) // 每秒一个关键帧
+            .with_codec_name("libx264".to_string())
             .build()?;
 
         let audio_encoder = EncoderBuilder::new()
@@ -594,39 +616,85 @@ mod tests {
             .with_sample_rate(AUDIO_SAMPLE_RATE) // 采样率
             .with_bit_rate(AUDIO_BITRATE) // 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
+            .with_time_base(1, AUDIO_SAMPLE_RATE as i32) // 使用采样率作为时间基
             .with_codec_name("aac".to_string()) // 指定AAC编码
             .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
 
+        let video_time_base = video_encoder.time_base();
+        let audio_time_base = audio_encoder.time_base();
+
         // 添加视频流 和 音频流
         let video_idx = muxer.add_stream(video_encoder)?;
         let audio_idx = muxer.add_stream(audio_encoder)?;
 
-        // 计算音频帧间隔
-        let audio_frame_interval = {
-            let audio_duration = SAMPLES_PER_FRAME as f64 / AUDIO_SAMPLE_RATE as f64;
-            let video_duration = 1.0 / VIDEO_FPS as f64;
-            (audio_duration / video_duration).ceil() as i32
-        };
+        // 计算总视频帧数
+        let total_video_frames = (VIDEO_FPS * VIDEO_DURATION_SEC) as i64;
 
-        // 生成测试数据
-        let total_frames = VIDEO_FPS * VIDEO_DURATION;
-        for pts in 0..total_frames {
-            // 处理视频帧
-            let video_frame = generate_test_frame(VIDEO_WIDTH, VIDEO_HEIGHT, pts as i64);
-            muxer.mux(video_frame, video_idx).unwrap();
+        // 计算每个视频帧对应的音频样本数，例如：48000Hz / 30fps = 1600个(样本/视频帧)
+        let audio_samples_per_video_frame = (AUDIO_SAMPLE_RATE as f64 / VIDEO_FPS as f64) as usize;
 
-            // 处理音频帧
-            if pts % audio_frame_interval == 0 {
-                let mut audio_frame = generate_sine_wave_frame(
-                    1000.0,
+        // 音频的PTS，需要根据视频帧数和音频帧数计算
+        let mut audio_pts: i64 = 0;
+
+        for frame_idx in 0..total_video_frames {
+            // 生成视频帧
+            let mut video_frame = generate_video_frame(VIDEO_WIDTH, VIDEO_HEIGHT, frame_idx);
+
+            // 设置视频帧PTS (以编码器 90kHz 为基准)
+            let frame_duration = video_time_base.den as i64 / VIDEO_FPS as i64;
+            let video_pts = frame_idx * frame_duration;
+            video_frame.set_pts(video_pts);
+            video_frame.set_time_base(video_time_base);
+
+            println!(
+                "Video frame: {}, pts: {}, timebase: {:?}",
+                frame_idx, video_pts, video_time_base
+            );
+            muxer.mux(video_frame, video_idx)?;
+
+            // 视频和音频帧不一对一写入,为什么需要这样计算？
+            // 1. 不同的时间基准 ：
+            // - 视频以帧率计算（如30fps）
+            // - 音频以采样率计算（如48000Hz）
+            // 2. 不同的编码要求 ：
+            // - AAC音频编码器要求固定的帧大小（通常是1024个样本）
+            // - 视频编码器（如H.264）有不同的帧大小要求
+            // 3. 同步需求 ：
+            // - 为了保持音视频同步，需要确保每个视频帧对应的音频数据都被正确编码
+            //
+            // 向上取整除法，计算需要生成的音频帧数
+            // 在音频处理中，我们需要知道多少个固定大小的帧能容纳所有样本。如果不向上取整，可能会丢失部分音频数据。
+            // 例如，对于1600个样本和1024大小的帧：
+            // - 1600 / 1024 = 1.56... ≈ 1（向下取整）
+            // - 但1个帧只能容纳1024个样本，剩余576个样本会被丢弃
+            // - 使用向上取整：(1600 + 1024 - 1) / 1024 = 2，确保所有样本都被处理
+            // 这就是为什么在计算音频帧数时使用这个向上取整除法公式的原因
+            let audio_frames_needed =
+                (audio_samples_per_video_frame as u32).div_ceil(SAMPLES_PER_FRAME);
+            for _ in 0..audio_frames_needed {
+                // 使用新的音频帧生成函数
+                let mut audio_frame = generate_audio_sine_wave_frame(
+                    440.0, // 440Hz的音调
+                    AUDIO_CHANNELS as usize,
                     SAMPLES_PER_FRAME as usize,
                     AUDIO_SAMPLE_RATE,
                 )?;
-                audio_frame.set_pts(pts as i64);
-                muxer.mux(audio_frame, audio_idx).unwrap();
+
+                audio_frame.set_pts(audio_pts);
+                audio_frame.set_time_base(audio_time_base);
+
+                println!(
+                    "Audio frame: pts: {}, samples: {}, timebase: {:?}",
+                    audio_pts, SAMPLES_PER_FRAME, audio_time_base
+                );
+
+                muxer.mux(audio_frame, audio_idx)?;
+
+                // 更新音频PTS (以采样率为基准)
+                audio_pts += SAMPLES_PER_FRAME as i64;
             }
         }
 

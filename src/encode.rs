@@ -128,18 +128,35 @@ impl<'a> EncoderBuilder<'a> {
     }
 
     /// Set the frame rate.
-    pub fn with_frame_rate(mut self, frame_rate: i32) -> Self {
-        self.frame_rate = avutil::ra(frame_rate, 1);
+    pub fn with_frame_rate_ra(mut self, frame_rare: ffi::AVRational) -> Self {
+        self.frame_rate = frame_rare;
         self
     }
 
-    pub fn with_time_base(mut self, base: i32) -> Self {
-        self.time_base = avutil::ra(1, base);
+    pub fn with_frame_rate(mut self, num: i32, den: i32) -> Self {
+        self.frame_rate = avutil::ra(num, den);
         self
     }
 
-    pub fn with_pkt_time_base(mut self, base: i32) -> Self {
-        self.pkt_time_base = avutil::ra(1, base);
+    /// Set the time base.
+    pub fn with_time_base_ra(mut self, time_base: ffi::AVRational) -> Self {
+        self.time_base = time_base;
+        self
+    }
+
+    pub fn with_time_base(mut self, num: i32, den: i32) -> Self {
+        self.time_base = avutil::ra(num, den);
+        self
+    }
+
+    /// Set the packet time base.
+    pub fn with_pkt_time_base_ra(mut self, pkt_time_base: ffi::AVRational) -> Self {
+        self.pkt_time_base = pkt_time_base;
+        self
+    }
+
+    pub fn with_pkt_time_base(mut self, num: i32, den: i32) -> Self {
+        self.pkt_time_base = avutil::ra(num, den);
         self
     }
 

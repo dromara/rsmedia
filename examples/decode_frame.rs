@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 
     let mut stream_reader = StreamReader::new(source)?;
     let mut decoder = DecoderBuilder::new()
-        .with_resize(Resize::Fit(1280, 720))
+        .with_resize(Some(Resize::Fit(1280, 720)))
         .build(&stream_reader)
         .context("failed to create decoder")?;
 

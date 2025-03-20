@@ -5,11 +5,9 @@ use crate::hwaccel::HWDeviceType;
 use crate::io::private::Output;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{utils, Decoder, DecoderBuilder, Encoder, StreamReader, StreamWriter};
+use crate::{utils, Decoder, DecoderBuilder, Encoder, Resize, StreamReader, StreamWriter};
 
-use rsmpeg::avcodec::AVCodec;
 use rsmpeg::avutil::AVFrame;
-use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
 use std::path::Path;
@@ -219,19 +217,22 @@ pub enum DemuxResult {
 }
 
 impl<R: Reader> Demuxer<R> {
-    pub fn from_reader(reader: R, device_type: Option<HWDeviceType>) -> Result<Self> {
+    pub fn from_reader(
+        reader: R,
+        resize: Option<Resize>,
+        device_type: Option<HWDeviceType>,
+    ) -> Result<Self> {
         let nb_streams = reader.input().nb_streams as usize;
         let mut streams = Vec::new();
         for stream_idx in 0..nb_streams {
             let stream_info = StreamInfo::from_reader(&reader, stream_idx)?;
-            let codec = {
-                let codec_id = stream_info.codec_id as ffi::AVCodecID;
-                AVCodec::find_decoder(codec_id).context("Failed to find decoder")?
-            };
+            // auto detect hardware acceleration decoder codec
+            let codec_name = stream_info.find_decoder_name(device_type);
             let decoder = DecoderBuilder::new()
                 .with_hardware_device(device_type)
                 .with_media_type(stream_info.media_type)
-                .with_codec_name(codec.name().to_string_lossy().to_string())
+                .with_codec_name(codec_name)
+                .with_resize(resize)
                 .build(&reader)
                 .context("Failed to build decoder")?;
             streams.push(DemuxerStream::new(decoder, stream_info));
@@ -517,7 +518,7 @@ mod tests {
 
         // Demuxer 测试视频解码
         let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader, None)?;
+        let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
         for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_idx, des.media_type)
         }
@@ -558,7 +559,7 @@ mod tests {
             .with_time_base(1, sample_rate as i32) // 设置时间基为1/采样率
             .with_bit_rate(bit_rate) // 128kbps 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
-            .with_codec_name("aac".to_string()) // 指定AAC编码
+            .with_codec_name(Some("aac".to_string())) // 指定AAC编码
             .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
@@ -601,7 +602,7 @@ mod tests {
 
         // Demuxer 测试音频解码
         let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader, None)?;
+        let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
         for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_idx, des.media_type)
         }
@@ -641,7 +642,7 @@ mod tests {
             .with_bit_rate(bit_rate)
             .with_sample_format(SampleFormat::FLTP) // MP3也支持平面浮点格式
             .with_time_base(1, sample_rate as i32)
-            .with_codec_name("libmp3lame".to_string()) // 使用LAME MP3编码器
+            .with_codec_name(Some("libmp3lame".to_string())) // 使用LAME MP3编码器
             .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
@@ -705,7 +706,7 @@ mod tests {
             .with_frame_rate(VIDEO_FPS as i32, 1)
             .with_time_base(1, 90_000) // 使用标准的90kHz时间基
             .with_gop_size(VIDEO_FPS as i32) // 每秒一个关键帧
-            .with_codec_name("libx264".to_string())
+            .with_codec_name(Some("libx264".to_string()))
             .build()?;
 
         let audio_encoder = EncoderBuilder::new()
@@ -715,7 +716,7 @@ mod tests {
             .with_bit_rate(AUDIO_BITRATE) // 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
             .with_time_base(1, AUDIO_SAMPLE_RATE as i32) // 使用采样率作为时间基
-            .with_codec_name("aac".to_string()) // 指定AAC编码
+            .with_codec_name(Some("aac".to_string())) // 指定AAC编码
             .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
@@ -804,7 +805,7 @@ mod tests {
 
         // 解封装验证
         let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader, None)?;
+        let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
         for stream in &demuxer.streams {
             println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
         }

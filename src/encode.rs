@@ -35,8 +35,8 @@ pub struct EncoderBuilder {
     sample_format: SampleFormat,
     /// Common
     bit_rate: i64,
-    media_type: MediaType,
     thread_count: i32,
+    media_type: MediaType,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
     hw_device_type: Option<HWDeviceType>,
@@ -105,8 +105,10 @@ impl EncoderBuilder {
     }
 
     /// Set the codec name.
-    pub fn with_codec_name(mut self, codec_name: String) -> Self {
-        self.codec_name = Some(codec_name);
+    /// video codec default is `libx264`
+    /// audio codec default is `aac`
+    pub fn with_codec_name(mut self, codec_name: Option<String>) -> Self {
+        self.codec_name = codec_name;
         self
     }
 
@@ -179,8 +181,9 @@ impl EncoderBuilder {
         self
     }
 
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.codec_opts = Some(options);
+    /// codec options used for encoder
+    pub fn with_options(mut self, options: Option<Options>) -> Self {
+        self.codec_opts = options;
         self
     }
 
@@ -858,7 +861,7 @@ mod tests {
             .with_sample_rate(DEFAULT_SAMPLE_RATE) // 采样率
             .with_bit_rate(DEFAULT_BIT_RATE) // 128kbps 比特率
             .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
-            .with_codec_name("aac".to_string()) // 指定AAC编码
+            .with_codec_name(Some("aac".to_string())) // 指定AAC编码
             .build()
             .unwrap();
 

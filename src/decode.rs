@@ -18,8 +18,8 @@ use rsmpeg::ffi;
 #[derive(Debug, Clone)]
 pub struct DecoderBuilder {
     flags: AvCodecFlags,
-    resize: Option<Resize>,
     media_type: MediaType,
+    resize: Option<Resize>,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
     hw_device_type: Option<HWDeviceType>,
@@ -46,23 +46,24 @@ impl DecoderBuilder {
         self
     }
 
-    /// Set the codec name to use for decoding.
-    /// If not set, the decoder will try to guess the codec based on the input.
-    pub fn with_codec_name(mut self, codec_name: String) -> Self {
-        self.codec_name = Some(codec_name);
-        self
-    }
-
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.codec_opts = Some(options);
-        self
-    }
-
     /// Set resizing to apply to frames.
     ///
     /// * `resize` - Resizing to apply.
-    pub fn with_resize(mut self, resize: Resize) -> Self {
-        self.resize = Some(resize);
+    pub fn with_resize(mut self, resize: Option<Resize>) -> Self {
+        self.resize = resize;
+        self
+    }
+
+    /// Set the codec name to use for decoding.
+    /// If not set, the decoder will try to guess the codec based on the input.
+    pub fn with_codec_name(mut self, codec_name: Option<String>) -> Self {
+        self.codec_name = codec_name;
+        self
+    }
+
+    /// codec options to use for decoding.
+    pub fn with_options(mut self, options: Option<Options>) -> Self {
+        self.codec_opts = options;
         self
     }
 

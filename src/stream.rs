@@ -1,7 +1,8 @@
+use crate::hwaccel::HWDeviceType;
 use crate::io::{Reader, Writer};
 use crate::{utils, MediaType, Options};
 
-use rsmpeg::avcodec::{AVCodecParametersRef, AVPacket};
+use rsmpeg::avcodec::{AVCodec, AVCodecParametersRef, AVPacket};
 use rsmpeg::avformat::{AVInputFormatRef, AVStream};
 use rsmpeg::avutil::AVDictionaryRef;
 use rsmpeg::ffi;
@@ -285,6 +286,142 @@ impl StreamInfo {
     /// * Original stream time base.
     pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, ffi::AVRational) {
         (self.index, self.codec_parameters, self.time_base)
+    }
+
+    /// find codec name, if have hw_device_type, will use hw accelerated codec name
+    /// if not, will use current stream codec name
+    pub fn find_decoder_name(&self, hw_device_type: Option<HWDeviceType>) -> Option<String> {
+        let codec_id = self.codec_id as ffi::AVCodecID;
+        let codec_name = utils::to_string(AVCodec::find_decoder(codec_id)?.name()).unwrap();
+
+        let hw_codec_name = if let Some(hw_type) = hw_device_type {
+            match hw_type {
+                HWDeviceType::CUDA => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_VC1 => Some("vc1_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_VP8 => Some("vp8_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_cuvid".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::QSV => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VC1 => Some("vc1_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VP8 => Some("vp8_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VAAPI => {
+                    // VAAPI使用通用解码器，但需要特定配置
+                    match codec_id {
+                        ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_VC1 => Some("vc1_vaapi".to_string()),
+                        _ => None,
+                    }
+                }
+                HWDeviceType::VIDEOTOOLBOX => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VULKAN => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_vulkan".to_string()),
+                    _ => None,
+                },
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        if hw_codec_name.is_some() {
+            hw_codec_name
+        } else {
+            Some(codec_name)
+        }
+    }
+
+    /// find encoder name, if have hw_device_type, will use hw accelerated codec name
+    /// if not, will use current stream codec name
+    pub fn find_encoder_name(
+        stream_info: &StreamInfo,
+        hw_device_type: Option<HWDeviceType>,
+    ) -> Option<String> {
+        let codec_id = stream_info.codec_id as ffi::AVCodecID;
+        let codec_name = utils::to_string(AVCodec::find_encoder(codec_id)?.name()).unwrap();
+
+        let hw_codec_name = if let Some(hw_type) = hw_device_type {
+            match hw_type {
+                HWDeviceType::CUDA => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_nvenc".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_nvenc".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_nvenc".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::QSV => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VAAPI => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VIDEOTOOLBOX => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VULKAN => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
+                    _ => None,
+                },
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        if hw_codec_name.is_some() {
+            hw_codec_name
+        } else {
+            Some(codec_name)
+        }
     }
 }
 

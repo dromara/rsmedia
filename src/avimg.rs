@@ -198,7 +198,7 @@ mod tests {
         check_size2(
             width as u32,
             height as u32,
-            (width * height) as i64,
+            (width * height * 3) as i64,
             pix_fmt,
         )?;
 

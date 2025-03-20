@@ -13,7 +13,7 @@ fn main() {
 
     let input_path = Path::new("/tmp/bear.mp4");
     let stream_reader = StreamReader::new(input_path).unwrap();
-    let mut demuxer = Demuxer::from_reader(stream_reader, None).unwrap();
+    let mut demuxer = Demuxer::from_reader(stream_reader, None, None).unwrap();
 
     let output_path = Path::new("/tmp/output.mov");
     let stream_writer = StreamWriterBuilder::new(output_path)
@@ -51,10 +51,10 @@ fn main() {
                     // .with_options(Options::preset_h264_nvenc())
                     // other
                     // notes: options must be match with input video encoder codec,
-                    .with_options(Options::preset_h264())
+                    .with_options(Some(Options::preset_h264()))
                     .with_media_type(stream_info.media_type)
                     .with_bit_rate(stream_info.bit_rate)
-                    .with_codec_name(codec.name().to_string_lossy().to_string())
+                    .with_codec_name(Some(codec.name().to_str().unwrap().to_string()))
                     // video
                     .with_video_size(stream_info.width as u32, stream_info.height as u32)
                     .with_time_base_ra(stream_info.time_base)
@@ -82,7 +82,7 @@ fn main() {
                     // other
                     .with_media_type(stream_info.media_type)
                     .with_bit_rate(stream_info.bit_rate)
-                    .with_codec_name(codec.name().to_string_lossy().to_string())
+                    .with_codec_name(Some(codec.name().to_str().unwrap().to_string()))
                     // audio
                     .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
                     .with_sample_format(SampleFormat::from(stream_info.format))

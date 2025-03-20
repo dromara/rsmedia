@@ -9,6 +9,8 @@ use anyhow::Context;
 use std::path::Path;
 
 fn main() {
+    rsmedia::init().unwrap();
+
     let input_path = Path::new("/tmp/bear.mp4");
     let stream_reader = StreamReader::new(input_path).unwrap();
     let mut demuxer = Demuxer::from_reader(stream_reader, None).unwrap();

@@ -469,8 +469,10 @@ impl Encoder {
 
         // Producer key frame every once in a while
         if self.frame_count % self.keyframe_interval == 0 {
-            av_frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
+            // not set for now
+            // av_frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
+        av_frame.set_pict_type(ffi::AV_PICTURE_TYPE_NONE);
 
         log::debug!(
             "send encoder {:?}, time_base: {:?}",

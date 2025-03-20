@@ -72,6 +72,8 @@ impl Options {
         opts.insert("preset".to_string(), "medium".to_string());
         // baseline,main,high
         opts.insert("profile:v".to_string(), "high".to_string());
+        // 场景切换敏感度
+        opts.insert("scenecut".to_string(), "0".to_string());
 
         // HashMap<String, String> -> Options
         opts.into()

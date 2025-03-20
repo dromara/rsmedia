@@ -302,10 +302,6 @@ impl<'a> StreamWriterBuilder<'a> {
         let output_ctx =
             AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut dict, None)
                 .context("Create output format context failed.")?;
-
-        // delay call `av_dict_free`
-        std::mem::forget(dict);
-
         Ok(StreamWriter {
             destination: self.destination,
             output: output_ctx,

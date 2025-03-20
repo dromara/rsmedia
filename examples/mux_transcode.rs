@@ -1,9 +1,9 @@
-use rsmedia::mux::{DemuxResult, Demuxer, Muxer};
 use rsmedia::{
-    EncoderBuilder, MediaType, PixelFormat, SampleFormat, StreamReader, StreamWriterBuilder,
+    mux::{DemuxResult, Demuxer, Muxer},
+    EncoderBuilder, MediaType, Options, PixelFormat, SampleFormat, StreamReader,
+    StreamWriterBuilder,
 };
 use rsmpeg::avcodec::AVCodec;
-use rsmpeg::ffi;
 
 use anyhow::Context;
 use std::path::Path;
@@ -16,6 +16,7 @@ fn main() {
     let output_path = Path::new("/tmp/output.mov");
     let stream_writer = StreamWriterBuilder::new(output_path)
         .with_format("mov")
+        .with_options(Options::preset_avformat_fragmented_mov())
         .build()
         .unwrap();
     let mut muxer = Muxer::from_writer(stream_writer);
@@ -28,8 +29,15 @@ fn main() {
             if stream_info.media_type == MediaType::VIDEO {
                 // build video encoder
                 let codec = {
-                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
-                    AVCodec::find_encoder(codec_id)
+                    // set custom video codec name, eg: libx264, libx265,
+                    // Notes: options muse be match with input video encoder codec,
+                    // Or if you just want to transcode, the codec stay the same,
+                    // just do get codec from input stream_info.codec_id
+                    // ```
+                    // AVCodec::find_encoder(stream_info.codec_id);
+                    // ```
+                    // or set by codec name:
+                    AVCodec::find_encoder_by_name(cstr::cstr!("libx264"))
                         .context("Failed to find decoder")
                         .unwrap()
                 };
@@ -40,6 +48,8 @@ fn main() {
                     // .with_codec_name("h264_nvenc".to_string())
                     // .with_options(Options::preset_h264_nvenc())
                     // other
+                    // notes: options must be match with input video encoder codec,
+                    .with_options(Options::preset_h264())
                     .with_media_type(stream_info.media_type)
                     .with_bit_rate(stream_info.bit_rate)
                     .with_codec_name(codec.name().to_string_lossy().to_string())
@@ -53,8 +63,15 @@ fn main() {
             } else if stream_info.media_type == MediaType::AUDIO {
                 // build audio encoder
                 let codec = {
-                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
-                    AVCodec::find_encoder(codec_id)
+                    // set custom audio codec name, eg: aac, libmp3lame,
+                    // Notes: options muse be match with input audio encoder codec,
+                    // Or if you just want to transcode, the codec stay the same,
+                    // just do get codec from input stream_info.codec_id
+                    // ```
+                    // AVCodec::find_encoder(stream_info.codec_id);
+                    // ```
+                    // or set by codec name:
+                    AVCodec::find_encoder_by_name(cstr::cstr!("aac"))
                         .context("Failed to find decoder")
                         .unwrap()
                 };
@@ -90,7 +107,7 @@ fn main() {
                 continue;
             }
             DemuxResult::Flushed => {
-                println!("End of stream reached");
+                println!("Input stream EOF reached");
                 break;
             }
             DemuxResult::Error(e) => {

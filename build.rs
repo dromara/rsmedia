@@ -49,27 +49,38 @@ fn configure_macos() {
 }
 
 fn configure_windows() {
-    #[cfg(target_env = "msvc")]
-    {
-        // MSVC not need to link libc
-    }
-    #[cfg(target_env = "gnu")]
-    {
-        // GNU (MinGW)
-        let mingw_paths = ["C:\\msys64\\mingw64\\lib", "C:\\MinGW\\lib"];
-        for path in &mingw_paths {
-            if std::path::Path::new(path).exists() {
-                println!("cargo:rustc-link-search=native={}", path);
-            }
+    if let Ok(vcpkg_root) = env::var("VCPKG_ROOT") {
+        let target_triplet = if cfg!(target_arch = "x86_64") {
+            "x64-windows-static"
+        } else {
+            "x86-windows-static"
+        };
+        let lib_path = format!("{}\\installed\\{}\\lib", vcpkg_root, target_triplet);
+
+        // vcpkg lib path
+        println!("cargo:rustc-link-search=native={}", lib_path);
+
+        //  MSVC
+        let system_libs = [
+            "bcrypt", "ole32", "user32", "shell32", "secur32", "ws2_32", "strmiids",
+        ];
+        for lib in system_libs.iter() {
+            println!("cargo:rustc-link-lib={}", lib);
         }
 
-        // necessary
-        println!("cargo:rustc-link-lib=static=mingwex");
-        println!("cargo:rustc-link-lib=dylib=msvcrt");
-
-        // MinGW lib path
-        if let Ok(gcc_dir) = env::var("MINGW_PREFIX") {
-            println!("cargo:rustc-link-search=native={}/lib", gcc_dir);
+        let ffmpeg_libs = [
+            "avcodec",
+            "avformat",
+            "avutil",
+            "swscale",
+            "swresample",
+            "avfilter",
+            "avdevice",
+        ];
+        for lib in ffmpeg_libs.iter() {
+            println!("cargo:rustc-link-lib=static={}", lib);
         }
+    } else {
+        panic!("'VCPKG_ROOT' not found");
     }
 }

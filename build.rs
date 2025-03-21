@@ -50,47 +50,90 @@ fn configure_macos() {
 }
 
 fn configure_windows() {
-    let vcpkg_root = env::var("VCPKG_ROOT").expect("VCPKG_ROOT must be set");
+    let vcpkg_root = env::var("VCPKG_ROOT").expect("VCPKG_ROOT not found.");
     let vcpkg_root = PathBuf::from(vcpkg_root);
     // 检查可用的 triplet
     let triplets = ["x64-windows-static", "x64-windows-static-md", "x64-windows"];
 
-    let mut available_triplets = Vec::new();
+    // 存储所有可用的 triplet 路径
+    let mut available_lib_paths = Vec::new();
+
+    // 检查每个 triplet 的库路径
     for triplet in triplets.iter() {
         let lib_path = vcpkg_root.join("installed").join(triplet).join("lib");
         if lib_path.exists() {
-            available_triplets.push(*triplet);
+            println!("cargo:warning=Found triplet: {}", triplet);
+            available_lib_paths.push(lib_path);
         }
     }
 
-    // 优先使用 static 版本
-    let target_triplet = if available_triplets.contains(&"x64-windows-static") {
-        "x64-windows-static"
-    } else if available_triplets.contains(&"x64-windows-static-md") {
-        "x64-windows-static-md"
-    } else {
-        "x64-windows"
-    };
+    if available_lib_paths.is_empty() {
+        panic!("No valid vcpkg triplets found!");
+    }
 
-    println!("cargo:warning=Using triplet: {}", target_triplet);
+    // 添加所有可用的库路径
+    for lib_path in &available_lib_paths {
+        println!("cargo:rustc-link-search=native={}", lib_path.display());
+    }
 
-    // 添加库搜索路径
-    let lib_path = vcpkg_root
-        .join("installed")
-        .join(target_triplet)
-        .join("lib");
-    println!("cargo:rustc-link-search=native={}", lib_path.display());
+    // Windows SDK 库路径
+    if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
+        let sdk_lib_path = PathBuf::from(windows_sdk_dir)
+            .join("Lib")
+            .join(env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string()))
+            .join("um")
+            .join("x64");
+        println!("cargo:rustc-link-search=native={}", sdk_lib_path.display());
+    }
 
-    let system_libs = [
-        // COM 和 Media Foundation
-        "ole32", "oleaut32", "mfplat", "mfuuid", "strmiids", // 安全相关
-        "secur32", "crypt32", "bcrypt", "ncrypt", // 网络相关
-        "ws2_32", "wininet", // 图形和 UI
-        "gdi32", "user32", "shell32", // 系统核心
-        "kernel32", "advapi32", "psapi", // 其他
-        "uuid", "version",
+    // 分组链接所需的系统库
+    // 1. 安全相关库
+    let security_libs = [
+        "secur32",  // 包含 AcquireCredentialsHandleA 等
+        "security", // 额外的安全功能
+        "crypt32",  // 加密相关
+        "bcrypt",   // BCrypt API
+        "ncrypt",   // NCrypt API
+        "credui",   // 凭据相关
+        "schannel", // SSL/TLS
     ];
 
+    // 2. COM 和 Media Foundation 相关库
+    let com_mf_libs = [
+        "ole32",          // COM 基础
+        "oleaut32",       // COM 自动化
+        "mfplat",         // Media Foundation 平台
+        "mf",             // Media Foundation 核心
+        "mfuuid",         // Media Foundation UUID
+        "strmiids",       // DirectShow UUID
+        "dxva2",          // DirectX Video Acceleration
+        "evr",            // Enhanced Video Renderer
+        "wmcodecdspuuid", // Windows Media Codec
+        "Mfcore",         // Media Foundation Core
+        "Mfplat",         // Media Foundation Platform
+    ];
+
+    // 3. Windows 核心库
+    let core_libs = [
+        "kernel32", // 核心系统功能
+        "user32",   // 用户界面
+        "gdi32",    // 图形设备接口
+        "shell32",  // Shell 功能
+        "advapi32", // 高级 Windows 32 基础 API
+        "wsock32",  // Windows Sockets (旧版)
+        "ws2_32",   // Windows Sockets 2
+        "iphlpapi", // IP Helper API
+        "uuid",     // UUID 生成
+        "normaliz", // 国际化
+        "psapi",    // 进程状态 API
+        "comdlg32", // Common Dialog
+        "glu32",    // OpenGL Utility
+        "version",  // Version checking
+        "winmm",    // Windows Multimedia
+        "imm32",    // Input Method Manager
+    ];
+
+    // FFmpeg
     let ffmpeg_libs = [
         "avcodec",
         "avformat",
@@ -101,45 +144,50 @@ fn configure_windows() {
         "avdevice",
     ];
 
-    match target_triplet {
-        "x64-windows-static" => {
-            // 完全静态链接
-            println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
-            println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
+    // 检查是否存在静态库版本
+    let use_static = available_lib_paths
+        .iter()
+        .any(|p| p.to_string_lossy().contains("static"));
 
-            // 链接 FFmpeg 静态库
-            for lib in ffmpeg_libs.iter() {
-                println!("cargo:rustc-link-lib=static={}", lib);
-            }
+    // 根据可用的库类型设置链接方式
+    for lib in ffmpeg_libs.iter() {
+        if use_static {
+            println!("cargo:rustc-link-lib=static={}", lib);
+        } else {
+            println!("cargo:rustc-link-lib={}", lib);
         }
-        "x64-windows-static-md" => {
-            // 使用动态运行时的静态链接
-            println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
-            println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
-
-            // 链接 FFmpeg 库
-            for lib in ffmpeg_libs.iter() {
-                println!("cargo:rustc-link-lib={}", lib);
-            }
-        }
-        "x64-windows" => {
-            // 动态链接
-            println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
-
-            // 链接 FFmpeg 动态库
-            for lib in ffmpeg_libs.iter() {
-                println!("cargo:rustc-link-lib=dylib={}", lib);
-            }
-        }
-        _ => panic!("Unsupported triplet"),
     }
 
     // 链接系统库
-    for lib in system_libs.iter() {
+    for lib in security_libs.iter() {
         println!("cargo:rustc-link-lib={}", lib);
     }
+
+    for lib in com_mf_libs.iter() {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
+
+    for lib in core_libs.iter() {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
+
+    // 运行时库设置
+    if use_static {
+        println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
+        println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
+    } else {
+        println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
+        println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
+    }
+
+    // 链接器选项
+    println!("cargo:rustc-link-arg=/DYNAMICBASE"); // ASLR
+    println!("cargo:rustc-link-arg=/NXCOMPAT"); // DEP
+    println!("cargo:rustc-link-arg=/SAFESEH"); // Safe Exception Handlers
 
     // 重新运行条件
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
+    println!("cargo:rerun-if-env-changed=WindowsSdkDir");
+    println!("cargo:rerun-if-env-changed=WindowsSDKLibVersion");
 }

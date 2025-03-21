@@ -1,6 +1,6 @@
-use crate::Rational as AvRational;
-
+use rsmpeg::avutil;
 use rsmpeg::ffi;
+use rsmpeg::ffi::AVRational;
 
 use std::time::Duration;
 
@@ -14,10 +14,10 @@ use std::time::Duration;
 ///
 /// A [`Time`] object may be aligned with another [`Time`] object, which produces an [`Aligned`]
 /// object, on which arithmetic operations can be performed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone)]
 pub struct Time {
     time: Option<i64>,
-    time_base: AvRational,
+    time_base: AVRational,
 }
 
 impl Time {
@@ -27,7 +27,7 @@ impl Time {
     ///
     /// * `time` - Relative time in `time_base` units.
     /// * `time_base` - Time base of source.
-    pub fn new(time: Option<i64>, time_base: AvRational) -> Time {
+    pub fn new(time: Option<i64>, time_base: AVRational) -> Time {
         Self { time, time_base }
     }
 
@@ -39,7 +39,7 @@ impl Time {
     ///
     /// The same timestamp, with the time base changed.
     #[inline]
-    pub fn with_time_base(&self, time_base: AvRational) -> Self {
+    pub fn with_time_base(&self, time_base: AVRational) -> Self {
         self.aligned_with_rational(time_base)
     }
 
@@ -51,7 +51,7 @@ impl Time {
     pub fn from_nth_of_a_second(nth: usize) -> Self {
         Self {
             time: Some(1),
-            time_base: AvRational::new(1, nth as i32),
+            time_base: avutil::ra(1, nth as i32),
         }
     }
 
@@ -62,7 +62,7 @@ impl Time {
     /// * `secs` - Number of seconds.
     pub fn from_secs(secs: f32) -> Self {
         Self {
-            time: Some((secs * TIME_BASE.denominator() as f32).round() as i64),
+            time: Some((secs * TIME_BASE.den as f32).round() as i64),
             time_base: TIME_BASE,
         }
     }
@@ -74,7 +74,7 @@ impl Time {
     /// * `secs` - Number of seconds.
     pub fn from_secs_f64(secs: f64) -> Self {
         Self {
-            time: Some((secs * TIME_BASE.denominator() as f64).round() as i64),
+            time: Some((secs * TIME_BASE.den as f64).round() as i64),
             time_base: TIME_BASE,
         }
     }
@@ -88,7 +88,7 @@ impl Time {
     pub fn from_units(time: usize, base_den: usize) -> Self {
         Self {
             time: Some(time as i64),
-            time_base: AvRational::new(1, base_den as i32),
+            time_base: avutil::ra(1, base_den as i32),
         }
     }
 
@@ -96,7 +96,7 @@ impl Time {
     pub fn zero() -> Self {
         Time {
             time: Some(0),
-            time_base: (1, 90000).into(),
+            time_base: avutil::ra(1, 90000),
         }
     }
 
@@ -133,8 +133,7 @@ impl Time {
     /// Get number of seconds as floating point value.
     pub fn as_secs(&self) -> f32 {
         if let Some(time) = self.time {
-            (time as f32)
-                * (self.time_base.numerator() as f32 / self.time_base.denominator() as f32)
+            (time as f32) * (self.time_base.num as f32 / self.time_base.den as f32)
         } else {
             0.0
         }
@@ -143,15 +142,14 @@ impl Time {
     /// Get number of seconds as floating point value.
     pub fn as_secs_f64(&self) -> f64 {
         if let Some(time) = self.time {
-            (time as f64)
-                * (self.time_base.numerator() as f64 / self.time_base.denominator() as f64)
+            (time as f64) * (self.time_base.num as f64 / self.time_base.den as f64)
         } else {
             0.0
         }
     }
 
     /// Convert to underlying parts: the `time` and `time_base`.
-    pub fn into_parts(self) -> (Option<i64>, AvRational) {
+    pub fn into_parts(self) -> (Option<i64>, AVRational) {
         (self.time, self.time_base)
     }
 
@@ -168,7 +166,7 @@ impl Time {
     /// # Arguments
     ///
     /// * `time_base` - Target time base.
-    pub(crate) fn aligned_with_rational(&self, time_base: AvRational) -> Time {
+    pub(crate) fn aligned_with_rational(&self, time_base: AVRational) -> Time {
         Time {
             time: self
                 .time
@@ -181,53 +179,93 @@ impl Time {
 /////////////////////////////////
 /////////////////////////////////
 
-pub const TIME_BASE: AvRational = AvRational(ffi::AV_TIME_BASE_Q.num, ffi::AV_TIME_BASE_Q.den);
+pub const TIME_BASE: AVRational = avutil::ra(ffi::AV_TIME_BASE_Q.num, ffi::AV_TIME_BASE_Q.den);
 
 pub trait Rescale {
     fn rescale<S, D>(&self, source: S, destination: D) -> i64
     where
-        S: Into<AvRational>,
-        D: Into<AvRational>;
+        S: Into<AVRational>,
+        D: Into<AVRational>;
 
     fn rescale_with<S, D>(&self, source: S, destination: D, rounding: ffi::AVRounding) -> i64
     where
-        S: Into<AvRational>,
-        D: Into<AvRational>;
+        S: Into<AVRational>,
+        D: Into<AVRational>;
 }
 
 impl<T: Into<i64> + Clone> Rescale for T {
     fn rescale<S, D>(&self, source: S, destination: D) -> i64
     where
-        S: Into<AvRational>,
-        D: Into<AvRational>,
+        S: Into<AVRational>,
+        D: Into<AVRational>,
     {
-        unsafe {
-            ffi::av_rescale_q(
-                self.clone().into(),
-                source.into().into(),
-                destination.into().into(),
-            )
-        }
+        unsafe { ffi::av_rescale_q(self.clone().into(), source.into(), destination.into()) }
     }
 
     fn rescale_with<S, D>(&self, source: S, destination: D, rounding: ffi::AVRounding) -> i64
     where
-        S: Into<AvRational>,
-        D: Into<AvRational>,
+        S: Into<AVRational>,
+        D: Into<AVRational>,
     {
         unsafe {
             ffi::av_rescale_q_rnd(
                 self.clone().into(),
-                source.into().into(),
-                destination.into().into(),
+                source.into(),
+                destination.into(),
                 rounding,
             )
         }
     }
 }
 
-/////////////////////////////////
-/////////////////////////////////
+#[inline(always)]
+pub fn av_rational_eq(a: &AVRational, b: &AVRational) -> bool {
+    a.num == b.num && a.den == b.den
+}
+
+impl PartialEq for Time {
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+            && self.time_base.num == other.time_base.num
+            && self.time_base.den == other.time_base.den
+    }
+}
+
+impl Eq for Time {}
+
+impl PartialOrd for Time {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self.time, other.time) {
+            // None的特殊处理规则
+            (None, None) => Some(std::cmp::Ordering::Equal),
+            (None, Some(_)) => Some(std::cmp::Ordering::Less),
+            (Some(_), None) => Some(std::cmp::Ordering::Greater),
+
+            // 有效时间的比较逻辑
+            (Some(t1), Some(t2)) => {
+                // 时间基不同时返回不可比较
+                if !av_rational_eq(&self.time_base, &other.time_base) {
+                    return None;
+                }
+
+                // 相同时间基直接比较
+                t1.partial_cmp(&t2)
+            }
+        }
+    }
+}
+
+impl PartialEq<(Option<i64>, AVRational)> for Time {
+    fn eq(&self, other: &(Option<i64>, AVRational)) -> bool {
+        *self == Time::new(other.0, other.1)
+    }
+}
+
+impl PartialEq<Time> for (Option<i64>, AVRational) {
+    fn eq(&self, other: &Time) -> bool {
+        other == self
+    }
+}
 
 impl From<Duration> for Time {
     /// Convert from a [`Duration`] to [`Time`].
@@ -251,8 +289,8 @@ impl std::fmt::Display for Time {
     /// * If the inner value is `None`: `none`.
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Some(time) = self.time {
-            let num = self.time_base.numerator() as i64 * time;
-            let den = self.time_base.denominator();
+            let num = self.time_base.num as i64 * time;
+            let den = self.time_base.den;
             write!(f, "{num}/{den} secs")
         } else {
             write!(f, "none")
@@ -268,7 +306,7 @@ impl std::fmt::Display for Time {
 pub struct Aligned {
     lhs: Option<i64>,
     rhs: Option<i64>,
-    time_base: AvRational,
+    time_base: AVRational,
 }
 
 impl Aligned {
@@ -312,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let time = Time::new(Some(2), AvRational::new(3, 9));
+        let time = Time::new(Some(2), avutil::ra(3, 9));
         assert!(time.has_value());
         assert_eq!(time.as_secs(), 2.0 / 3.0);
         assert_eq!(time.into_value(), Some(2));
@@ -320,9 +358,9 @@ mod tests {
 
     #[test]
     fn test_with_time_base() {
-        let time = Time::new(Some(2), AvRational::new(3, 9));
+        let time = Time::new(Some(2), avutil::ra(3, 9));
         assert_eq!(time.as_secs(), 2.0 / 3.0);
-        let time = time.with_time_base(AvRational::new(1, 9));
+        let time = time.with_time_base(avutil::ra(1, 9));
         assert_eq!(time.as_secs(), 2.0 / 3.0);
         assert_eq!(time.into_value(), Some(6));
     }
@@ -395,7 +433,7 @@ mod tests {
         assert_eq!(time.as_secs(), 0.25);
         let time = Time::from_secs(0.3);
         assert_eq!(time.as_secs(), 0.3);
-        let time = Time::new(None, AvRational::new(0, 0));
+        let time = Time::new(None, avutil::ra(0, 0));
         assert_eq!(time.as_secs(), 0.0);
     }
 
@@ -405,19 +443,19 @@ mod tests {
         assert_eq!(time.as_secs_f64(), 0.25);
         let time = Time::from_secs_f64(0.3);
         assert_eq!(time.as_secs_f64(), 0.3);
-        let time = Time::new(None, AvRational::new(0, 0));
+        let time = Time::new(None, avutil::ra(0, 0));
         assert_eq!(time.as_secs_f64(), 0.0);
     }
 
     #[test]
     fn test_into_parts() {
-        let time = Time::new(Some(1), AvRational::new(2, 3));
-        assert_eq!(time.into_parts(), (Some(1), AvRational::new(2, 3)));
+        let time = Time::new(Some(1), avutil::ra(2, 3));
+        assert_eq!(time, (Some(1), avutil::ra(2, 3)));
     }
 
     #[test]
     fn test_into_value_none() {
-        let time = Time::new(None, AvRational::new(0, 0));
+        let time = Time::new(None, avutil::ra(0, 0));
         assert_eq!(time.into_value(), None);
     }
 
@@ -447,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_apply_different_time_bases() {
-        let a = Time::new(Some(3), AvRational::new(2, 32));
+        let a = Time::new(Some(3), avutil::ra(2, 32));
         let b = Time::from_nth_of_a_second(4);
         assert!(
             (a.aligned_with(b).apply(|x, y| x + y).as_secs()
@@ -460,14 +498,14 @@ mod tests {
     #[test]
     fn test_negative_into_duration_clamps() {
         assert_eq!(
-            Duration::from(Time::new(Some(-100), AvRational::new(0, 0))),
+            Duration::from(Time::new(Some(-100), avutil::ra(0, 0))),
             Duration::ZERO,
         )
     }
 
     #[test]
     fn test_av_no_pts_value() {
-        let nopts = Time::new(Some(ffi::AV_NOPTS_VALUE), AvRational::new(0, 0));
+        let nopts = Time::new(Some(ffi::AV_NOPTS_VALUE), avutil::ra(0, 0));
         assert_eq!(nopts.into_value(), Some(ffi::AV_NOPTS_VALUE));
         assert_eq!(Duration::from(nopts).as_secs_f32(), 0.0);
     }

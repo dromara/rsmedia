@@ -1,9 +1,10 @@
+use crate::flags::MediaType;
 use crate::location::Location;
 use crate::options::Options;
-use crate::stream::{Stream, StreamInfo};
+use crate::stream::Stream;
 use crate::utils;
-use crate::Packet;
 
+use rsmpeg::avcodec::{AVCodecParameters, AVPacket};
 use rsmpeg::avformat::{AVFormatContextInput, AVFormatContextOutput, AVInputFormat};
 use rsmpeg::error::RsmpegError;
 use rsmpeg::ffi;
@@ -11,7 +12,45 @@ use rsmpeg::ffi;
 use anyhow::{Context, Error, Result};
 use std::ops::{Bound, Deref};
 
-/// Builds a [`Reader`].
+pub trait Reader {
+    fn input(&self) -> &AVFormatContextInput;
+
+    fn input_mut(&mut self) -> &mut AVFormatContextInput;
+
+    fn read_packet(&mut self) -> Result<Option<(Stream, AVPacket)>> {
+        match self.input_mut().read_packet() {
+            Ok(Some(pkt)) => {
+                let av_stream = self
+                    .input()
+                    .streams()
+                    .get(pkt.stream_index as usize)
+                    .unwrap();
+                let iformat = self.input().iformat();
+                let metadata = self.input().metadata();
+                Ok(Some((Stream::wrap(av_stream, iformat, metadata), pkt)))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(Error::new(e)),
+        }
+    }
+
+    /// Find the best stream
+    ///
+    /// # Arguments
+    ///
+    /// * `media_type` - MediaType maybe Video, Audio, etc.
+    fn find_best_stream(&self, media_type: MediaType) -> Result<(usize, String)> {
+        self.input()
+            .find_best_stream(media_type as _)?
+            .map(|(index, codec)| (index, utils::to_string(codec.name()).unwrap()))
+            .ok_or(Error::msg(format!(
+                "No stream found for MediaType:{:?}",
+                media_type
+            )))
+    }
+}
+
+/// Builds a [`StreamReader`].
 ///
 /// # Example
 ///
@@ -22,18 +61,18 @@ use std::ops::{Bound, Deref};
 ///     "tcp".to_string(),
 /// );
 ///
-/// let mut reader = ReaderBuilder::new(Path::new("my_file.mp4"))
+/// let mut reader = StreamReaderBuilder::new(Path::new("my_file.mp4"))
 ///    .with_options(&options.into())
 ///    .build()
 ///    .unwrap();
 /// ```
-pub struct ReaderBuilder<'a> {
+pub struct StreamReaderBuilder<'a> {
     source: Location,
     format: Option<&'a str>,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
-impl<'a> ReaderBuilder<'a> {
+impl<'a> StreamReaderBuilder<'a> {
     /// Create a new reader with the specified locator.
     ///
     /// # Arguments
@@ -62,13 +101,13 @@ impl<'a> ReaderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to input.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
 
-    /// Build [`Reader`].
-    pub fn build(self) -> Result<Reader> {
+    /// Build [`StreamReader`].
+    pub fn build(self) -> Result<StreamReader> {
         let src_path = self.source.as_path().to_str().unwrap();
         let protocol =
             unsafe { ffi::avio_find_protocol_name(utils::to_c_char(src_path) as *const _) };
@@ -88,13 +127,13 @@ impl<'a> ReaderBuilder<'a> {
         let fmt_opt = self
             .format
             .and_then(|str| AVInputFormat::find(&utils::from_str(str)));
-        let mut opts = self.options.map(|opts| opts.to_dict());
-        let mut ctx_input = AVFormatContextInput::open(&filename, fmt_opt.as_deref(), &mut opts)
+        let mut dict = self.options.map(|opts| opts.into_dict());
+        let mut ctx_input = AVFormatContextInput::open(&filename, fmt_opt.as_deref(), &mut dict)
             .context("Create input format context failed.")?;
         ctx_input
             .dump(0, &filename)
             .context("Dump input format context failed.")?;
-        Ok(Reader {
+        Ok(StreamReader {
             source: self.source,
             input: ctx_input,
         })
@@ -102,12 +141,12 @@ impl<'a> ReaderBuilder<'a> {
 }
 
 /// Video reader that can read from files.
-pub struct Reader {
+pub struct StreamReader {
     pub source: Location,
     pub input: AVFormatContextInput,
 }
 
-impl Reader {
+impl StreamReader {
     /// Create a new video file reader on a given source (path, URL, etc.).
     ///
     /// # Arguments
@@ -115,75 +154,7 @@ impl Reader {
     /// * `source` - Source to read from.
     #[inline]
     pub fn new(source: impl Into<Location>) -> Result<Self> {
-        ReaderBuilder::new(source).build()
-    }
-
-    /// Read a single packet from the source video file.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to read from.
-    ///
-    /// # Example
-    ///
-    /// Read a single packet:
-    ///
-    /// ```ignore
-    /// let mut reader = Reader::new(Path::new("my_video.mp4")).unwrap();
-    /// let stream = reader.best_video_stream_index().unwrap();
-    /// let mut packet = reader.read(stream).unwrap();
-    /// ```
-    pub fn read(&mut self, stream_index: usize) -> Result<Packet> {
-        loop {
-            match self.read_packet() {
-                Ok(Some((stream, packet))) => {
-                    if stream.index() == stream_index {
-                        return Ok(Packet::new(packet, stream.time_base()));
-                    }
-                    log::debug!("Skipping packet from stream: {}", stream.index());
-                }
-                Ok(None) => return Err(Error::msg("No more packets")),
-                Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    pub fn read_any(&mut self) -> Result<Packet> {
-        match self.read_packet() {
-            Ok(Some((stream, packet))) => Ok(Packet::new(packet, stream.time_base())),
-            Ok(None) => Err(Error::msg("No more packets")),
-            Err(e) => {
-                log::error!("Error reading packet: {}", e);
-                Err(e)
-            }
-        }
-    }
-
-    pub fn read_packet(&mut self) -> Result<Option<(Stream, Packet)>> {
-        match self.input.read_packet() {
-            Ok(Some(pkt)) => {
-                let av_stream = self.input.streams().get(pkt.stream_index as usize).unwrap();
-                Ok(Some((
-                    Stream::wrap(av_stream),
-                    Packet::new_with_avpacket(pkt),
-                )))
-            }
-            Ok(None) => Ok(None),
-            Err(e) => Err(Error::new(e)),
-        }
-    }
-
-    /// Retrieve stream information for a stream. Stream information can be used to set up a
-    /// corresponding stream for transmuxing or transcoding.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to produce information for.
-    pub fn stream_info(&self, stream_index: usize) -> Result<StreamInfo> {
-        StreamInfo::from_reader(self, stream_index)
+        StreamReaderBuilder::new(source).build()
     }
 
     /// Seek in reader. This will change the reader head so that it points to a location within one
@@ -249,30 +220,20 @@ impl Reader {
             }
         }
     }
+}
 
-    /// Find the best video stream and return the index.
-    pub fn best_video_stream_index(&self) -> Result<(usize, String)> {
-        let res = self
-            .input
-            .find_best_stream(ffi::AVMEDIA_TYPE_VIDEO)?
-            .map(|(index, codec)| (index, utils::to_string(codec.name())))
-            .ok_or(Error::msg("No video stream found"))?;
-        Ok(res)
+impl Reader for StreamReader {
+    fn input(&self) -> &AVFormatContextInput {
+        &self.input
     }
 
-    /// Find the best audio stream and return the index.
-    pub fn best_audio_stream_index(&self) -> Result<(usize, String)> {
-        let res = self
-            .input
-            .find_best_stream(ffi::AVMEDIA_TYPE_AUDIO)?
-            .map(|(index, codec)| (index, utils::to_string(codec.name())))
-            .ok_or(Error::msg("No audio stream found"))?;
-        Ok(res)
+    fn input_mut(&mut self) -> &mut AVFormatContextInput {
+        &mut self.input
     }
 }
 
-unsafe impl Send for Reader {}
-unsafe impl Sync for Reader {}
+unsafe impl Send for StreamReader {}
+unsafe impl Sync for StreamReader {}
 
 /// Any type that implements this can write video packets.
 pub trait Writer: private::Write + private::Output {}
@@ -281,7 +242,7 @@ pub trait Writer: private::Write + private::Output {}
 pub struct StreamWriterBuilder<'a> {
     destination: Location,
     format: Option<&'a str>,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> StreamWriterBuilder<'a> {
@@ -298,11 +259,26 @@ impl<'a> StreamWriterBuilder<'a> {
         }
     }
 
-    /// Specify a custom format for the writer.
+    /// Specify a container format for the writer.
     ///
     /// # Arguments
     ///
-    /// * `format` - Container format to use.
+    /// * `format` - Container format to use. eg. `"mp4"`, `"mkv"`, `"mov"`, `"avi"`, `"flv"`.
+    ///
+    /// reference: https://trac.ffmpeg.org/wiki/HWAccelIntro
+    ///
+    /// | Format                          | Filename Extension | H.264/AVC | H.265/HEVC | AV1   |
+    /// |---------------------------------|--------------------|-----------|------------|-------|
+    /// | Matroska                        | .mkv               | Y         | Y          | Y     |
+    /// | MPEG-4 Part 14 (MP4)            | .mp4               | Y         | Y          | Y     |
+    /// | Audio Video Interleave (AVI)    | .avi               | Y         | N          | Y     |
+    /// | Material Exchange Format (MXF)  | .mxf               | Y         | n/a        | n/a   |
+    /// | MPEG transport stream (TS)      | .ts                | Y         | Y          | N     |
+    /// | 3GPP (3GP)                      | .3gp               | Y         | n/a        | n/a   |
+    /// | Flash Video (FLV)               | .flv               | Y         | n/a        | n/a   |
+    /// | WebM                            | .webm              | n/a       | n/a        | Y     |
+    /// | Advanced Systems Format (ASF)   | .asf, .wmv         | Y         | Y          | Y     |
+    /// | QuickTime File Format (QTFF)    | .mov               | Y         | Y          | n/a   |
     pub fn with_format(mut self, format: &'a str) -> Self {
         self.format = Some(format);
         self
@@ -313,7 +289,7 @@ impl<'a> StreamWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
@@ -322,9 +298,9 @@ impl<'a> StreamWriterBuilder<'a> {
     pub fn build(self) -> Result<StreamWriter> {
         let filename = utils::from_path(&self.destination.as_path());
         let format = self.format.map(utils::from_str);
-        let mut opts = self.options.map(|opts| opts.to_dict());
+        let mut dict = self.options.map(|opts| opts.into_dict());
         let output_ctx =
-            AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut opts, None)
+            AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut dict, None)
                 .context("Create output format context failed.")?;
         Ok(StreamWriter {
             destination: self.destination,
@@ -366,16 +342,6 @@ impl StreamWriter {
     pub fn new(destination: impl Into<Location>) -> Result<Self> {
         StreamWriterBuilder::new(destination).build()
     }
-
-    /// Retrieve stream information for a stream. Stream information can be used to set up a
-    /// corresponding stream for transmuxing or transcoding.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream_index` - Index of stream to produce information for.
-    pub fn stream_info(&self, stream_index: usize) -> Result<StreamInfo> {
-        StreamInfo::from_writer(self, stream_index)
-    }
 }
 
 impl Writer for StreamWriter {}
@@ -392,7 +358,7 @@ pub type Bufs = Vec<Buf>;
 /// Build a [`BufferWriter`].
 pub struct BufferWriterBuilder<'a> {
     format: &'a str,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> BufferWriterBuilder<'a> {
@@ -413,16 +379,16 @@ impl<'a> BufferWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
 
     /// Build [`BufferWriter`].
     pub fn build(self) -> Result<BufferWriter> {
+        let _dict = self.options.map(|opts| opts.into_dict());
         Ok(BufferWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned(),
         })
     }
 }
@@ -437,7 +403,6 @@ impl<'a> BufferWriterBuilder<'a> {
 /// ```
 pub struct BufferWriter {
     pub(crate) output: AVFormatContextOutput,
-    options: Option<Options>,
 }
 
 impl BufferWriter {
@@ -476,7 +441,7 @@ unsafe impl Sync for BufferWriter {}
 /// Build a [`PacketizedBufWriter`].
 pub struct PacketizedBufWriterBuilder<'a> {
     format: &'a str,
-    options: Option<&'a Options>,
+    options: Option<Options>,
 }
 
 impl<'a> PacketizedBufWriterBuilder<'a> {
@@ -497,16 +462,16 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: &'a Options) -> Self {
+    pub fn with_options(mut self, options: Options) -> Self {
         self.options = Some(options);
         self
     }
 
     /// Build [`PacketizedBufWriter`].
     pub fn build(self) -> Result<PacketizedBufWriter> {
+        let _dict = self.options.map(|opts| opts.into_dict());
         Ok(PacketizedBufWriter {
             output: output_raw(self.format)?,
-            options: self.options.cloned(),
             buffers: Vec::new(),
         })
     }
@@ -523,7 +488,6 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
 /// ```
 pub struct PacketizedBufWriter {
     pub(crate) output: AVFormatContextOutput,
-    options: Option<Options>,
     buffers: Bufs,
 }
 
@@ -570,8 +534,9 @@ impl Writer for PacketizedBufWriter {}
 unsafe impl Send for PacketizedBufWriter {}
 unsafe impl Sync for PacketizedBufWriter {}
 
-pub(crate) mod private {
+pub mod private {
     use super::*;
+    use rsmpeg::avcodec::AVPacket;
 
     pub trait Write {
         type Out;
@@ -583,15 +548,15 @@ pub(crate) mod private {
         ///
         /// # Arguments
         ///
-        /// * `packet` - Packet to write.
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<Self::Out>;
+        /// * `packet` - AVPacket to write.
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<Self::Out>;
 
         /// Write a packet into the container and take care of interleaving.
         ///
         /// # Arguments
         ///
-        /// * `packet` - Packet to write.
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Self::Out>;
+        /// * `packet` - AVPacket to write.
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<Self::Out>;
 
         /// Write the container trailer.
         fn write_trailer(&mut self) -> Result<Self::Out>;
@@ -607,19 +572,13 @@ pub(crate) mod private {
             Ok(())
         }
 
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<()> {
-            // packet.write(&mut self.output)?;
-            self.output
-                .write_frame(packet.as_inner())
-                .context("Failed to write frame")?;
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<()> {
+            self.output.write_frame(packet)?;
             Ok(())
         }
 
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<()> {
-            // packet.write_interleaved(&mut self.output)?;
-            self.output
-                .interleaved_write_frame(packet.as_inner())
-                .context("Failed to write interleaved frame")?;
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<()> {
+            self.output.interleaved_write_frame(packet)?;
             Ok(())
         }
 
@@ -636,21 +595,20 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Buf> {
             self.begin_write();
-            let mut dict = self.options.clone().map(|options| options.to_dict());
-            self.output.write_header(&mut dict)?;
+            self.output.write_header(&mut None)?;
             Ok(self.end_write())
         }
 
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<Buf> {
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<Buf> {
             self.begin_write();
-            packet.write(&mut self.output)?;
+            self.output.write_frame(packet)?;
             flush_output(&mut self.output)?;
             Ok(self.end_write())
         }
 
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Buf> {
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<Buf> {
             self.begin_write();
-            packet.write_interleaved(&mut self.output)?;
+            self.output.interleaved_write_frame(packet)?;
             flush_output(&mut self.output)?;
             Ok(self.end_write())
         }
@@ -667,23 +625,22 @@ pub(crate) mod private {
 
         fn write_header(&mut self) -> Result<Bufs> {
             self.begin_write();
-            let mut dict = self.options.clone().map(|options| options.to_dict());
-            self.output.write_header(&mut dict)?;
+            self.output.write_header(&mut None)?;
             self.end_write();
             Ok(self.take_buffers())
         }
 
-        fn write_frame(&mut self, packet: &mut Packet) -> Result<Bufs> {
+        fn write_frame(&mut self, packet: &mut AVPacket) -> Result<Bufs> {
             self.begin_write();
-            packet.write(&mut self.output)?;
+            self.output.write_frame(packet)?;
             flush_output(&mut self.output)?;
             self.end_write();
             Ok(self.take_buffers())
         }
 
-        fn write_interleaved(&mut self, packet: &mut Packet) -> Result<Bufs> {
+        fn write_interleaved(&mut self, packet: &mut AVPacket) -> Result<Bufs> {
             self.begin_write();
-            packet.write_interleaved(&mut self.output)?;
+            self.output.interleaved_write_frame(packet)?;
             flush_output(&mut self.output)?;
             self.end_write();
             Ok(self.take_buffers())
@@ -703,6 +660,14 @@ pub(crate) mod private {
 
         /// Obtain mutable reference to output context.
         fn output_mut(&mut self) -> &mut AVFormatContextOutput;
+
+        /// new stream
+        fn add_stream(&mut self, codecpar: AVCodecParameters, timebase: ffi::AVRational) -> usize {
+            let mut av_stream = self.output_mut().new_stream();
+            av_stream.set_codecpar(codecpar);
+            av_stream.set_time_base(timebase);
+            av_stream.index as usize
+        }
     }
 
     impl Output for StreamWriter {

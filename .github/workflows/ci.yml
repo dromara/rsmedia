@@ -2,11 +2,11 @@ name: ci
 
 on:
   push:
-    branches: [ "main", "rsmpeg" ]
+    branches: [ "main", "rsmpeg", "dev" ]
     paths-ignore:
       - 'README.md'
   pull_request:
-    branches: [ "main", "rsmpeg" ]
+    branches: [ "main", "rsmpeg", "dev" ]
     paths-ignore:
       - 'README.md'
 
@@ -28,10 +28,10 @@ jobs:
         include:
           # FFmpeg 6.x
           - ffmpeg_version: "6.1"
-            feature: "ffmpeg6,ndarray"
+            feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           # FFmpeg 7.x
           - ffmpeg_version: "7.1"
-            feature: "ffmpeg7,ndarray"
+            feature: "ndarray,ffmpeg7,link_system_ffmpeg"
       fail-fast: false
 
     steps:
@@ -69,8 +69,8 @@ jobs:
             libssl-dev \
             librtmp-dev \
             libvpx-dev \
-            libsvtav1-dev \
             libaom-dev \
+            libsvtav1-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
@@ -79,8 +79,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy, rust-src, llvm-tools-preview, rust-analysis
 
-      - name: Configure Rust linker settings
+      - name: Configure Rust linker
         run: |
           mkdir -p .cargo
           cat > .cargo/config.toml << EOF
@@ -94,7 +97,10 @@ jobs:
             "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
           ]
           EOF
-    
+
+      - name: Clippy check
+        run: cargo clippy --no-default-features --features ${{ matrix.feature }} -- -D warnings
+
       - name: Build
         run: cargo build --no-default-features --features ${{ matrix.feature }} --verbose
 
@@ -109,13 +115,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Install dependencies
         run: |
           brew install ffmpeg pkg-config
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-    
       - name: Build
         run: cargo build --verbose
 
@@ -126,38 +143,73 @@ jobs:
     name: build / windows / latest ffmpeg
     runs-on: windows-latest
 
-    env:
-      FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
-      RUST_BACKTRACE: 1
+    strategy:
+      matrix:
+        include:
+          - ffmpeg_version: "7.1"
+            feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
+      fail-fast: false
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          $VCINSTALLDIR = $(& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath)
-          Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=${VCINSTALLDIR}\VC\Tools\LLVM\x64\bin`n"
-          Invoke-WebRequest "${env:FFMPEG_DOWNLOAD_URL}" -OutFile ffmpeg-release-full-shared.7z
-          7z x ffmpeg-release-full-shared.7z
-          mv ffmpeg-*/* ffmpeg/
-          Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg`n"
-          Add-Content $env:GITHUB_ENV "FFMPEG_INCLUDE_DIR=${pwd}\ffmpeg\include`n"
-          Add-Content $env:GITHUB_ENV "FFMPEG_LIBS_DIR=${pwd}\ffmpeg\lib`n"
-          Add-Content $env:GITHUB_ENV "FFMPEG_DLL_PATH=${pwd}\ffmpeg\bin`n"
-          Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin`n"
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      # Using this since it's used by clang-sys's CI
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: "10.0"
+          directory: ${{ github.workspace }}/clang
+
+      - name: Cache vcpkg
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          key: vcpkg-${{ runner.os }}-x64-windows-static-md
+
+      - name: Build vcpkg
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/microsoft/vcpkg --depth 1
+          ./vcpkg/bootstrap-vcpkg.bat
+
+      - name: Install Dependencies
+        run: |
+          ./vcpkg/vcpkg.exe install ffmpeg:x64-windows-static-md
+
+      - name: Set ENV
+        run: |
+          echo "VCPKG_ROOT=${{ github.workspace }}/vcpkg" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=${{ github.workspace }}/clang/lib" >> $GITHUB_ENV
+          echo "LLVM_CONFIG_PATH=${{ github.workspace }}/clang/bin/llvm-config" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Clippy check
+        run: cargo clippy --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --no-default-features --features ${{ matrix.feature }} --verbose
 
       # TODO: Fix linking error on Windows
       # error: linking with `link.exe` failed: exit code: 1181
       # note: LINK : fatal error LNK1181: cannot open input file 'bin.lib'
-      #- name: Run Test
-      #  run: cargo test --verbose
+      # - name: Run Test
+      #  run: cargo test --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   test:
     runs-on: ubuntu-latest
@@ -198,8 +250,8 @@ jobs:
             libssl-dev \
             librtmp-dev \
             libvpx-dev \
-            libsvtav1-dev \
             libaom-dev \
+            libsvtav1-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
@@ -225,7 +277,7 @@ jobs:
           EOF
 
       - name: Test
-        run: cargo test --verbose -- --nocapture
+        run: cargo test --all-features --verbose -- --nocapture
 
   lints:
     runs-on: ubuntu-latest
@@ -266,8 +318,8 @@ jobs:
             libssl-dev \
             librtmp-dev \
             libvpx-dev \
-            libsvtav1-dev \
             libaom-dev \
+            libsvtav1-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
@@ -277,10 +329,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
-    
-      - name: Rustfmt
+
+      - name: Rust fmt
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --all -- -D warnings
+        run: cargo clippy --all --all-features  -- -D warnings

@@ -89,7 +89,7 @@ fn open_input_file(
     let mut decode_ctx = AVCodecContext::new(&decode_codec);
     let time_base = avutil::ra(1, 24);
     decode_ctx.set_time_base(time_base);
-    decode_ctx.set_pkt_timebase(time_base);
+    decode_ctx.set_pkt_timebase(video_stream.time_base);
     decode_ctx.set_sample_aspect_ratio(avutil::ra(1, 1));
     decode_ctx.apply_codecpar(&video_stream.codecpar())?;
 
@@ -134,7 +134,6 @@ fn open_output_file(
     encode_ctx.set_height(decode_ctx.height);
     encode_ctx.set_framerate(decode_ctx.framerate);
     encode_ctx.set_time_base(decode_ctx.time_base);
-    encode_ctx.set_pkt_timebase(decode_ctx.pkt_timebase);
     encode_ctx.set_sample_aspect_ratio(decode_ctx.sample_aspect_ratio);
 
     // Some formats want stream headers to be separate.

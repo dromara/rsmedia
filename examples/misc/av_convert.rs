@@ -1,6 +1,7 @@
 use anyhow::Result;
 use image::RgbImage;
-use rsmedia::{frame, PixelFormat};
+use rsmedia::swctx;
+use rsmedia::PixelFormat;
 use rsmpeg::{avutil::AVFrame, ffi};
 
 /// 将 RgbImage 转换为 AVFrame
@@ -30,7 +31,7 @@ pub fn image_rgb_to_avframe_rgb24(image: &RgbImage, frame_pts: i64) -> Result<AV
 /// 将 RgbImage 转换为 AVFrame
 pub fn image_rgb_to_avframe_yuv420p(image: &RgbImage, frame_pts: i64) -> Result<AVFrame> {
     let rgb_frame = image_rgb_to_avframe_rgb24(image, frame_pts)?;
-    frame::convert_avframe(
+    swctx::scale_frame(
         &rgb_frame,
         rgb_frame.width,
         rgb_frame.height,
@@ -82,7 +83,7 @@ pub fn avframe_rgb24_to_image_rgb(rgb_frame: &AVFrame) -> Result<RgbImage> {
 
 /// 将 AVFrame YUV420P 转换为 RgbImage
 pub fn avframe_yuv420p_to_image_rgb(frame: &AVFrame) -> Result<RgbImage> {
-    let rgb_frame = frame::convert_avframe(&frame, frame.width, frame.height, PixelFormat::RGB24)?;
+    let rgb_frame = swctx::scale_frame(&frame, frame.width, frame.height, PixelFormat::RGB24)?;
     avframe_rgb24_to_image_rgb(&rgb_frame)
 }
 

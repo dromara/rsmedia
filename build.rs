@@ -62,12 +62,15 @@ fn configure_windows() {
 
         //  MSVC
         let system_libs = [
-            "bcrypt", "ole32", "user32", "shell32", "secur32", "ws2_32", "strmiids",
+            "secur32", "ws2_32", "wininet", "crypt32", "bcrypt", "ncrypt", "ole32", "oleaut32",
+            "gdi32", "user32", "psapi", "advapi32", "shell32", "strmiids", "mfplat", "mfuuid",
+            "kernel32", "uuid", "version", "msvcrt", "libcmt",
         ];
         for lib in system_libs.iter() {
             println!("cargo:rustc-link-lib={}", lib);
         }
 
+        // ffmpeg static libs
         let ffmpeg_libs = [
             "avcodec",
             "avformat",

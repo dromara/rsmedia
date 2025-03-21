@@ -8,6 +8,20 @@ Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rs
 
 ffmpeg 6.x, 7.x is supported based [rusty_ffmpeg](https://github.com/CCExtractor/rusty_ffmpeg)
 
+## 🎬 Introduction
+
+`rsmedia` is a general-purpose video/audio media library for Rust that uses the
+`libav`-family libraries from `ffmpeg`.
+
+It aims to provide a stable and Rusty
+interface to many common media tasks such as reading, writing, muxing, encoding, decoding, Picture Quality Enhancement and Image Processing.
+
+## 🛠 S️️tatus
+
+⚠️ This project is still a work-in-progress, and will contain bugs. Some parts
+of the API have not been flushed out yet. Use with caution.
+
+
 ## Wiki
 
 - [Home](https://github.com/phial3/rsmedia/wiki/rsmedia-Home)
@@ -38,30 +52,30 @@ ffmpeg 6.x, 7.x is supported based [rusty_ffmpeg](https://github.com/CCExtractor
 > <https://github.com/remotia/remotia-ffmpeg-codecs>
 
 
-## Status
->
-> ⛔ Incorrect formatting
->
-> ✔️ Register successfully
->
-> ✅ Succeed
->
-> 🔴 Build failed
->
-> 🟢 Test passed
-> 
-> ❌ Test failed
-
-## Advanced usage
+##  📦 Advanced usage
 
 1. FFmpeg linking: refer to [`rusty_ffmpeg`](https://github.com/CCExtractor/rusty_ffmpeg)'s documentation for how to use environment variables to statically or dynamically link FFmpeg.
 
 2. Advanced usage of rsmpeg: Check out the `examples` folder.
 
-## usage
+## ⚙️ Setup
 
-```toml
-rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
+dynamic linking with pkg-config(unix) or vcpkg(windows):
+```bash
+export FFMPEG_DIR=/path/to/ffmpeg
+export FFMPEG_LIBS_DIR=$FFMPEG_DIR/lib
+export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
+## (unix recommended):
+export FFMPEG_PKG_CONFIG_PATH=$FFMPEG_DIR/lib/pkgconfig
+## manually set dylib path:
+## dynamic linking for linux:
+export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.so
+## dynamic linking for macos:
+export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.dylib
+## dynamic linking for windows:
+export VCPKG_ROOT=/path/to/vcpkg
+vcpkg install ffmpeg:x64-windows-static
+export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 ```
 
 ## Features
@@ -74,13 +88,144 @@ Use the `ndarray` feature to be able to use raw frames with the
 
 - `ffmpeg7`: enable support for `ffmpeg` 7.x.
 
-```toml
-rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
-```
+- `link_system_ffmpeg`: unxi system linking ffmpeg with pkg-config.
+
+- `link_vcpkg_ffmpeg`: windows linking ffmpeg with vcpkg.
+
+> usage:
+> 
+> - ffmpeg 7.x for unix:
+>
+> ```toml
+> ## default feature is ok for ffmpeg 7.x unix:
+> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
+> ## or like this:
+> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_system_ffmpeg"] }
+> ```
+> - ffmpeg 6.x for unix:
+> ```toml
+> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg6", "link_system_ffmpeg"] }
+> ```
+> - ffmpeg 7.x for windows:
+> ```toml
+> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_vcpkg_ffmpeg"] }
+> ```
+> - ffmpeg 6.x for windows:
+> ```toml
+> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg6", "link_vcpkg_ffmpeg"] }
+> ```
 
 ## 📖 Examples
 
-Decode a video and print the RGB value for the top left pixel:
+### 1. Demux and mux a video:
+
+```rust
+use rsmedia::{
+    mux::{DemuxResult, Demuxer, Muxer},
+    EncoderBuilder, MediaType, PixelFormat, SampleFormat, 
+    StreamReader, StreamWriterBuilder,
+};
+
+use rsmpeg::avcodec::AVCodec;
+use rsmpeg::ffi;
+
+use anyhow::Context;
+use std::path::Path;
+
+fn main() {
+    let input_path = Path::new("/tmp/bear.mp4");
+    let stream_reader = StreamReader::new(input_path).unwrap();
+    let mut demuxer = Demuxer::from_reader(stream_reader, None).unwrap();
+
+    let output_path = Path::new("/tmp/output.mov");
+    let stream_writer = StreamWriterBuilder::new(output_path)
+        .with_format("mov")
+        .build()
+        .unwrap();
+    let mut muxer = Muxer::from_writer(stream_writer);
+
+    // add all streams from input to output muxer
+    for in_stream in demuxer.streams() {
+        let stream_info = &in_stream.stream_info;
+
+        let encoder = {
+            if stream_info.media_type == MediaType::VIDEO {
+                // build video encoder
+                let codec = {
+                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
+                    AVCodec::find_encoder(codec_id)
+                        .context("Failed to find decoder")
+                        .unwrap()
+                };
+
+                EncoderBuilder::new()
+                    // other
+                    .with_media_type(stream_info.media_type)
+                    .with_bit_rate(stream_info.bit_rate)
+                    .with_codec_name(codec.name().to_string_lossy().to_string())
+                    // video
+                    .with_video_size(stream_info.width as u32, stream_info.height as u32)
+                    .with_time_base_ra(stream_info.time_base)
+                    .with_frame_rate_ra(stream_info.frame_rate)
+                    .with_pixel_format(PixelFormat::from(stream_info.format))
+                    .build()
+                    .unwrap()
+            } else if stream_info.media_type == MediaType::AUDIO {
+                // build audio encoder
+                let codec = {
+                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
+                    AVCodec::find_encoder(codec_id)
+                        .context("Failed to find decoder")
+                        .unwrap()
+                };
+
+                EncoderBuilder::new()
+                    // other
+                    .with_media_type(stream_info.media_type)
+                    .with_bit_rate(stream_info.bit_rate)
+                    .with_codec_name(codec.name().to_string_lossy().to_string())
+                    // audio
+                    .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
+                    .with_sample_format(SampleFormat::from(stream_info.format))
+                    .with_sample_rate(stream_info.sample_rate as u32)
+                    .build()
+                    .unwrap()
+            } else {
+                panic!("Unsupported media type: {:?}", stream_info.media_type);
+            }
+        };
+
+        let _stream_index = muxer.add_stream(encoder).unwrap();
+    }
+
+    // demux and mux all frames from input to output muxer
+    loop {
+        match demuxer.demux() {
+            DemuxResult::Frame(stream_index, frame) => {
+                println!("stream index:{}, {:?}", stream_index, frame);
+                let _ = muxer.mux(frame, stream_index).unwrap();
+            }
+            DemuxResult::Drain => {
+                println!("Need more data, continuing...");
+                continue;
+            }
+            DemuxResult::Flushed => {
+                println!("End of stream reached");
+                break;
+            }
+            DemuxResult::Error(e) => {
+                eprintln!("Demuxing error: {}", e);
+                break;
+            }
+        }
+    }
+
+    // finish muxing
+    muxer.finish().unwrap();
+}
+```
+
+### 2. Decode a video and print the RGB value for the top left pixel:
 
 ```rust
 use image::{ImageBuffer, Rgb};
@@ -150,77 +295,80 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
-Encode a 🌈 video, using `ndarray` to create each frame:
+### 3. Encode a 🌈 video, using `ndarray` to create each frame:
 
 ```rust
-use rsmedia::encode::Settings;
+use rsmedia::io::private::{Output, Write};
 use rsmedia::time::Time;
+use rsmedia::{colors, StreamWriter};
 use rsmedia::{EncoderBuilder, FrameArray};
+
+use anyhow::Context;
+use rsmedia::stream::StreamInfo;
 use std::path::Path;
 
 fn main() {
-    rsmedia::init().unwrap();
+  rsmedia::init().unwrap();
 
-    let settings = Settings::preset_h264_yuv420p(1280, 720, false);
-    let mut encoder = EncoderBuilder::new(Path::new("rainbow.mp4"), settings)
-        .with_format("mp4")
-        .build()
-        .expect("failed to create encoder");
+  let mut encoder = EncoderBuilder::new()
+          .with_video_size(1280, 720)
+          // use hwaccel cuda
+          // .with_hardware_device(HWDeviceType::CUDA)
+          // libx264, libx265, h264_nvenc, h264_vaapi etc.
+          // .with_codec_name("h264_nvenc".to_string())
+          // .with_codec_options(&Options::preset_h264_nvenc())
+          .build()
+          .expect("failed to create encoder");
 
-    let duration: Time = Time::from_nth_of_a_second(24);
-    let mut position = Time::zero();
+  let output_path = Path::new("/tmp/rainbow.mp4");
+  let mut stream_writer = StreamWriter::new(output_path).unwrap();
+  let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
+  let stream_info = StreamInfo::from_writer(&stream_writer, video_index).unwrap();
 
-    for i in 0..256 {
-        // This will create a smooth rainbow animation video!
-        let frame = rainbow_frame(i as f32 / 256.0);
+  // Write the header to the output file.
+  stream_writer.write_header().unwrap();
 
-        encoder
-            .encode(&frame, position)
-            .expect("failed to encode frame");
+  let duration: Time = Time::from_nth_of_a_second(24);
+  let mut position = Time::zero();
 
-        // Update the current position and add the inter-frame duration to it.
-        position = position.aligned_with(duration).add();
+  for i in 0..256 {
+    // This will create a smooth rainbow animation video!
+    let frame = rainbow_frame(i as f32 / 256.0);
+
+    match encoder.encode(&frame, position) {
+      Ok(Some(mut packet)) => {
+        packet.set_pos(-1);
+        packet.set_stream_index(video_index as i32);
+        packet.rescale_ts(encoder.time_base(), stream_info.time_base);
+        stream_writer
+                .write_frame(&mut packet)
+                .context("failed to write frame")
+                .unwrap();
+      }
+      Ok(None) => {
+        println!("No packet received from encoder.");
+      }
+      Err(e) => {
+        println!("Error encoding frame: {:?}", e);
+      }
     }
 
-    encoder.finish().expect("failed to finish encoder");
+    // Update the current position and add the inter-frame duration to it.
+    position = position.aligned_with(duration).add();
+  }
+
+  encoder.flush().expect("failed to finish encoder");
+  stream_writer.write_trailer().unwrap();
 }
 
 fn rainbow_frame(p: f32) -> FrameArray {
-    // This is what generated the rainbow effect!
-    // We loop through the HSV color spectrum and convert to RGB.
-    let rgb = hsv_to_rgb(p * 360.0, 100.0, 100.0);
+  // This is what generated the rainbow effect!
+  // We loop through the HSV color spectrum and convert to RGB.
+  let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
 
-    // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
-    // pixel are equal, and determined by the `rgb` we chose above.
-    FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
-}
-
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
-    let s = s / 100.0;
-    let v = v / 100.0;
-    let c = s * v;
-    let x = c * (1.0 - (((h / 60.0) % 2.0) - 1.0).abs());
-    let m = v - c;
-    let (r, g, b) = if (0.0..60.0).contains(&h) {
-        (c, x, 0.0)
-    } else if (60.0..120.0).contains(&h) {
-        (x, c, 0.0)
-    } else if (120.0..180.0).contains(&h) {
-        (0.0, c, x)
-    } else if (180.0..240.0).contains(&h) {
-        (0.0, x, c)
-    } else if (240.0..300.0).contains(&h) {
-        (x, 0.0, c)
-    } else if (300.0..360.0).contains(&h) {
-        (c, 0.0, x)
-    } else {
-        (0.0, 0.0, 0.0)
-    };
-    [
-        ((r + m) * 255.0) as u8,
-        ((g + m) * 255.0) as u8,
-        ((b + m) * 255.0) as u8,
-    ]
+  // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
+  // pixel are equal, and determined by the `rgb` we chose above.
+  FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
 }
 ```
 

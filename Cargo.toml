@@ -12,16 +12,19 @@ repository = "https://github.com/phial3/rsmedia"
 readme = "README.md"
 
 [features]
-default = ["ffmpeg7", "ndarray"]
-ffmpeg6 = ["rsmpeg/ffmpeg6", "rsmpeg/link_system_ffmpeg"]
-ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/link_system_ffmpeg"]
+default = ["ndarray", "ffmpeg7", "link_system_ffmpeg"]
+ffmpeg6 = ["rsmpeg/ffmpeg6"]
+ffmpeg7 = ["rsmpeg/ffmpeg7"]
+## unxi linking ffmpeg with pkg-config.
+link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg"]
+## windows linking ffmpeg with vcpkg.
+link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
 
 [dependencies]
 url = "2"
 libc = "0.2"
 image = "0.25"
 anyhow = "1.0"
-bitflags = "2.8"
 log = "0.4"
 tracing = "0.1"
 env_logger = "0.11"
@@ -32,10 +35,22 @@ rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-f
 cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"
-pix = "0.13"
 yuvutils-rs = "0.8"
 colorutils-rs = "0.7"
+lazy_static = "1.5"
+once_cell = "1.21.1"
+futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 
 [package.metadata.docs.rs]
 all-features = true
+
+[[example]]
+name = "decode_frame"
+path = "examples/decode_frame.rs"
+required-features = ["ndarray"]
+
+[[example]]
+name = "encode_frame"
+path = "examples/encode_frame.rs"
+required-features = ["ndarray"]

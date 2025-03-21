@@ -1,3 +1,4 @@
+use anyhow::{Error, Result};
 use rsmpeg::ffi;
 
 /// Number of pixel formats
@@ -1236,5 +1237,144 @@ impl From<PixelFormat> for ffi::AVPixelFormat {
             #[cfg(feature = "ffmpeg7")]
             PixelFormat::D3D12 => ffi::AV_PIX_FMT_D3D12,
         }
+    }
+}
+
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+
+/// 返回最佳像素格式，或错误
+pub fn find_best_pix_fmt(
+    dst_pix_fmt1: PixelFormat,
+    dst_pix_fmt2: PixelFormat,
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<PixelFormat> {
+    let alpha = if has_alpha { 1 } else { 0 };
+
+    // Combination of flags informing you what kind of losses will occur (maximum loss for an invalid dst_pix_fmt).
+    let flags = unsafe {
+        ffi::av_find_best_pix_fmt_of_2(
+            dst_pix_fmt1.into(),
+            dst_pix_fmt2.into(),
+            src_pix_fmt.into(),
+            alpha,
+            std::ptr::null_mut(),
+        )
+    };
+
+    match PixelFormat::from(flags) {
+        PixelFormat::NONE => Err(Error::msg(format!("Failed to find best pix fmt:{}", flags))),
+        fmt => Ok(fmt),
+    }
+}
+
+/// Find the best pixel format to convert to given a certain source pixel format.
+/// this function searches which of the given pixel formats should be used to suffer the least amount of loss.
+/// The pixel formats from which it chooses one, are determined by the pix_fmt_list parameter.
+pub fn find_codec_best_pix_fmt(
+    pix_fmt_list: &[PixelFormat],
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<PixelFormat> {
+    let pix_fmts = pix_fmt_list.as_ptr() as *const _;
+    let alpha = if has_alpha { 1 } else { 0 };
+    let ret = unsafe {
+        ffi::avcodec_find_best_pix_fmt_of_list(
+            pix_fmts,
+            src_pix_fmt.into(),
+            alpha,
+            std::ptr::null_mut(),
+        )
+    };
+    if ret < 0 {
+        return Err(Error::msg(format!(
+            "Failed to find codec best pix fmt, ret: {}",
+            ret
+        )));
+    }
+    Ok(PixelFormat::from(ret))
+}
+
+/// 计算像素格式转换的损失值（封装 av_get_pix_fmt_loss）
+///
+/// # 参数
+/// - `dst_pix_fmt`: 目标像素格式
+/// - `src_pix_fmt`: 源像素格式
+/// - `has_alpha`:   是否考虑 alpha 通道
+///
+/// # 返回值
+/// 返回非负损失值，或错误
+pub fn get_pix_fmt_loss(
+    dst_pix_fmt: PixelFormat,
+    src_pix_fmt: PixelFormat,
+    has_alpha: bool,
+) -> Result<i32> {
+    let loss = unsafe {
+        ffi::av_get_pix_fmt_loss(dst_pix_fmt.into(), src_pix_fmt.into(), has_alpha as i32)
+    };
+
+    if loss < 0 {
+        return Err(Error::msg(format!(
+            "Failed to get pix fmt loss, ret: {}",
+            loss
+        )));
+    }
+
+    Ok(loss)
+}
+
+/// See ffi::av_pix_fmt_count_planes
+pub fn pix_fmt_count_planes(pix_fmt: PixelFormat) -> Result<i32> {
+    let cnt = unsafe { ffi::av_pix_fmt_count_planes(pix_fmt as _) };
+    if cnt < 0 {
+        return Err(Error::msg(format!("Failed to get plane count:{}", cnt)));
+    }
+    Ok(cnt)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pixel_format() -> Result<()> {
+        // 9. 测试最佳像素格式查找
+        let best_fmt = find_best_pix_fmt(
+            PixelFormat::RGB24,
+            PixelFormat::BGR24,
+            PixelFormat::YUV420P,
+            false,
+        )?;
+        println!("Best pixel format: {:?}", best_fmt);
+        assert_ne!(best_fmt, PixelFormat::NONE);
+
+        // 10. 测试像素格式损失计算
+        let loss = get_pix_fmt_loss(PixelFormat::RGB24, PixelFormat::YUV420P, false)?;
+        println!("Pixel format loss: {}", loss);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_conversion() -> Result<()> {
+        let formats = vec![
+            PixelFormat::RGB24,
+            PixelFormat::BGR24,
+            PixelFormat::YUV420P,
+            PixelFormat::RGBA,
+        ];
+
+        // 测试所有格式组合的转换
+        for &src_fmt in &formats {
+            for &dst_fmt in &formats {
+                if src_fmt != dst_fmt {
+                    let loss = get_pix_fmt_loss(dst_fmt, src_fmt, true)?;
+                    println!("Convert {:?} to {:?}, loss: {}", src_fmt, dst_fmt, loss);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

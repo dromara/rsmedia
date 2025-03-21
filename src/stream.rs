@@ -1,10 +1,10 @@
+use crate::hwaccel::HWDeviceType;
 use crate::io::{Reader, Writer};
-use crate::packet::Packet;
-use crate::{utils, Options, Rational};
+use crate::{utils, MediaType, Options};
 
-use rsmpeg::avcodec::AVCodecParametersRef;
-use rsmpeg::avformat::AVStream;
-use rsmpeg::avutil::{AVDictionaryRef, AVMediaType};
+use rsmpeg::avcodec::{AVCodec, AVCodecParametersRef, AVPacket};
+use rsmpeg::avformat::{AVInputFormatRef, AVStream};
+use rsmpeg::avutil::AVDictionaryRef;
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
@@ -15,28 +15,31 @@ use std::ptr::NonNull;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
-// #[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StreamInfo {
     /// id
     pub id: i32,
     /// Stream index
     pub index: usize,
     /// Media type video/audio/subtitle
-    pub media_type: AVMediaType,
-    /// Stream codec
-    pub codec: isize,
+    pub media_type: MediaType,
+    /// Stream codec `ffi::AVCodecID`
+    pub codec_id: u32,
     /// Codec Additional Info
     pub codec_tag: u32,
     /// Pixel format / Sample format
     pub format: i32,
+
     /// time_base
-    pub time_base: Rational,
+    pub time_base: ffi::AVRational,
     /// Stream Duration
     pub duration: i64,
     /// Start time
     pub start_time: i64,
     /// Number of frames
     pub nb_frames: i64,
+    /// Bit rate
+    pub bit_rate: i64,
     /// combination of AV_DISPOSITION_*
     pub disposition: i32,
     /// discard of AVDISCARD_*
@@ -45,27 +48,26 @@ pub struct StreamInfo {
     pub profile: i32,
     /// codec level, eg. 3.1, 4.1 etc.
     pub level: i32,
+
     // Video parameters
     /// Video width
     pub width: i32,
     /// Video height
     pub height: i32,
-    /// Video bit_rate
-    pub bit_rate: i64,
     /// Video frame rate FPS
-    pub frame_rate: f32,
-    pub avg_frame_rate: f32,
-    pub real_frame_rate: f32,
+    pub frame_rate: ffi::AVRational,
+    pub avg_frame_rate: ffi::AVRational,
+    pub real_frame_rate: ffi::AVRational,
+    /// Number of bits in timestamps. Used for wrapping control.
+    pub pts_wrap_bits: i32,
+    /// Flags indicating events happening on the stream, a combination of AVSTREAM_EVENT_FLAG_*.
+    pub event_flags: i32,
     /// video_delay
     pub video_delay: i32,
-    /// Video GOP size
-    pub gop_size: i32,
-    /// Video has B frames
-    pub has_b_frames: i32,
     /// Video sample aspect ratio
-    pub sample_aspect_ratio: Rational,
+    pub sample_aspect_ratio: ffi::AVRational,
     /// Display aspect ratio
-    pub display_aspect_ratio: Rational,
+    pub display_aspect_ratio: ffi::AVRational,
     /// Video color space, eg: ffi::AVCOL_SPC_*
     pub color_space: usize,
     /// Video color range, eg: ffi::AVCOL_RANGE_*
@@ -78,17 +80,27 @@ pub struct StreamInfo {
     pub field_order: usize,
     /// Video rotation
     pub rotation: f64,
+
     // Audio parameters
     /// Audio sample rate
     pub sample_rate: i32,
-    /// Audio number of channels
-    pub channels: i32,
-    /// Audio channel layout
-    pub channel_layout: usize,
+    /// Audio Channel layout
+    pub channel_layout: ffi::AVChannelLayout,
     /// Audio frame size
     pub frame_size: i32,
     /// Audio block align
     pub block_align: i32,
+    /// Initial padding
+    pub initial_padding: i32,
+    /// Trailing padding
+    pub trailing_padding: i32,
+    /// Seek preroll
+    pub seek_preroll: i32,
+    /// The number of bits per code sample
+    pub bits_per_coded_sample: i32,
+    /// Raw Sample Bit Depth
+    pub bits_per_raw_sample: i32,
+
     // extra
     pub extra_data: Option<Vec<u8>>,
     pub metadata: HashMap<String, String>,
@@ -102,9 +114,9 @@ impl StreamInfo {
     ///
     /// * `reader` - Reader to find stream information from.
     /// * `stream_index` - Index of stream in reader.
-    pub fn from_reader(reader: &Reader, stream_index: usize) -> Result<Self> {
+    pub fn from_reader<R: Reader>(reader: &R, stream_index: usize) -> Result<Self> {
         let stream = reader
-            .input
+            .input()
             .streams()
             .get(stream_index)
             .ok_or(Error::msg(format!(
@@ -136,11 +148,12 @@ impl StreamInfo {
         Ok(Self {
             id: stream.id,
             index: stream.index as usize,
-            media_type: codecpar.codec_type(),
-            codec: codecpar.codec_id as isize,
+            media_type: MediaType::from(codecpar.codec_type),
+            #[allow(clippy::unnecessary_cast)]
+            codec_id: codecpar.codec_id as u32,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
-            time_base: stream.time_base.into(),
+            time_base: stream.time_base,
             duration: stream.duration,
             start_time: stream.start_time,
             nb_frames: stream.nb_frames,
@@ -152,26 +165,30 @@ impl StreamInfo {
             width: codecpar.width,
             height: codecpar.height,
             bit_rate: codecpar.bit_rate,
-            frame_rate: ffi::av_q2d(codecpar.framerate) as f32,
-            avg_frame_rate: ffi::av_q2d(stream.avg_frame_rate) as f32,
-            real_frame_rate: ffi::av_q2d(stream.r_frame_rate) as f32,
+            frame_rate: codecpar.framerate,
+            avg_frame_rate: stream.avg_frame_rate,
+            real_frame_rate: stream.r_frame_rate,
+            pts_wrap_bits: stream.pts_wrap_bits,
+            event_flags: stream.event_flags,
             video_delay: codecpar.video_delay,
-            gop_size: 0,
-            has_b_frames: 0,
-            sample_aspect_ratio: codecpar.sample_aspect_ratio.into(),
-            display_aspect_ratio: stream.sample_aspect_ratio.into(),
+            sample_aspect_ratio: codecpar.sample_aspect_ratio,
+            display_aspect_ratio: stream.sample_aspect_ratio,
             color_space: codecpar.color_space as usize,
             color_range: codecpar.color_range as usize,
             color_primaries: codecpar.color_primaries as usize,
             color_transfer: codecpar.color_trc as usize,
             field_order: codecpar.field_order as usize,
-            rotation: Self::get_stream_rotation_angle(stream, &metadata),
+            rotation: Self::get_stream_display_rotation(stream, &metadata),
             // Audio
             sample_rate: codecpar.sample_rate,
-            channels: codecpar.ch_layout.nb_channels,
-            channel_layout: codecpar.ch_layout.order as usize,
+            channel_layout: codecpar.ch_layout,
             frame_size: codecpar.frame_size,
             block_align: codecpar.block_align,
+            initial_padding: codecpar.initial_padding,
+            trailing_padding: codecpar.trailing_padding,
+            seek_preroll: codecpar.seek_preroll,
+            bits_per_coded_sample: codecpar.bits_per_coded_sample,
+            bits_per_raw_sample: codecpar.bits_per_raw_sample,
             // extra
             metadata,
             extra_data: Self::get_extra_data(stream),
@@ -179,7 +196,7 @@ impl StreamInfo {
         })
     }
 
-    fn get_stream_rotation_angle(stream: &AVStream, map: &HashMap<String, String>) -> f64 {
+    fn get_stream_display_rotation(stream: &AVStream, map: &HashMap<String, String>) -> f64 {
         fn get_rotation_from_metadata(map: &HashMap<String, String>) -> f64 {
             if let Some(value) = map.get("rotate") {
                 value.parse::<f64>().unwrap_or(0.0)
@@ -188,21 +205,21 @@ impl StreamInfo {
             }
         }
 
+        /// av_stream_new_side_data
+        /// av_stream_add_side_data
+        /// av_stream_get_side_data
         unsafe fn get_rotation_from_side_data(stream: &AVStream) -> f64 {
             for i in 0..stream.nb_side_data {
                 let side_data = stream.side_data.offset(i as isize);
                 if (*side_data).type_ == ffi::AV_PKT_DATA_DISPLAYMATRIX {
-                    let matrix = unsafe {
-                        std::slice::from_raw_parts(
-                            (*side_data).data as *const i32,
-                            (*side_data).size,
-                        )
-                    };
-
-                    let rotation = unsafe { ffi::av_display_rotation_get(matrix.as_ptr()) };
-
-                    // av_display_rotation_get 返回的是顺时针角度，我们需要转换为逆时针
-                    return -rotation;
+                    let matrix = ffi::av_stream_get_side_data(
+                        stream.as_ptr(),
+                        (*side_data).type_,
+                        std::ptr::null_mut(),
+                    ) as *const i32;
+                    if !matrix.is_null() {
+                        return ffi::av_display_rotation_get(matrix);
+                    }
                 }
             }
             0.0
@@ -213,6 +230,33 @@ impl StreamInfo {
             return rotation;
         }
         get_rotation_from_metadata(map)
+    }
+
+    #[allow(dead_code)]
+    fn set_stream_display_rotation(stream: &mut AVStream, angle: f64) {
+        // Display matrix in libavcodec is [i32; 9] where each point is 16.16
+        // fixed point, but all this is opaque here..
+        const MATRIX_LEN: usize = 9 * size_of::<i32>();
+        let mut matrix = [0u8; MATRIX_LEN];
+
+        unsafe {
+            ffi::av_display_rotation_set(matrix.as_mut_ptr() as *mut i32, angle);
+
+            let mut data_size: usize = 0;
+            let mut side_data = ffi::av_stream_get_side_data(
+                stream.as_ptr(),
+                ffi::AV_PKT_DATA_DISPLAYMATRIX,
+                &mut data_size,
+            );
+            if side_data.is_null() || data_size != MATRIX_LEN {
+                side_data = ffi::av_stream_new_side_data(
+                    stream.as_mut_ptr(),
+                    ffi::AV_PKT_DATA_DISPLAYMATRIX,
+                    MATRIX_LEN,
+                );
+            }
+            side_data.copy_from(matrix.as_ptr(), MATRIX_LEN);
+        }
     }
 
     fn get_extra_data(stream: &AVStream) -> Option<Vec<u8>> {
@@ -240,21 +284,157 @@ impl StreamInfo {
     /// * The stream index.
     /// * Codec parameters.
     /// * Original stream time base.
-    pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, Rational) {
+    pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, ffi::AVRational) {
         (self.index, self.codec_parameters, self.time_base)
+    }
+
+    /// find codec name, if have hw_device_type, will use hw accelerated codec name
+    /// if not, will use current stream codec name
+    pub fn find_decoder_name(&self, hw_device_type: Option<HWDeviceType>) -> Option<String> {
+        let codec_id = self.codec_id as ffi::AVCodecID;
+        let codec_name = utils::to_string(AVCodec::find_decoder(codec_id)?.name()).unwrap();
+
+        let hw_codec_name = if let Some(hw_type) = hw_device_type {
+            match hw_type {
+                HWDeviceType::CUDA => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_VC1 => Some("vc1_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_VP8 => Some("vp8_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_cuvid".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_cuvid".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::QSV => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VC1 => Some("vc1_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VP8 => Some("vp8_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VAAPI => {
+                    // VAAPI使用通用解码器，但需要特定配置
+                    match codec_id {
+                        ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
+                        ffi::AV_CODEC_ID_VC1 => Some("vc1_vaapi".to_string()),
+                        _ => None,
+                    }
+                }
+                HWDeviceType::VIDEOTOOLBOX => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VULKAN => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_vulkan".to_string()),
+                    _ => None,
+                },
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        if hw_codec_name.is_some() {
+            hw_codec_name
+        } else {
+            Some(codec_name)
+        }
+    }
+
+    /// find encoder name, if have hw_device_type, will use hw accelerated codec name
+    /// if not, will use current stream codec name
+    pub fn find_encoder_name(
+        stream_info: &StreamInfo,
+        hw_device_type: Option<HWDeviceType>,
+    ) -> Option<String> {
+        let codec_id = stream_info.codec_id as ffi::AVCodecID;
+        let codec_name = utils::to_string(AVCodec::find_encoder(codec_id)?.name()).unwrap();
+
+        let hw_codec_name = if let Some(hw_type) = hw_device_type {
+            match hw_type {
+                HWDeviceType::CUDA => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_nvenc".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_nvenc".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_nvenc".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::QSV => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VAAPI => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
+                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VIDEOTOOLBOX => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
+                    ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
+                    _ => None,
+                },
+                HWDeviceType::VULKAN => match codec_id {
+                    ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
+                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
+                    _ => None,
+                },
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        if hw_codec_name.is_some() {
+            hw_codec_name
+        } else {
+            Some(codec_name)
+        }
     }
 }
 
 impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
-            let codec_id = self.codec as i32 as ffi::AVCodecID;
+            let codec_id = self.codec_id as ffi::AVCodecID;
             utils::from_c_char(ffi::avcodec_get_name(codec_id))
         };
-        let pix_fmt = unsafe {
-            if self.media_type.is_video() {
+        let format = unsafe {
+            if self.media_type == MediaType::VIDEO {
                 utils::from_c_char(ffi::av_get_pix_fmt_name(self.format as c_int))
-            } else if self.media_type.is_audio() {
+            } else if self.media_type == MediaType::AUDIO {
                 utils::from_c_char(ffi::av_get_sample_fmt_name(self.format as c_int))
             } else {
                 "unknown".to_string()
@@ -263,22 +443,22 @@ impl std::fmt::Display for StreamInfo {
         let stream_type = {
             let unknown = utils::from_str("unknown");
             let media_type_str =
-                rsmpeg::avutil::get_media_type_string(self.media_type.0).unwrap_or(&unknown);
-            utils::to_string(media_type_str)
+                rsmpeg::avutil::get_media_type_string(self.media_type as _).unwrap_or(&unknown);
+            utils::to_string(media_type_str).unwrap()
         };
         write!(
             f,
-            "{} #{}: codec={}, pix_fmt={}, size={}x{}, bit_rate={}, fps={:.3}, frame_rate={:.3}, video_delay={}",
+            "{} #{}: codec={}, format={}, size={}x{}, fps={:?}, bit_rate={}, sample_rate={}, video_delay={}",
             stream_type,
             self.index,
             codec_name,
-            pix_fmt,
+            format,
             self.width,
             self.height,
-            self.bit_rate,
             self.avg_frame_rate,
-            self.frame_rate,
-            self.video_delay
+            self.bit_rate,
+            self.sample_rate,
+            self.video_delay,
         )
     }
 }
@@ -297,11 +477,29 @@ unsafe impl Sync for StreamInfo {}
 
 pub struct Stream<'a> {
     av_stream: &'a AVStream,
+    iformat: AVInputFormatRef<'a>,
+    metadata: Option<AVDictionaryRef<'a>>,
 }
 
 impl<'a> Stream<'a> {
-    pub fn wrap(av_stream: &'a AVStream) -> Stream<'a> {
-        Stream { av_stream }
+    pub fn wrap(
+        av_stream: &'a AVStream,
+        iformat: AVInputFormatRef<'a>,
+        metadata: Option<AVDictionaryRef<'a>>,
+    ) -> Stream<'a> {
+        Stream {
+            av_stream,
+            iformat,
+            metadata,
+        }
+    }
+
+    pub fn iformat(&self) -> &AVInputFormatRef<'a> {
+        &self.iformat
+    }
+
+    pub fn ctx_metadata(&self) -> &Option<AVDictionaryRef<'a>> {
+        &self.metadata
     }
 }
 
@@ -314,8 +512,8 @@ impl Stream<'_> {
         self.av_stream.index as usize
     }
 
-    pub fn time_base(&self) -> Rational {
-        Rational::from(self.av_stream.time_base)
+    pub fn time_base(&self) -> ffi::AVRational {
+        self.av_stream.time_base
     }
 
     pub fn start_time(&self) -> i64 {
@@ -342,12 +540,12 @@ impl Stream<'_> {
         StreamSideDataIter::new(self)
     }
 
-    pub fn r_frame_rate(&self) -> Rational {
-        self.av_stream.r_frame_rate.into()
+    pub fn r_frame_rate(&self) -> ffi::AVRational {
+        self.av_stream.r_frame_rate
     }
 
-    pub fn avg_frame_rate(&self) -> Rational {
-        self.av_stream.avg_frame_rate.into()
+    pub fn avg_frame_rate(&self) -> ffi::AVRational {
+        self.av_stream.avg_frame_rate
     }
 
     pub fn parameters(&self) -> AVCodecParametersRef {
@@ -372,7 +570,7 @@ impl Eq for Stream<'_> {}
 
 pub struct StreamSideData<'a> {
     ptr: *mut ffi::AVPacketSideData,
-    _marker: PhantomData<&'a Packet>,
+    _marker: PhantomData<&'a AVPacket>,
 }
 
 impl StreamSideData<'_> {

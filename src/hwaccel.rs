@@ -4,68 +4,92 @@ use crate::{utils, Options};
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext};
+use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext};
 use rsmpeg::{ffi, UnsafeDerefMut};
 
-use std::collections::HashMap;
-
-/// 硬件加速设备配置
-/// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
+/// Hardware device configuration.
+/// This struct contains all the necessary information to create a hardware device context.
+///
+/// The sw / hw frames conversion process includes the following steps:
+///
+/// CPU(NV12) -> GPU(CUDA) -> transform -> GPU(CUDA) -> CPU(NV12)
 #[derive(Clone)]
 pub struct HWDeviceConfig {
-    device_type: HWDeviceType,    // 硬件加速设备的具体路径或标识符
-    hw_pixel_format: PixelFormat, // GPU 硬件设备在内存中的像素格式, eg: CUDA,VAAPI,VDPAU
-    sw_pixel_format: PixelFormat, // CPU 内存中使用的像素格式, eg: NV12,YUV420P,RGB24
-    device_path: Option<String>,
-    options: Option<AVDictionary>,
+    pub device_type: HWDeviceType,
+    pub hw_pixel_format: PixelFormat,
+    pub sw_pixel_format: PixelFormat,
+    pub device_id: Option<String>,
+    pub options: Option<Options>,
 }
 
 impl HWDeviceConfig {
+    /// create a new HWDeviceConfig with the given parameters
+    ///
+    /// # Arguments
+    ///
+    /// * `device_type` - The type of hardware device
+    /// * `hw_pixel_format` - The pixel format of the hardware device
+    /// * `sw_pixel_format` - The pixel format of the software device
+    /// * `device_id` - The type-specific string identifying of the GPU device,
+    ///     e.g. for NVIDIA CUDA, device_id should be explicitly the GPU ID  "0" or "1",
+    ///         for VAAPI: device_id should be set like "/dev/dri/renderD128"
+    /// * `options` - Additional (type-specific) options to use in opening the device
     pub fn new(
         device_type: HWDeviceType,
         hw_pixel_format: PixelFormat,
         sw_pixel_format: PixelFormat,
-        device_path: Option<String>,
-        options: Option<AVDictionary>,
+        device_id: Option<String>,
+        options: Option<Options>,
     ) -> Self {
         Self {
             device_type,
             hw_pixel_format,
             sw_pixel_format,
-            device_path,
+            device_id,
             options,
         }
     }
 
-    /// 创建NVIDIA配置
-    pub fn cuda() -> Self {
+    /// build CUDA HWDeviceConfig
+    pub fn cuda(id: Option<usize>) -> Self {
         Self::new(
             HWDeviceType::CUDA,
             PixelFormat::CUDA,
             PixelFormat::NV12,
-            None,
+            id.map(|id| format!("{}", id)),
             None,
         )
     }
 
-    /// 创建VAAPI配置
-    pub fn vaapi(device_path: Option<String>) -> Self {
+    /// build VAAPI HWDeviceConfig
+    pub fn vaapi(device_id: Option<String>) -> Self {
         Self::new(
             HWDeviceType::VAAPI,
             PixelFormat::VAAPI,
             PixelFormat::NV12,
-            device_path,
+            device_id,
             None,
         )
     }
 
-    /// 创建Vulkan配置
-    pub fn vulkan() -> Self {
+    /// build VULKAN HWDeviceConfig
+    pub fn vulkan(device_id: Option<String>) -> Self {
         Self::new(
             HWDeviceType::VULKAN,
             PixelFormat::VULKAN,
             PixelFormat::NV12,
+            device_id,
             None,
+        )
+    }
+
+    /// build QSV (Intel Quick Sync Video) HWDeviceConfig
+    pub fn qsv(device_id: Option<String>) -> Self {
+        Self::new(
+            HWDeviceType::QSV,
+            PixelFormat::QSV,
+            PixelFormat::NV12,
+            device_id,
             None,
         )
     }
@@ -73,18 +97,14 @@ impl HWDeviceConfig {
 
 impl std::fmt::Debug for HWDeviceConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let options = self.options.to_owned();
-        let opts = options.map_or_else(HashMap::<String, String>::new, |dict| {
-            Options::new(dict).into()
-        });
         write!(
             f,
-            "HWDeviceConfig {{ device_type: {:?}, device_path: {:?},  hw_pixel_format: {:?}, sw_pixel_format: {:?}, options: {:?} }}",
+            "HWDeviceConfig {{ device_type: {:?}, device_id: {:?},  hw_pixel_format: {:?}, sw_pixel_format: {:?}, options: {:?} }}",
             self.device_type,
-            self.device_path,
+            self.device_id,
             self.hw_pixel_format,
             self.sw_pixel_format,
-            opts
+            self.options,
         )
     }
 }
@@ -101,23 +121,31 @@ pub struct HWContext {
 }
 
 impl HWContext {
+    /// create a new HWContext with the given HWDeviceConfig
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
-        let device_path = utils::str_opt(config.device_path.as_ref());
-        let device_ctx = AVHWDeviceContext::create(
-            config.device_type.into(),
-            device_path.as_deref(),
-            config.options.as_ref(),
-            0,
-        )
-        .context("Failed to create hardware device context")?;
+        let device_ctx = {
+            let device = utils::from_str_opt(config.device_id.as_ref());
+            let opts = config.options.as_ref().map(|opts| opts.as_dict());
+            AVHWDeviceContext::create(config.device_type.into(), device.as_deref(), opts, 0)
+                .context("Failed to create hardware device context")?
+        };
 
-        log::info!("Created hardware device context successfully.");
-        log::debug!("{}", config);
+        log::debug!(
+            "Created hardware device context successfully. config:{}",
+            config
+        );
 
         Ok(Self { config, device_ctx })
     }
 
-    /// 设置编解码器的硬件帧上下文
+    /// initialize HWFramesContext for the given codec context
+    ///
+    /// # Arguments
+    ///
+    /// * `is_decoder` - Whether the codec context is for decoding or encoding
+    /// * `codec_ctx` - The codec context to initialize
+    /// * `width` - The width of the input/output frames
+    /// * `height` - The height of the input/output frames
     pub fn setup_hw_frames(
         &mut self,
         is_decoder: bool,
@@ -127,8 +155,8 @@ impl HWContext {
     ) -> Result<()> {
         let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
 
-        hw_frames_ref.data().format = self.config.hw_pixel_format.into();
-        hw_frames_ref.data().sw_format = self.config.sw_pixel_format.into();
+        hw_frames_ref.data().format = self.get_format(true);
+        hw_frames_ref.data().sw_format = self.get_format(false);
         hw_frames_ref.data().width = width;
         hw_frames_ref.data().height = height;
         hw_frames_ref.data().initial_pool_size = 20;
@@ -144,11 +172,10 @@ impl HWContext {
         if is_decoder {
             unsafe {
                 let ctx_mut_ptr = codec_ctx.deref_mut();
-                ctx_mut_ptr.sw_pix_fmt = self.config.sw_pixel_format.into();
-                ctx_mut_ptr.opaque =
-                    i32::from(self.config.hw_pixel_format) as *mut std::os::raw::c_void;
-                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
+                ctx_mut_ptr.opaque = self.get_format(true) as *mut std::os::raw::c_void;
                 ctx_mut_ptr.get_format = Some(hwaccel_get_format);
+                ctx_mut_ptr.sw_pix_fmt = self.get_format(false);
+                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
             }
         }
 
@@ -176,8 +203,7 @@ impl HWContext {
         let hw_down_start = std::time::Instant::now();
 
         // Check if input frame is actually in hardware memory
-        if hw_frame.hw_frames_ctx.is_null() || hw_frame.format != self.config.hw_pixel_format.into()
-        {
+        if !self.is_hw_frame(hw_frame) {
             return Err(Error::msg(format!(
                 "Input frame is not a valid hardware frame: format={:?}, expected={:?}, hw_frames_ctx={:?}",
                 hw_frame.format,
@@ -262,7 +288,7 @@ impl HWContext {
         let hw_up_start = std::time::Instant::now();
 
         // Check if input frame format matches our software format
-        if sw_frame.format != self.config.sw_pixel_format.into() {
+        if !self.is_sw_frame(sw_frame) {
             return Err(Error::msg(format!(
                 "Input frame format ({:?}) doesn't match expected software format ({:?})",
                 sw_frame.format, self.config.sw_pixel_format
@@ -347,7 +373,7 @@ impl HWContext {
     ///
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
-    pub fn is_hw_frame(&self, frame: AVFrame) -> bool {
+    pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
         // 检查硬件帧上下文是否为空
         if frame.hw_frames_ctx.is_null() {
             log::debug!("Frame hardware context is null");
@@ -355,12 +381,7 @@ impl HWContext {
         }
 
         // 检查帧格式是否匹配硬件像素格式
-        if frame.format != self.config.hw_pixel_format.into() {
-            log::debug!(
-                "Frame format ({:?}) doesn't match hardware format ({:?})",
-                frame.format,
-                self.config.hw_pixel_format
-            );
+        if frame.format != self.get_format(true) {
             return false;
         }
 
@@ -368,8 +389,8 @@ impl HWContext {
     }
 
     /// Check if a frame is in software memory format
-    pub fn is_sw_frame(&self, frame: AVFrame) -> bool {
-        frame.format == self.config.sw_pixel_format.into()
+    pub fn is_sw_frame(&self, frame: &AVFrame) -> bool {
+        frame.format == self.get_format(false)
     }
 
     /// Helper function to get the appropriate pixel format for a frame
@@ -382,7 +403,7 @@ impl HWContext {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HWDeviceType {
     /// ffi definition NONE: 0
     NONE,
@@ -434,8 +455,8 @@ impl HWDeviceType {
         }
     }
 
-    /// 自动选择最佳设备
-    pub fn auto_best_device(self) -> Result<HWDeviceConfig> {
+    /// Find the best available hardware acceleration device config on this system.
+    pub fn auto_best_config(self) -> Result<HWDeviceConfig> {
         if self.is_available() {
             Ok(HWDeviceConfig::new(
                 self,
@@ -496,7 +517,8 @@ impl HWDeviceType {
             unsafe {
                 let hw_config = ffi::avcodec_get_hw_config(codec.as_ptr(), i);
                 if !hw_config.is_null() {
-                    let hw_config_supports_codec = (((*hw_config).methods) as i32
+                    #[allow(clippy::unnecessary_cast)]
+                    let hw_config_supports_codec = ((*hw_config).methods as i32
                         & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32)
                         != 0;
                     if hw_config_supports_codec && (*hw_config).device_type == (*self).into() {

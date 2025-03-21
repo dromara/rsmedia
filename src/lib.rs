@@ -4,6 +4,7 @@ pub mod encode;
 pub mod frame;
 #[cfg(feature = "ndarray")]
 pub use frame::FrameArray;
+pub mod avimg;
 pub mod colors;
 pub mod flags;
 pub mod hwaccel;
@@ -12,23 +13,22 @@ pub mod io;
 pub mod location;
 pub mod mux;
 pub mod options;
-pub mod packet;
 pub mod pixel;
-pub mod rational;
 pub mod resize;
 pub mod stream;
+pub mod swctx;
 pub mod time;
 pub mod utils;
 
 pub use decode::{Decoder, DecoderBuilder};
 pub use encode::{Encoder, EncoderBuilder};
+pub use flags::{MediaType, SampleFormat};
 pub use init::init;
-pub use io::{Reader, ReaderBuilder, StreamWriter, StreamWriterBuilder};
+pub use io::{Reader, Writer};
+pub use io::{StreamReader, StreamReaderBuilder, StreamWriter, StreamWriterBuilder};
 pub use location::{Location, Url};
 pub use options::Options;
-pub use packet::Packet;
 pub use pixel::PixelFormat;
-pub use rational::Rational;
 pub use resize::Resize;
 pub use time::Time;
 

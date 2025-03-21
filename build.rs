@@ -49,88 +49,142 @@ fn configure_macos() {
     }
 }
 
-fn configure_windows() {
-    let vcpkg_root = env::var("VCPKG_ROOT").expect("VCPKG_ROOT not found.");
-    let vcpkg_root = PathBuf::from(vcpkg_root);
-    // 检查可用的 triplet
-    let triplets = ["x64-windows-static", "x64-windows-static-md", "x64-windows"];
+#[derive(Debug, Copy, Clone)]
+enum LinkType {
+    Static,   // x64-windows-static
+    StaticMD, // x64-windows-static-md
+    Dynamic,  // x64-windows
+}
 
-    // 存储所有可用的 triplet 路径
-    let mut available_lib_paths = Vec::new();
-
-    // 检查每个 triplet 的库路径
-    for triplet in triplets.iter() {
-        let lib_path = vcpkg_root.join("installed").join(triplet).join("lib");
-        if lib_path.exists() {
-            println!("cargo:warning=Found triplet: {}", triplet);
-            available_lib_paths.push(lib_path);
+impl LinkType {
+    fn from_triplet(triplet: &str) -> Option<Self> {
+        match triplet {
+            "x64-windows-static" => Some(LinkType::Static),
+            "x64-windows-static-md" => Some(LinkType::StaticMD),
+            "x64-windows" => Some(LinkType::Dynamic),
+            _ => None,
         }
     }
 
-    if available_lib_paths.is_empty() {
-        panic!("No valid vcpkg triplets found!");
+    fn configure_runtime(&self) {
+        match self {
+            LinkType::Static => {
+                // 完全静态链接
+                println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
+                println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
+            }
+            LinkType::StaticMD => {
+                // 使用动态运行时的静态链接
+                println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
+                println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
+            }
+            LinkType::Dynamic => {
+                // 完全动态链接
+                println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
+                println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
+            }
+        }
+    }
+}
+
+struct VcpkgConfig {
+    link_type: LinkType,
+    lib_paths: Vec<PathBuf>,
+}
+
+impl VcpkgConfig {
+    fn new() -> Result<Self, String> {
+        let vcpkg_root = PathBuf::from(env::var("VCPKG_ROOT").map_err(|_| "VCPKG_ROOT not found")?);
+
+        // 检查所有可能的 triplet
+        let triplets = ["x64-windows-static", "x64-windows-static-md", "x64-windows"];
+
+        let mut available_configs = Vec::new();
+        for triplet in triplets.iter() {
+            let lib_path = vcpkg_root.join("installed").join(triplet).join("lib");
+            if lib_path.exists() {
+                println!("cargo:warning=Found triplet: {}", triplet);
+                if let Some(link_type) = LinkType::from_triplet(triplet) {
+                    available_configs.push((link_type, lib_path));
+                }
+            }
+        }
+
+        if available_configs.is_empty() {
+            return Err("No valid vcpkg triplets found!".to_string());
+        }
+
+        // 优先选择链接类型：Static > StaticMD > Dynamic
+        let (link_type, primary_lib_path) = available_configs
+            .iter()
+            .find(|(lt, _)| matches!(lt, LinkType::Static))
+            .or_else(|| {
+                available_configs
+                    .iter()
+                    .find(|(lt, _)| matches!(lt, LinkType::StaticMD))
+            })
+            .or_else(|| {
+                available_configs
+                    .iter()
+                    .find(|(lt, _)| matches!(lt, LinkType::Dynamic))
+            })
+            .ok_or("No valid configuration found")?;
+
+        // 使用 vec! 宏创建库路径列表
+        let lib_paths = vec![primary_lib_path.clone()];
+
+        Ok(VcpkgConfig {
+            link_type: *link_type,
+            lib_paths,
+        })
     }
 
-    // 添加所有可用的库路径
-    for lib_path in &available_lib_paths {
-        println!("cargo:rustc-link-search=native={}", lib_path.display());
+    fn configure_ffmpeg(&self, libs: &[&str]) {
+        match self.link_type {
+            LinkType::Static => {
+                for lib in libs {
+                    println!("cargo:rustc-link-lib=static={}", lib);
+                }
+            }
+            LinkType::StaticMD | LinkType::Dynamic => {
+                for lib in libs {
+                    println!("cargo:rustc-link-lib={}", lib);
+                }
+            }
+        }
     }
 
-    // Windows SDK 库路径
-    if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
-        let sdk_lib_path = PathBuf::from(windows_sdk_dir)
-            .join("Lib")
-            .join(env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string()))
-            .join("um")
-            .join("x64");
-        println!("cargo:rustc-link-search=native={}", sdk_lib_path.display());
+    fn add_library_paths(&self) {
+        // 添加 vcpkg 库路径
+        for path in &self.lib_paths {
+            println!("cargo:rustc-link-search=native={}", path.display());
+        }
+
+        // 添加 Windows SDK 路径
+        if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
+            let sdk_lib_path = PathBuf::from(windows_sdk_dir)
+                .join("Lib")
+                .join(env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string()))
+                .join("um")
+                .join("x64");
+            println!("cargo:rustc-link-search=native={}", sdk_lib_path.display());
+        }
+
+        // 添加 Visual Studio 路径
+        if let Ok(vs_path) = env::var("VCINSTALLDIR") {
+            let vs_lib_path = PathBuf::from(vs_path).join("lib").join("x64");
+            println!("cargo:rustc-link-search=native={}", vs_lib_path.display());
+        }
     }
+}
 
-    // 分组链接所需的系统库
-    // 1. 安全相关库
-    let security_libs = [
-        "secur32",  // 包含 AcquireCredentialsHandleA 等
-        "security", // 额外的安全功能
-        "crypt32",  // 加密相关
-        "bcrypt",   // BCrypt API
-        "ncrypt",   // NCrypt API
-        "credui",   // 凭据相关
-        "schannel", // SSL/TLS
-    ];
+fn configure_windows() {
+    let vcpkg_config = VcpkgConfig::new().unwrap();
 
-    // 2. COM 和 Media Foundation 相关库
-    let com_mf_libs = [
-        "ole32",          // COM 基础
-        "oleaut32",       // COM 自动化
-        "mfplat",         // Media Foundation 平台
-        "mf",             // Media Foundation 核心
-        "mfuuid",         // Media Foundation UUID
-        "strmiids",       // DirectShow UUID
-        "dxva2",          // DirectX Video Acceleration
-        "evr",            // Enhanced Video Renderer
-        "wmcodecdspuuid", // Windows Media Codec
-    ];
+    // 添加库搜索路径
+    vcpkg_config.add_library_paths();
 
-    // 3. Windows 核心库
-    let core_libs = [
-        "kernel32", // 核心系统功能
-        "user32",   // 用户界面
-        "gdi32",    // 图形设备接口
-        "shell32",  // Shell 功能
-        "advapi32", // 高级 Windows 32 基础 API
-        "wsock32",  // Windows Sockets (旧版)
-        "ws2_32",   // Windows Sockets 2
-        "iphlpapi", // IP Helper API
-        "uuid",     // UUID 生成
-        "normaliz", // 国际化
-        "psapi",    // 进程状态 API
-        "comdlg32", // Common Dialog
-        "version",  // Version checking
-        "winmm",    // Windows Multimedia
-        "imm32",    // Input Method Manager
-    ];
-
-    // FFmpeg
+    // 配置 FFmpeg 库
     let ffmpeg_libs = [
         "avcodec",
         "avformat",
@@ -140,54 +194,44 @@ fn configure_windows() {
         "avfilter",
         "avdevice",
     ];
+    vcpkg_config.configure_ffmpeg(&ffmpeg_libs);
 
-    // 检查是否存在静态库版本
-    let use_static = available_lib_paths
-        .iter()
-        .any(|p| p.to_string_lossy().contains("static"));
+    // 配置运行时
+    vcpkg_config.link_type.configure_runtime();
 
-    // 根据可用的库类型设置链接方式
-    for lib in ffmpeg_libs.iter() {
-        if use_static {
-            println!("cargo:rustc-link-lib=static={}", lib);
-        } else {
-            println!("cargo:rustc-link-lib={}", lib);
-        }
-    }
+    // Windows 系统库
+    let system_libs = [
+        // 安全相关
+        "secur32", "crypt32", "bcrypt", "ncrypt", "credui",
+        // COM 和 Media Foundation
+        "ole32", "oleaut32", "mfplat", "mfuuid", "strmiids", "dxva2", "evr",
+        // 核心系统
+        "kernel32", "user32", "gdi32", "shell32", "advapi32", "ws2_32", "iphlpapi", "psapi",
+        "version",
+    ];
 
     // 链接系统库
-    for lib in security_libs.iter() {
+    for lib in system_libs.iter() {
         println!("cargo:rustc-link-lib={}", lib);
     }
 
-    for lib in com_mf_libs.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
-    }
+    // 通用链接器选项
+    let linker_flags = [
+        "/DYNAMICBASE",   // ASLR
+        "/NXCOMPAT",      // DEP
+        "/HIGHENTROPYVA", // 高熵 ASLR
+        "/OPT:REF",       // 移除未引用的函数
+        "/DEBUG",         // 调试信息
+        "/MANIFEST",      // 生成清单
+    ];
 
-    for lib in core_libs.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
+    for flag in linker_flags.iter() {
+        println!("cargo:rustc-link-arg={}", flag);
     }
-
-    // 运行时库设置
-    if use_static {
-        println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
-        println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
-    } else {
-        println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
-        println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
-    }
-
-    // 链接器选项
-    println!("cargo:rustc-link-arg=/DYNAMICBASE"); // ASLR
-    println!("cargo:rustc-link-arg=/NXCOMPAT"); // DEP
-    println!("cargo:rustc-link-arg=/HIGHENTROPYVA"); // ASLR
-                                                     // 优化和调试选项
-    println!("cargo:rustc-link-arg=/OPT:REF"); // 移除未引用的函数和数据
-    println!("cargo:rustc-link-arg=/DEBUG"); // 生成调试信息
-    println!("cargo:rustc-link-arg=/MANIFEST"); // 生成清单文件
 
     // 重新运行条件
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
     println!("cargo:rerun-if-env-changed=WindowsSdkDir");
+    println!("cargo:rerun-if-env-changed=VCINSTALLDIR");
 }

@@ -4,10 +4,6 @@ use anyhow::Error;
 use rsmpeg::avutil::AVImage;
 use rsmpeg::ffi;
 
-///////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////// MyAVImage /////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
 pub struct MyAVImage(pub AVImage);
 
 impl MyAVImage {
@@ -17,7 +13,7 @@ impl MyAVImage {
         width: i32,
         height: i32,
         align: i32,
-    ) -> anyhow::Result<Self> {
+    ) -> anyhow::Result<MyAVImage> {
         let mut data: [*mut u8; ffi::AV_NUM_DATA_POINTERS as usize] =
             [std::ptr::null_mut(); ffi::AV_NUM_DATA_POINTERS as usize];
         let mut line_sizes: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
@@ -54,8 +50,8 @@ impl MyAVImage {
         Ok(MyAVImage(img))
     }
 
-    pub fn new(img: AVImage) -> Self {
-        Self(img)
+    pub fn new(img: AVImage) -> MyAVImage {
+        MyAVImage(img)
     }
 
     pub fn into_inner(self) -> AVImage {

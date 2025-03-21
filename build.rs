@@ -4,9 +4,6 @@ fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
-    // common
-    println!("cargo:rustc-link-lib=dylib=c");
-
     match target_os.as_str() {
         "linux" => configure_linux(&target_arch),
         "macos" | "darwin" => configure_macos(),
@@ -16,6 +13,7 @@ fn main() {
 }
 
 fn configure_linux(target_arch: &str) {
+    println!("cargo:rustc-link-lib=dylib=c");
     println!("cargo:rustc-link-lib=dylib=dl");
     println!("cargo:rustc-link-lib=dylib=pthread");
 
@@ -33,6 +31,8 @@ fn configure_linux(target_arch: &str) {
 }
 
 fn configure_macos() {
+    println!("cargo:rustc-link-lib=dylib=c");
+    println!("cargo:rustc-link-lib=dylib=dl");
     println!("cargo:rustc-link-lib=dylib=pthread");
     println!("cargo:rustc-link-search=native=/usr/lib");
     println!("cargo:rustc-link-search=native=/usr/local/lib");
@@ -49,14 +49,24 @@ fn configure_macos() {
 }
 
 fn configure_windows() {
-    if cfg!(target_env = "msvc") {
-        // MSVC
-        println!("cargo:rustc-link-search=native=C:\\Windows\\System32");
-        println!("cargo:rustc-link-lib=dylib=msvcrt");
-    } else {
+    #[cfg(target_env = "msvc")]
+    {
+        // MSVC not need to link libc
+    }
+    #[cfg(target_env = "gnu")]
+    {
         // GNU (MinGW)
-        println!("cargo:rustc-link-lib=dylib=gcc_s");
-        println!("cargo:rustc-link-lib=dylib=pthread");
+        let mingw_paths = ["C:\\msys64\\mingw64\\lib", "C:\\MinGW\\lib"];
+        for path in &mingw_paths {
+            if std::path::Path::new(path).exists() {
+                println!("cargo:rustc-link-search=native={}", path);
+            }
+        }
+
+        // necessary
+        println!("cargo:rustc-link-lib=static=mingwex");
+        println!("cargo:rustc-link-lib=dylib=msvcrt");
+
         // MinGW lib path
         if let Ok(gcc_dir) = env::var("MINGW_PREFIX") {
             println!("cargo:rustc-link-search=native={}/lib", gcc_dir);

@@ -15,11 +15,11 @@ use rsmpeg::{ffi, UnsafeDerefMut};
 /// CPU(NV12) -> GPU(CUDA) -> transform -> GPU(CUDA) -> CPU(NV12)
 #[derive(Clone)]
 pub struct HWDeviceConfig {
-    device_type: HWDeviceType,
-    hw_pixel_format: PixelFormat,
-    sw_pixel_format: PixelFormat,
-    device_path: Option<String>,
-    options: Option<Options>,
+    pub device_type: HWDeviceType,
+    pub hw_pixel_format: PixelFormat,
+    pub sw_pixel_format: PixelFormat,
+    pub device_id: Option<String>,
+    pub options: Option<Options>,
 }
 
 impl HWDeviceConfig {
@@ -30,22 +30,22 @@ impl HWDeviceConfig {
     /// * `device_type` - The type of hardware device
     /// * `hw_pixel_format` - The pixel format of the hardware device
     /// * `sw_pixel_format` - The pixel format of the software device
-    /// * `device_path` - The type-specific string identifying of the GPU device,
-    ///     e.g. for NVIDIA CUDA, device_path should be explicitly the GPU ID  "0" or "1",
-    ///         for VAAPI: device_path should be set like "/dev/dri/renderD128"
+    /// * `device_id` - The type-specific string identifying of the GPU device,
+    ///     e.g. for NVIDIA CUDA, device_id should be explicitly the GPU ID  "0" or "1",
+    ///         for VAAPI: device_id should be set like "/dev/dri/renderD128"
     /// * `options` - Additional (type-specific) options to use in opening the device
     pub fn new(
         device_type: HWDeviceType,
         hw_pixel_format: PixelFormat,
         sw_pixel_format: PixelFormat,
-        device_path: Option<String>,
+        device_id: Option<String>,
         options: Option<Options>,
     ) -> Self {
         Self {
             device_type,
             hw_pixel_format,
             sw_pixel_format,
-            device_path,
+            device_id,
             options,
         }
     }
@@ -62,23 +62,34 @@ impl HWDeviceConfig {
     }
 
     /// build VAAPI HWDeviceConfig
-    pub fn vaapi(device_path: Option<String>) -> Self {
+    pub fn vaapi(device_id: Option<String>) -> Self {
         Self::new(
             HWDeviceType::VAAPI,
             PixelFormat::VAAPI,
             PixelFormat::NV12,
-            device_path,
+            device_id,
             None,
         )
     }
 
     /// build VULKAN HWDeviceConfig
-    pub fn vulkan(device_path: Option<String>) -> Self {
+    pub fn vulkan(device_id: Option<String>) -> Self {
         Self::new(
             HWDeviceType::VULKAN,
             PixelFormat::VULKAN,
             PixelFormat::NV12,
-            device_path,
+            device_id,
+            None,
+        )
+    }
+
+    /// build QSV (Intel Quick Sync Video) HWDeviceConfig
+    pub fn qsv(device_id: Option<String>) -> Self {
+        Self::new(
+            HWDeviceType::QSV,
+            PixelFormat::QSV,
+            PixelFormat::NV12,
+            device_id,
             None,
         )
     }
@@ -88,9 +99,9 @@ impl std::fmt::Debug for HWDeviceConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "HWDeviceConfig {{ device_type: {:?}, device_path: {:?},  hw_pixel_format: {:?}, sw_pixel_format: {:?}, options: {:?} }}",
+            "HWDeviceConfig {{ device_type: {:?}, device_id: {:?},  hw_pixel_format: {:?}, sw_pixel_format: {:?}, options: {:?} }}",
             self.device_type,
-            self.device_path,
+            self.device_id,
             self.hw_pixel_format,
             self.sw_pixel_format,
             self.options,
@@ -113,7 +124,7 @@ impl HWContext {
     /// create a new HWContext with the given HWDeviceConfig
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
         let device_ctx = {
-            let device = utils::from_str_opt(config.device_path.as_ref());
+            let device = utils::from_str_opt(config.device_id.as_ref());
             let opts = config.options.as_ref().map(|opts| opts.as_dict());
             AVHWDeviceContext::create(config.device_type.into(), device.as_deref(), opts, 0)
                 .context("Failed to create hardware device context")?
@@ -392,7 +403,7 @@ impl HWContext {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HWDeviceType {
     /// ffi definition NONE: 0
     NONE,
@@ -444,8 +455,8 @@ impl HWDeviceType {
         }
     }
 
-    /// Find the best available hardware acceleration device type on this system.
-    pub fn auto_best_device(self) -> Result<HWDeviceConfig> {
+    /// Find the best available hardware acceleration device config on this system.
+    pub fn auto_best_config(self) -> Result<HWDeviceConfig> {
         if self.is_available() {
             Ok(HWDeviceConfig::new(
                 self,

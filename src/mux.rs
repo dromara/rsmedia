@@ -1,9 +1,8 @@
 use crate::decode::DecodeRawResult;
 use crate::encode::EncodeRawResult;
 use crate::flags::MediaType;
-use crate::hwaccel::HWDeviceType;
-use crate::io::private::Output;
-use crate::io::{Reader, Writer};
+use crate::hwaccel::HWDeviceConfig;
+use crate::io::{private::Output, Reader, Writer};
 use crate::stream::StreamInfo;
 use crate::{utils, Decoder, DecoderBuilder, Encoder, Resize, StreamReader, StreamWriter};
 
@@ -220,8 +219,9 @@ impl<R: Reader> Demuxer<R> {
     pub fn from_reader(
         reader: R,
         resize: Option<Resize>,
-        device_type: Option<HWDeviceType>,
+        device_config: Option<HWDeviceConfig>,
     ) -> Result<Self> {
+        let device_type = device_config.as_ref().map(|c| c.device_type);
         let nb_streams = reader.input().nb_streams as usize;
         let mut streams = Vec::new();
         for stream_idx in 0..nb_streams {
@@ -229,7 +229,7 @@ impl<R: Reader> Demuxer<R> {
             // auto detect hardware acceleration decoder codec
             let codec_name = stream_info.find_decoder_name(device_type);
             let decoder = DecoderBuilder::new()
-                .with_hardware_device(device_type)
+                .with_hardware_device(device_config.clone())
                 .with_media_type(stream_info.media_type)
                 .with_codec_name(codec_name)
                 .with_resize(resize)

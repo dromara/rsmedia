@@ -1,7 +1,7 @@
 use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
-use crate::hwaccel::{HWContext, HWDeviceType};
+use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
 use crate::swctx;
@@ -39,7 +39,7 @@ pub struct EncoderBuilder {
     media_type: MediaType,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
-    hw_device_type: Option<HWDeviceType>,
+    hw_device_config: Option<HWDeviceConfig>,
 }
 
 impl EncoderBuilder {
@@ -94,7 +94,7 @@ impl EncoderBuilder {
             thread_count: 0,
             codec_name: None,
             codec_opts: None,
-            hw_device_type: None,
+            hw_device_config: None,
         }
     }
 
@@ -189,9 +189,9 @@ impl EncoderBuilder {
 
     /// Enable hardware acceleration with the specified device type.
     ///
-    /// * `device_type` - Device to use for hardware acceleration.
-    pub fn with_hardware_device(mut self, device_type: Option<HWDeviceType>) -> Self {
-        self.hw_device_type = device_type;
+    /// * `device_config` - Device to use for hardware acceleration.
+    pub fn with_hardware_device(mut self, device_config: Option<HWDeviceConfig>) -> Self {
+        self.hw_device_config = device_config;
         self
     }
 
@@ -294,26 +294,34 @@ impl EncoderBuilder {
 
         self.apply_to(&mut encode_ctx, self.media_type);
 
-        // only video hw accel
-        let hw_context = if self.media_type == MediaType::VIDEO && self.hw_device_type.is_some() {
-            let device_type = self.hw_device_type.unwrap();
-            if device_type
-                .find_hw_pixel_format_with_codec(&codec)
-                .is_none()
-            {
-                return Err(Error::msg(format!(
-                    "HW acceleration encoder not supported for codec: {}",
-                    utils::to_string(codec.name()).unwrap()
-                )));
-            }
-            let (width, height) = (encode_ctx.width, encode_ctx.height);
-            let mut hw_ctx = HWContext::new(device_type.auto_best_device()?)
-                .context("Hardware acceleration context initialization failed.")?;
-            hw_ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;
-            Some(hw_ctx)
-        } else {
-            None
-        };
+        let hw_context = self
+            .hw_device_config
+            .filter(|cfg| {
+                // hardware acceleration enabled for video
+                let is_video = self.media_type == MediaType::VIDEO;
+                // codec support or not for hardware acceleration
+                let hw_pixel = cfg
+                    .device_type
+                    .find_hw_pixel_format_with_codec(&codec)
+                    .ok_or_else(|| {
+                        let codec_name = utils::to_string(codec.name()).unwrap();
+                        Error::msg(format!(
+                            "HW acceleration encoder not supported for codec: {codec_name}"
+                        ))
+                    });
+                is_video && hw_pixel.is_ok()
+            })
+            .map(|cfg| {
+                // create hardware context
+                let (width, height) = (encode_ctx.width, encode_ctx.height);
+                HWContext::new(cfg)
+                    .and_then(|mut ctx| {
+                        ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;
+                        Ok(ctx)
+                    })
+                    .context("Hardware acceleration context initialization failed")
+            })
+            .transpose()?;
 
         let dict = self.codec_opts.map(|opts| opts.into_dict());
         encode_ctx

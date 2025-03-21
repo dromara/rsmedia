@@ -109,8 +109,6 @@ fn configure_windows() {
         "dxva2",          // DirectX Video Acceleration
         "evr",            // Enhanced Video Renderer
         "wmcodecdspuuid", // Windows Media Codec
-        "Mfcore",         // Media Foundation Core
-        "Mfplat",         // Media Foundation Platform
     ];
 
     // 3. Windows 核心库
@@ -127,7 +125,6 @@ fn configure_windows() {
         "normaliz", // 国际化
         "psapi",    // 进程状态 API
         "comdlg32", // Common Dialog
-        "glu32",    // OpenGL Utility
         "version",  // Version checking
         "winmm",    // Windows Multimedia
         "imm32",    // Input Method Manager
@@ -183,11 +180,14 @@ fn configure_windows() {
     // 链接器选项
     println!("cargo:rustc-link-arg=/DYNAMICBASE"); // ASLR
     println!("cargo:rustc-link-arg=/NXCOMPAT"); // DEP
-    println!("cargo:rustc-link-arg=/SAFESEH"); // Safe Exception Handlers
+    println!("cargo:rustc-link-arg=/HIGHENTROPYVA"); // ASLR
+                                                     // 优化和调试选项
+    println!("cargo:rustc-link-arg=/OPT:REF"); // 移除未引用的函数和数据
+    println!("cargo:rustc-link-arg=/DEBUG"); // 生成调试信息
+    println!("cargo:rustc-link-arg=/MANIFEST"); // 生成清单文件
 
     // 重新运行条件
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
     println!("cargo:rerun-if-env-changed=WindowsSdkDir");
-    println!("cargo:rerun-if-env-changed=WindowsSDKLibVersion");
 }

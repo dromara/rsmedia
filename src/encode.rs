@@ -195,7 +195,7 @@ impl EncoderBuilder {
         self
     }
 
-    /// explicit media type
+    /// explicit media type, default is `MediaType::VIDEO`
     pub fn with_media_type(mut self, media_type: MediaType) -> Self {
         self.media_type = media_type;
         self

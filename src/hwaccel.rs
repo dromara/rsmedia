@@ -4,29 +4,42 @@ use crate::{utils, Options};
 use anyhow::{Context, Error, Result};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
-use rsmpeg::avutil::{AVDictionary, AVFrame, AVHWDeviceContext, AVHWFramesContext};
+use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext};
 use rsmpeg::{ffi, UnsafeDerefMut};
 
-use std::collections::HashMap;
-
-/// 硬件加速设备配置
-/// CPU(NV12) -> GPU(CUDA) -> 处理 -> GPU(CUDA) -> CPU(NV12)
+/// Hardware device configuration.
+/// This struct contains all the necessary information to create a hardware device context.
+///
+/// The sw / hw frames conversion process includes the following steps:
+///
+/// CPU(NV12) -> GPU(CUDA) -> transform -> GPU(CUDA) -> CPU(NV12)
 #[derive(Clone)]
 pub struct HWDeviceConfig {
-    device_type: HWDeviceType,    // 硬件加速设备的具体路径或标识符
-    hw_pixel_format: PixelFormat, // GPU 硬件设备在内存中的像素格式, eg: CUDA,VAAPI,VDPAU
-    sw_pixel_format: PixelFormat, // CPU 内存中使用的像素格式, eg: NV12,YUV420P,RGB24
+    device_type: HWDeviceType,
+    hw_pixel_format: PixelFormat,
+    sw_pixel_format: PixelFormat,
     device_path: Option<String>,
-    options: Option<AVDictionary>,
+    options: Option<Options>,
 }
 
 impl HWDeviceConfig {
+    /// create a new HWDeviceConfig with the given parameters
+    ///
+    /// # Arguments
+    ///
+    /// * `device_type` - The type of hardware device
+    /// * `hw_pixel_format` - The pixel format of the hardware device
+    /// * `sw_pixel_format` - The pixel format of the software device
+    /// * `device_path` - The type-specific string identifying of the GPU device,
+    ///     e.g. for NVIDIA CUDA, device_path should be explicitly the GPU ID  "0" or "1",
+    ///         for VAAPI: device_path should be set like "/dev/dri/renderD128"
+    /// * `options` - Additional (type-specific) options to use in opening the device
     pub fn new(
         device_type: HWDeviceType,
         hw_pixel_format: PixelFormat,
         sw_pixel_format: PixelFormat,
         device_path: Option<String>,
-        options: Option<AVDictionary>,
+        options: Option<Options>,
     ) -> Self {
         Self {
             device_type,
@@ -37,18 +50,18 @@ impl HWDeviceConfig {
         }
     }
 
-    /// 创建NVIDIA配置
-    pub fn cuda() -> Self {
+    /// build CUDA HWDeviceConfig
+    pub fn cuda(id: Option<usize>) -> Self {
         Self::new(
             HWDeviceType::CUDA,
             PixelFormat::CUDA,
             PixelFormat::NV12,
-            None,
+            id.map(|id| format!("{}", id)),
             None,
         )
     }
 
-    /// 创建VAAPI配置
+    /// build VAAPI HWDeviceConfig
     pub fn vaapi(device_path: Option<String>) -> Self {
         Self::new(
             HWDeviceType::VAAPI,
@@ -59,13 +72,13 @@ impl HWDeviceConfig {
         )
     }
 
-    /// 创建Vulkan配置
-    pub fn vulkan() -> Self {
+    /// build VULKAN HWDeviceConfig
+    pub fn vulkan(device_path: Option<String>) -> Self {
         Self::new(
             HWDeviceType::VULKAN,
             PixelFormat::VULKAN,
             PixelFormat::NV12,
-            None,
+            device_path,
             None,
         )
     }
@@ -73,10 +86,6 @@ impl HWDeviceConfig {
 
 impl std::fmt::Debug for HWDeviceConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let options = self.options.to_owned();
-        let opts = options.map_or_else(HashMap::<String, String>::new, |dict| {
-            Options::new(dict).into()
-        });
         write!(
             f,
             "HWDeviceConfig {{ device_type: {:?}, device_path: {:?},  hw_pixel_format: {:?}, sw_pixel_format: {:?}, options: {:?} }}",
@@ -84,7 +93,7 @@ impl std::fmt::Debug for HWDeviceConfig {
             self.device_path,
             self.hw_pixel_format,
             self.sw_pixel_format,
-            opts
+            self.options,
         )
     }
 }
@@ -101,23 +110,31 @@ pub struct HWContext {
 }
 
 impl HWContext {
+    /// create a new HWContext with the given HWDeviceConfig
     pub fn new(config: HWDeviceConfig) -> Result<Self> {
-        let device_path = utils::from_str_opt(config.device_path.as_ref());
-        let device_ctx = AVHWDeviceContext::create(
-            config.device_type.into(),
-            device_path.as_deref(),
-            config.options.as_ref(),
-            0,
-        )
-        .context("Failed to create hardware device context")?;
+        let device_ctx = {
+            let device = utils::from_str_opt(config.device_path.as_ref());
+            let opts = config.options.as_ref().map(|opts| opts.as_dict());
+            AVHWDeviceContext::create(config.device_type.into(), device.as_deref(), opts, 0)
+                .context("Failed to create hardware device context")?
+        };
 
-        log::info!("Created hardware device context successfully.");
-        log::debug!("{}", config);
+        log::debug!(
+            "Created hardware device context successfully. config:{}",
+            config
+        );
 
         Ok(Self { config, device_ctx })
     }
 
-    /// 设置编解码器的硬件帧上下文
+    /// initialize HWFramesContext for the given codec context
+    ///
+    /// # Arguments
+    ///
+    /// * `is_decoder` - Whether the codec context is for decoding or encoding
+    /// * `codec_ctx` - The codec context to initialize
+    /// * `width` - The width of the input/output frames
+    /// * `height` - The height of the input/output frames
     pub fn setup_hw_frames(
         &mut self,
         is_decoder: bool,
@@ -427,7 +444,7 @@ impl HWDeviceType {
         }
     }
 
-    /// 自动选择最佳设备
+    /// Find the best available hardware acceleration device type on this system.
     pub fn auto_best_device(self) -> Result<HWDeviceConfig> {
         if self.is_available() {
             Ok(HWDeviceConfig::new(

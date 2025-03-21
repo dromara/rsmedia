@@ -96,7 +96,17 @@ pub fn to_os_string(cstr: impl AsRef<CStr>) -> OsString {
 /// - 指针必须指向一个有效的以 null 结尾的 C 字符串
 /// - 字符串内容必须是有效的 UTF-8
 pub unsafe fn from_c_char(ptr: *const c_char) -> String {
-    CStr::from_ptr(ptr).to_string_lossy().to_string()
+    if ptr.is_null() {
+        return String::new();
+    }
+    let cstr = CStr::from_ptr(ptr);
+    match cstr.to_str() {
+        Ok(s) => s.to_owned(),
+        Err(_) => {
+            // NOT UTF-8
+            cstr.to_string_lossy().into_owned()
+        }
+    }
 }
 
 /// 将 Rust 字符串转换为 C 字符串指针

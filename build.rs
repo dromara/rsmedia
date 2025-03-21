@@ -69,17 +69,10 @@ impl LinkType {
     fn configure_runtime(&self) {
         match self {
             LinkType::Static => {
-                // 完全静态链接
                 println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
                 println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
             }
-            LinkType::StaticMD => {
-                // 使用动态运行时的静态链接
-                println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
-                println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
-            }
-            LinkType::Dynamic => {
-                // 完全动态链接
+            LinkType::StaticMD | LinkType::Dynamic => {
                 println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
                 println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
             }
@@ -130,7 +123,6 @@ impl VcpkgConfig {
             })
             .ok_or("No valid configuration found")?;
 
-        // 使用 vec! 宏创建库路径列表
         let lib_paths = vec![primary_lib_path.clone()];
 
         Ok(VcpkgConfig {
@@ -160,17 +152,27 @@ impl VcpkgConfig {
             println!("cargo:rustc-link-search=native={}", path.display());
         }
 
-        // 添加 Windows SDK 路径
+        // Windows SDK 路径
         if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
-            let sdk_lib_path = PathBuf::from(windows_sdk_dir)
+            let sdk_version =
+                env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string());
+            let sdk_lib_path = PathBuf::from(windows_sdk_dir.clone())
                 .join("Lib")
-                .join(env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string()))
+                .join(&sdk_version)
                 .join("um")
                 .join("x64");
             println!("cargo:rustc-link-search=native={}", sdk_lib_path.display());
+
+            // 添加 SDK 的其他必要路径
+            let sdk_ucrt_path = PathBuf::from(windows_sdk_dir)
+                .join("Lib")
+                .join(&sdk_version)
+                .join("ucrt")
+                .join("x64");
+            println!("cargo:rustc-link-search=native={}", sdk_ucrt_path.display());
         }
 
-        // 添加 Visual Studio 路径
+        // Visual Studio 路径
         if let Ok(vs_path) = env::var("VCINSTALLDIR") {
             let vs_lib_path = PathBuf::from(vs_path).join("lib").join("x64");
             println!("cargo:rustc-link-search=native={}", vs_lib_path.display());
@@ -184,7 +186,7 @@ fn configure_windows() {
     // 添加库搜索路径
     vcpkg_config.add_library_paths();
 
-    // 配置 FFmpeg 库
+    // FFmpeg 库
     let ffmpeg_libs = [
         "avcodec",
         "avformat",
@@ -199,28 +201,73 @@ fn configure_windows() {
     // 配置运行时
     vcpkg_config.link_type.configure_runtime();
 
-    // Windows 系统库
-    let system_libs = [
-        // 安全相关
-        "secur32", "crypt32", "bcrypt", "ncrypt", "credui",
-        // COM 和 Media Foundation
-        "ole32", "oleaut32", "mfplat", "mfuuid", "strmiids", "dxva2", "evr",
-        // 核心系统
-        "kernel32", "user32", "gdi32", "shell32", "advapi32", "ws2_32", "iphlpapi", "psapi",
-        "version",
+    // 安全相关库 (Schannel, BCrypt等)
+    let security_libs = [
+        "secur32",  // Schannel API
+        "security", // Security Support Provider Interface
+        "crypt32",  // Cryptography API
+        "bcrypt",   // BCrypt API
+        "ncrypt",   // NCrypt API
+        "credui",   // Credential Manager UI
+        "schannel", // Secure Channel
+        "ntdll",    // NT Layer
+        "sspicli",  // Security Support Provider Interface Client
     ];
 
-    // 链接系统库
+    // COM 和 Media Foundation 相关库
+    let com_mf_libs = [
+        "ole32",          // COM Core
+        "oleaut32",       // COM Automation
+        "mf",             // Media Foundation
+        "mfplat",         // Media Foundation Platform
+        "mfplay",         // Media Foundation Playback
+        "mfreadwrite",    // Media Foundation Read/Write
+        "mfuuid",         // Media Foundation UUIDs
+        "propsys",        // Property System
+        "strmiids",       // DirectShow UUIDs
+        "dxva2",          // DirectX Video Acceleration
+        "evr",            // Enhanced Video Renderer
+        "wmcodecdspuuid", // Windows Media Codec DSP
+        "amstrmid",       // ActiveMovie
+    ];
+
+    // 核心系统库
+    let system_libs = [
+        "kernel32", // Core Windows API
+        "user32",   // User Interface
+        "gdi32",    // Graphics Device Interface
+        "shell32",  // Shell
+        "advapi32", // Advanced Windows 32 Base API
+        "ws2_32",   // Windows Sockets 2
+        "iphlpapi", // IP Helper API
+        "userenv",  // User Environment
+        "psapi",    // Process Status API
+        "dbghelp",  // Debug Help
+        "shlwapi",  // Shell Light-weight API
+        "version",  // Version Checking
+        "setupapi", // Setup API
+        "comctl32", // Common Controls
+    ];
+
+    for lib in security_libs.iter() {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
+
+    for lib in com_mf_libs.iter() {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
+
     for lib in system_libs.iter() {
         println!("cargo:rustc-link-lib={}", lib);
     }
 
-    // 通用链接器选项
+    // 链接器选项
     let linker_flags = [
         "/DYNAMICBASE",   // ASLR
         "/NXCOMPAT",      // DEP
         "/HIGHENTROPYVA", // 高熵 ASLR
         "/OPT:REF",       // 移除未引用的函数
+        "/OPT:ICF",       // 相同代码折叠
         "/DEBUG",         // 调试信息
         "/MANIFEST",      // 生成清单
     ];
@@ -228,6 +275,10 @@ fn configure_windows() {
     for flag in linker_flags.iter() {
         println!("cargo:rustc-link-arg={}", flag);
     }
+
+    // 添加额外的链接器指令
+    println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
+    println!("cargo:rustc-link-arg=/SUBSYSTEM:CONSOLE");
 
     // 重新运行条件
     println!("cargo:rerun-if-changed=build.rs");

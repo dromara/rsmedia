@@ -53,7 +53,6 @@ fn configure_macos() {
 enum LinkType {
     Static,   // x64-windows-static
     StaticMD, // x64-windows-static-md
-    Dynamic,  // x64-windows
 }
 
 impl LinkType {
@@ -61,7 +60,6 @@ impl LinkType {
         match triplet {
             "x64-windows-static" => Some(LinkType::Static),
             "x64-windows-static-md" => Some(LinkType::StaticMD),
-            "x64-windows" => Some(LinkType::Dynamic),
             _ => None,
         }
     }
@@ -72,7 +70,7 @@ impl LinkType {
                 println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
                 println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
             }
-            LinkType::StaticMD | LinkType::Dynamic => {
+            LinkType::StaticMD => {
                 println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
                 println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
             }
@@ -89,8 +87,8 @@ impl VcpkgConfig {
     fn new() -> Result<Self, String> {
         let vcpkg_root = PathBuf::from(env::var("VCPKG_ROOT").map_err(|_| "VCPKG_ROOT not found")?);
 
-        // 检查所有可能的 triplet
-        let triplets = ["x64-windows-static", "x64-windows-static-md", "x64-windows"];
+        // 检查静态链接的 triplet
+        let triplets = ["x64-windows-static", "x64-windows-static-md"];
 
         let mut available_configs = Vec::new();
         for triplet in triplets.iter() {
@@ -107,7 +105,7 @@ impl VcpkgConfig {
             return Err("No valid vcpkg triplets found!".to_string());
         }
 
-        // 优先选择链接类型：Static > StaticMD > Dynamic
+        // 优先选择 Static 链接类型
         let (link_type, primary_lib_path) = available_configs
             .iter()
             .find(|(lt, _)| matches!(lt, LinkType::Static))
@@ -115,11 +113,6 @@ impl VcpkgConfig {
                 available_configs
                     .iter()
                     .find(|(lt, _)| matches!(lt, LinkType::StaticMD))
-            })
-            .or_else(|| {
-                available_configs
-                    .iter()
-                    .find(|(lt, _)| matches!(lt, LinkType::Dynamic))
             })
             .ok_or("No valid configuration found")?;
 
@@ -138,7 +131,7 @@ impl VcpkgConfig {
                     println!("cargo:rustc-link-lib=static={}", lib);
                 }
             }
-            LinkType::StaticMD | LinkType::Dynamic => {
+            LinkType::StaticMD => {
                 for lib in libs {
                     println!("cargo:rustc-link-lib={}", lib);
                 }
@@ -201,62 +194,26 @@ fn configure_windows() {
     // 配置运行时
     vcpkg_config.link_type.configure_runtime();
 
-    // 安全相关库 (Schannel, BCrypt等)
-    let security_libs = [
-        "secur32",  // Schannel API
-        "security", // Security Support Provider Interface
-        "crypt32",  // Cryptography API
-        "bcrypt",   // BCrypt API
-        "ncrypt",   // NCrypt API
-        "credui",   // Credential Manager UI
-        "schannel", // Secure Channel
-        "ntdll",    // NT Layer
-        "sspicli",  // Security Support Provider Interface Client
-    ];
-
-    // COM 和 Media Foundation 相关库
-    let com_mf_libs = [
-        "ole32",          // COM Core
-        "oleaut32",       // COM Automation
-        "mf",             // Media Foundation
-        "mfplat",         // Media Foundation Platform
-        "mfplay",         // Media Foundation Playback
-        "mfreadwrite",    // Media Foundation Read/Write
-        "mfuuid",         // Media Foundation UUIDs
-        "propsys",        // Property System
-        "strmiids",       // DirectShow UUIDs
-        "dxva2",          // DirectX Video Acceleration
-        "evr",            // Enhanced Video Renderer
-        "wmcodecdspuuid", // Windows Media Codec DSP
-        "amstrmid",       // ActiveMovie
-    ];
-
-    // 核心系统库
     let system_libs = [
-        "kernel32", // Core Windows API
-        "user32",   // User Interface
+        // 基础系统库
         "gdi32",    // Graphics Device Interface
-        "shell32",  // Shell
-        "advapi32", // Advanced Windows 32 Base API
-        "ws2_32",   // Windows Sockets 2
-        "iphlpapi", // IP Helper API
-        "userenv",  // User Environment
         "psapi",    // Process Status API
-        "dbghelp",  // Debug Help
-        "shlwapi",  // Shell Light-weight API
-        "version",  // Version Checking
-        "setupapi", // Setup API
-        "comctl32", // Common Controls
+        "ole32",    // COM/OLE Support
+        "strmiids", // DirectShow GUID definitions
+        "uuid",     // COM GUID definitions
+        "oleaut32", // OLE Automation
+        "shlwapi",  // Shell Light-weight Utility
+        "user32",   // User Interface
+        "ws2_32",   // Windows Sockets
+        "vfw32",    // Video for Windows
+        "secur32",  // Security Support Provider
+        "bcrypt",   // Cryptography
+        "advapi32", // Advanced Windows Services
+        "shell32",  // Shell Services
+        "mfplat",   // Media Foundation Platform
     ];
 
-    for lib in security_libs.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
-    }
-
-    for lib in com_mf_libs.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
-    }
-
+    // 链接系统库
     for lib in system_libs.iter() {
         println!("cargo:rustc-link-lib={}", lib);
     }
@@ -268,17 +225,11 @@ fn configure_windows() {
         "/HIGHENTROPYVA", // 高熵 ASLR
         "/OPT:REF",       // 移除未引用的函数
         "/OPT:ICF",       // 相同代码折叠
-        "/DEBUG",         // 调试信息
-        "/MANIFEST",      // 生成清单
     ];
 
     for flag in linker_flags.iter() {
         println!("cargo:rustc-link-arg={}", flag);
     }
-
-    // 添加额外的链接器指令
-    println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
-    println!("cargo:rustc-link-arg=/SUBSYSTEM:CONSOLE");
 
     // 重新运行条件
     println!("cargo:rerun-if-changed=build.rs");

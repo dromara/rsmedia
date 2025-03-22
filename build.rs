@@ -6,9 +6,9 @@ fn main() {
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
     match target_os.as_str() {
-        "linux" => configure_linux(&target_arch),
         "macos" | "darwin" => configure_macos(),
-        "windows" => configure_windows(),
+        "linux" => configure_linux(&target_arch),
+        "windows" => configure_windows(&target_arch),
         _ => panic!("Unsupported operating system"),
     }
 }
@@ -49,10 +49,25 @@ fn configure_macos() {
     }
 }
 
-fn configure_windows() {
+fn configure_windows(target_arch: &str) {
     // 获取 VCPKG_ROOT 并检查 triplet
     let vcpkg_root = PathBuf::from(env::var("VCPKG_ROOT").expect("VCPKG_ROOT not found"));
-    let triplets = ["x64-windows-static", "x64-windows-static-md"];
+    let triplets = if target_arch == "x86_64" {
+        vec![
+            "x64-windows",
+            "x64-windows-release",
+            "x64-windows-static",
+            "x64-windows-static-md",
+        ]
+    } else if target_arch == "aarch64" {
+        vec![
+            "arm64-windows",
+            "arm64-windows-static",
+            "arm64-windows-static-md",
+        ]
+    } else {
+        panic!("Unsupported target architecture: {}", target_arch);
+    };
 
     // 查找可用的 triplet
     let mut found_triplet = None;
@@ -72,15 +87,21 @@ fn configure_windows() {
 
     // 配置运行时
     match *triplet {
-        "x64-windows-static" => {
+        "x64-windows-static" | "arm64-windows-static" => {
             println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
             println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
         }
-        "x64-windows-static-md" => {
+        "x64-windows-static-md" | "arm64-windows-static-md" => {
             println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
             println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
         }
-        _ => unreachable!(),
+        _ => {
+            // 动态链接的情况
+            panic!(
+                "Unsupported architecture: {}, triplet: {}",
+                target_arch, triplet
+            );
+        }
     }
 
     // FFmpeg 库 - 静态链接
@@ -178,24 +199,34 @@ fn configure_windows() {
     // Windows SDK 和 Visual Studio 路径
     if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
         let sdk_version = env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string());
+        let arch_path = if target_arch == "x86_64" {
+            "x64"
+        } else {
+            "arm64"
+        };
 
         let sdk_lib_path = PathBuf::from(windows_sdk_dir.clone())
             .join("Lib")
             .join(&sdk_version)
             .join("um")
-            .join("x64");
+            .join(arch_path);
         println!("cargo:rustc-link-search=native={}", sdk_lib_path.display());
 
         let sdk_ucrt_path = PathBuf::from(windows_sdk_dir)
             .join("Lib")
             .join(&sdk_version)
             .join("ucrt")
-            .join("x64");
+            .join(arch_path);
         println!("cargo:rustc-link-search=native={}", sdk_ucrt_path.display());
     }
 
     if let Ok(vs_path) = env::var("VCINSTALLDIR") {
-        let vs_lib_path = PathBuf::from(vs_path).join("lib").join("x64");
+        let arch_path = if target_arch == "x86_64" {
+            "x64"
+        } else {
+            "arm64"
+        };
+        let vs_lib_path = PathBuf::from(vs_path).join("lib").join(arch_path);
         println!("cargo:rustc-link-search=native={}", vs_lib_path.display());
     }
 

@@ -81,42 +81,37 @@ fn configure_windows(target_arch: &str) {
     }
 
     let (triplet, lib_path) = found_triplet.expect("No valid vcpkg triplets found!");
+    let is_static = triplet.contains("static");
 
     // 添加 vcpkg 库路径
     println!("cargo:rustc-link-search=native={}", lib_path.display());
 
     // 配置运行时
-    match *triplet {
-        "x64-windows-static" | "arm64-windows-static" => {
-            println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
-            println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
-        }
-        "x64-windows-static-md" | "arm64-windows-static-md" => {
-            println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
-            println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
-        }
-        _ => {
-            // 动态链接的情况
-            panic!(
-                "Unsupported architecture: {}, triplet: {}",
-                target_arch, triplet
-            );
-        }
+    if triplet.ends_with("-static") {
+        println!("cargo:rustc-link-arg=/NODEFAULTLIB:msvcrt.lib");
+        println!("cargo:rustc-link-arg=/DEFAULTLIB:libcmt.lib");
+    } else {
+        println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
+        println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
     }
 
-    // FFmpeg 库 - 静态链接
+    // FFmpeg
     let ffmpeg_libs = [
-        "avcodec",
-        "avformat",
         "avutil",
         "swscale",
         "swresample",
+        "avcodec",
+        "avformat",
         "avfilter",
         "avdevice",
     ];
 
     for lib in ffmpeg_libs.iter() {
-        println!("cargo:rustc-link-lib=static={}", lib);
+        if is_static {
+            println!("cargo:rustc-link-lib=static={}", lib);
+        } else {
+            println!("cargo:rustc-link-lib={}", lib);
+        }
     }
 
     // Windows 系统库
@@ -210,6 +205,9 @@ fn configure_windows(target_arch: &str) {
             .join(&sdk_version)
             .join("um")
             .join(arch_path);
+        if !sdk_lib_path.exists() {
+            panic!("Windows SDK path not found: {}", sdk_lib_path.display());
+        }
         println!("cargo:rustc-link-search=native={}", sdk_lib_path.display());
 
         let sdk_ucrt_path = PathBuf::from(windows_sdk_dir)
@@ -217,6 +215,12 @@ fn configure_windows(target_arch: &str) {
             .join(&sdk_version)
             .join("ucrt")
             .join(arch_path);
+        if !sdk_ucrt_path.exists() {
+            panic!(
+                "Windows SDK UCRT path not found: {}",
+                sdk_ucrt_path.display()
+            );
+        }
         println!("cargo:rustc-link-search=native={}", sdk_ucrt_path.display());
     }
 

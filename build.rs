@@ -167,7 +167,7 @@ fn configure_windows(target_arch: &str) {
     println!("cargo:rustc-link-arg=user32.lib");
 
     // 链接器选项
-    let linker_flags = [
+    let mut linker_flags = vec![
         // 基础安全选项
         "/NXCOMPAT",          // 启用数据执行保护 (DEP)
         "/DYNAMICBASE",       // 启用 ASLR
@@ -178,15 +178,19 @@ fn configure_windows(target_arch: &str) {
         "/OPT:ICF",        // 合并重复的函数
         "/INCREMENTAL:NO", // 禁用增量链接
         // 调试和安全检查
-        "/GUARD:CF",     // 启用控制流保护
-        "/CETCOMPAT",    // 启用 CET Shadow Stack
         "/DEBUG",        // 包含调试信息
         "/DEBUGTYPE:CV", // 使用 CodeView 格式的调试信息
-        // 堆和栈保护
-        "/STACK:8388608", // 设置较大的栈大小 (8MB)
-        "/HEAP:8388608",  // 设置较大的堆大小 (8MB)
     ];
 
+    // 架构特定的链接器选项
+    if target_arch == "x86_64" {
+        linker_flags.extend_from_slice(&[
+            "/GUARD:CF",  // 启用控制流保护
+            "/CETCOMPAT", // 启用 CET Shadow Stack (仅 x64)
+        ]);
+    } else if target_arch == "aarch64" {
+        linker_flags.push("/GUARD:CF"); // ARM64 支持 CFG，但不支持 CET
+    }
     for flag in linker_flags.iter() {
         println!("cargo:rustc-link-arg={}", flag);
     }

@@ -155,7 +155,6 @@ jobs:
             feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
             target: "x86_64-pc-windows-msvc"
             vcpkg_triplet: "x64-windows-static-md"
-          - ffmpeg_version: "7.1"
       fail-fast: false
 
     steps:
@@ -202,13 +201,6 @@ jobs:
       - name: Install Dependencies
         run: |
           ./vcpkg/vcpkg.exe install ffmpeg:${{ matrix.config.vcpkg_triplet }}
-
-      - name: Set env
-        shell: bash
-        run: |
-          if [ '${{ matrix.config.dynamic }}' != '' ]; then
-            echo "VCPKGRS_DYNAMIC=1" >> $GITHUB_ENV
-          fi
 
       - name: Clippy check
         shell: bash

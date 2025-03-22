@@ -19,7 +19,7 @@ env:
 jobs:
 
   build-linux:
-    name: build / linux / ffmpeg ${{ matrix.ffmpeg_version }}
+    name: build / linux-x86_64 / ffmpeg ${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
     container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
 
@@ -133,14 +133,17 @@ jobs:
         run: |
           brew install ffmpeg pkg-config
 
+      - name: Clippy check
+        run: cargo clippy --all --all-features -- -D warnings
+
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --all --all-features --verbose
 
       - name: Run Test
-        run: cargo test --verbose -- --nocapture
+        run: cargo test --all --all-features --verbose -- --nocapture
 
   build-windows:
-    name: build / windows / latest ffmpeg
+    name: build / windows-x86_64 / ffmpeg ${{ matrix.config.ffmpeg_version }}
     runs-on: windows-latest
 
     strategy:
@@ -155,6 +158,11 @@ jobs:
             feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
             target: "x86_64-pc-windows-msvc"
             vcpkg_triplet: "x64-windows-static-md"
+          - ffmpeg_version: "7.1"
+            feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
+            target: "x86_64-pc-windows-msvc"
+            vcpkg_triplet: "x64-windows"
+            dynamic: true
       fail-fast: false
 
     steps:
@@ -202,6 +210,13 @@ jobs:
         run: |
           ./vcpkg/vcpkg.exe install ffmpeg:${{ matrix.config.vcpkg_triplet }}
 
+      - name: Set env
+        shell: bash
+        run: |
+          if [ '${{ matrix.config.dynamic }}' != '' ]; then
+            echo "VCPKGRS_DYNAMIC=1" >> $GITHUB_ENV
+          fi
+
       - name: Clippy check
         shell: bash
         env:
@@ -222,9 +237,6 @@ jobs:
           LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
         run: cargo build --no-default-features --features ${{ matrix.config.feature }} --target ${{ matrix.config.target }} --verbose
 
-      # TODO: Fix linking error on Windows
-      # error: linking with `link.exe` failed: exit code: 1181
-      # note: LINK : fatal error LNK1181: cannot open input file 'bin.lib'
       - name: Run Test
         shell: bash
         env:
@@ -301,7 +313,7 @@ jobs:
           EOF
 
       - name: Test
-        run: cargo test --all-features --verbose -- --nocapture
+        run: cargo test --all --all-features --verbose -- --nocapture
 
   lints:
     runs-on: ubuntu-latest

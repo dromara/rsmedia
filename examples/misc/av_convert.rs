@@ -116,19 +116,16 @@ mod tests {
         let height = 240;
         let pixel_format = ffi::AV_PIX_FMT_YUV420P;
 
-        unsafe {
-            // 创建一个新的 AVFrame
-            let mut yuv_frame = AVFrame::new();
-            yuv_frame.set_width(width);
-            yuv_frame.set_height(height);
-            yuv_frame.set_format(pixel_format);
-            yuv_frame
-                .alloc_buffer()
-                .context("frame alloc_buffer failed, error.")
-                .unwrap();
+        let mut yuv_frame = AVFrame::new();
+        yuv_frame.set_width(width);
+        yuv_frame.set_height(height);
+        yuv_frame.set_format(pixel_format);
+        yuv_frame
+            .alloc_buffer()
+            .context("frame alloc_buffer failed, error.")
+            .unwrap();
 
-            Ok(yuv_frame)
-        }
+        Ok(yuv_frame)
     }
 
     #[test]

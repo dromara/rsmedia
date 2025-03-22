@@ -156,10 +156,6 @@ jobs:
             target: "x86_64-pc-windows-msvc"
             vcpkg_triplet: "x64-windows-static-md"
           - ffmpeg_version: "7.1"
-            feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
-            target: "x86_64-pc-windows-msvc"
-            vcpkg_triplet: "x64-windows"
-            dynamic: true
       fail-fast: false
 
     steps:

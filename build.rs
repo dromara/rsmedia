@@ -141,6 +141,15 @@ fn configure_windows() {
         println!("cargo:rustc-link-lib={}", lib);
     }
 
+    // 显式链接
+    println!("cargo:rustc-link-arg=mfuuid.lib");
+    println!("cargo:rustc-link-arg=strmiids.lib");
+    println!("cargo:rustc-link-arg=secur32.lib");
+    println!("cargo:rustc-link-arg=bcrypt.lib");
+    println!("cargo:rustc-link-arg=dxva2.lib");
+    println!("cargo:rustc-link-arg=ole32.lib");
+    println!("cargo:rustc-link-arg=user32.lib");
+
     // 链接器选项
     let linker_flags = [
         // 基础安全选项

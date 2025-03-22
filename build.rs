@@ -126,9 +126,7 @@ fn configure_windows() {
         "bcrypt",
         "ncrypt",
         "credui",
-        // Schannel
         "schannel",
-        "secur32",
         // 其他必需库
         "shlwapi",
         "psapi",
@@ -143,22 +141,25 @@ fn configure_windows() {
         println!("cargo:rustc-link-lib={}", lib);
     }
 
-    // 显式链接
-    println!("cargo:rustc-link-arg=mfuuid.lib");
-    println!("cargo:rustc-link-arg=strmiids.lib");
-    println!("cargo:rustc-link-arg=secur32.lib");
-    println!("cargo:rustc-link-arg=bcrypt.lib");
-    println!("cargo:rustc-link-arg=dxva2.lib");
-    println!("cargo:rustc-link-arg=ole32.lib");
-    println!("cargo:rustc-link-arg=user32.lib");
-
     // 链接器选项
     let linker_flags = [
-        "/DYNAMICBASE",
-        "/NXCOMPAT",
-        "/HIGHENTROPYVA",
-        "/OPT:REF",
-        "/OPT:ICF",
+        // 基础安全选项
+        "/NXCOMPAT",          // 启用数据执行保护 (DEP)
+        "/DYNAMICBASE",       // 启用 ASLR
+        "/HIGHENTROPYVA",     // 启用高熵 ASLR
+        "/LARGEADDRESSAWARE", // 启用大内存地址支持
+        // 优化选项
+        "/OPT:REF",        // 删除未引用的函数和数据
+        "/OPT:ICF",        // 合并重复的函数
+        "/INCREMENTAL:NO", // 禁用增量链接
+        // 调试和安全检查
+        "/GUARD:CF",     // 启用控制流保护
+        "/CETCOMPAT",    // 启用 CET Shadow Stack
+        "/DEBUG",        // 包含调试信息
+        "/DEBUGTYPE:CV", // 使用 CodeView 格式的调试信息
+        // 堆和栈保护
+        "/STACK:8388608", // 设置较大的栈大小 (8MB)
+        "/HEAP:8388608",  // 设置较大的堆大小 (8MB)
     ];
 
     for flag in linker_flags.iter() {

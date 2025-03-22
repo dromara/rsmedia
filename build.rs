@@ -83,7 +83,89 @@ fn configure_windows() {
         _ => unreachable!(),
     }
 
-    // 添加 Windows SDK 路径
+    // FFmpeg 库 - 静态链接
+    let ffmpeg_libs = [
+        "avcodec",
+        "avformat",
+        "avutil",
+        "swscale",
+        "swresample",
+        "avfilter",
+        "avdevice",
+    ];
+
+    for lib in ffmpeg_libs.iter() {
+        println!("cargo:rustc-link-lib=static={}", lib);
+    }
+
+    // Windows 系统库
+    let system_libs = [
+        // 基础系统库
+        "kernel32",
+        "user32",
+        "gdi32",
+        "advapi32",
+        "shell32",
+        "ole32",
+        "oleaut32",
+        "uuid",
+        "ws2_32",
+        // COM 和 Media Foundation
+        "mf",
+        "mfplat",
+        "mfplay",
+        "mfreadwrite",
+        "mfuuid",
+        "strmiids",
+        "dxva2",
+        "evr",
+        // Security APIs
+        "secur32",
+        "security",
+        "crypt32",
+        "bcrypt",
+        "ncrypt",
+        "credui",
+        // Schannel
+        "schannel",
+        "secur32",
+        // 其他必需库
+        "shlwapi",
+        "psapi",
+        "vfw32",
+        "comdlg32",
+        "comctl32",
+        "msacm32",
+        "winmm",
+    ];
+
+    for lib in system_libs.iter() {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
+
+    // 显式链接
+    println!("cargo:rustc-link-arg=mfuuid.lib");
+    println!("cargo:rustc-link-arg=strmiids.lib");
+    println!("cargo:rustc-link-arg=secur32.lib");
+    println!("cargo:rustc-link-arg=bcrypt.lib");
+    println!("cargo:rustc-link-arg=dxva2.lib");
+    println!("cargo:rustc-link-arg=ole32.lib");
+    println!("cargo:rustc-link-arg=user32.lib");
+
+    // 链接器选项
+    let linker_flags = [
+        "/DYNAMICBASE",
+        "/NXCOMPAT",
+        "/HIGHENTROPYVA",
+        "/OPT:REF",
+        "/OPT:ICF",
+    ];
+
+    for flag in linker_flags.iter() {
+        println!("cargo:rustc-link-arg={}", flag);
+    }
+
+    // Windows SDK 和 Visual Studio 路径
     if let Ok(windows_sdk_dir) = env::var("WindowsSdkDir") {
         let sdk_version = env::var("WindowsSDKLibVersion").unwrap_or("10.0.22621.0".to_string());
 
@@ -102,71 +184,9 @@ fn configure_windows() {
         println!("cargo:rustc-link-search=native={}", sdk_ucrt_path.display());
     }
 
-    // Visual Studio 路径
     if let Ok(vs_path) = env::var("VCINSTALLDIR") {
         let vs_lib_path = PathBuf::from(vs_path).join("lib").join("x64");
         println!("cargo:rustc-link-search=native={}", vs_lib_path.display());
-    }
-
-    // FFmpeg
-    let ffmpeg_libs = [
-        "avcodec",
-        "avformat",
-        "avutil",
-        "swscale",
-        "swresample",
-        "avfilter",
-        "avdevice",
-    ];
-
-    for lib in ffmpeg_libs.iter() {
-        println!("cargo:rustc-link-lib=static={}", lib);
-    }
-
-    let system_libs = [
-        "gdi32",
-        "psapi",
-        "ole32",
-        "strmiids",
-        "uuid",
-        "oleaut32",
-        "shlwapi",
-        "user32",
-        "ws2_32",
-        "vfw32",
-        "secur32",
-        "bcrypt",
-        "advapi32",
-        "shell32",
-        "mf",
-        "mfplat",
-        "mfplay",
-        "mfreadwrite",
-        "mfuuid",
-        "evr",
-        "dxva2",
-        "wmcodecdspuuid",
-    ];
-
-    for lib in system_libs.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
-    }
-
-    // 显式链接 GUID 库
-    println!("cargo:rustc-link-arg=mfuuid.lib");
-    println!("cargo:rustc-link-arg=strmiids.lib");
-
-    // 链接器选项
-    let linker_flags = [
-        "/DYNAMICBASE",
-        "/NXCOMPAT",
-        "/HIGHENTROPYVA",
-        "/OPT:REF",
-        "/OPT:ICF",
-    ];
-
-    for flag in linker_flags.iter() {
-        println!("cargo:rustc-link-arg={}", flag);
     }
 
     // 重新运行条件

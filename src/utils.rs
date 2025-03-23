@@ -14,8 +14,8 @@ pub fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
     {
         use std::os::windows::ffi::OsStrExt;
         let wide: Vec<u16> = path.as_ref().as_os_str().encode_wide().collect();
-        let bytes: Vec<u8> = wide.iter().flat_map(|c| c.to_le_bytes().to_vec()).collect();
-        CString::new(bytes).unwrap()
+        let path_str = String::from_utf16_lossy(&wide);
+        CString::new(path_str.as_bytes()).unwrap()
     }
 }
 
@@ -128,27 +128,38 @@ mod tests {
 
     #[test]
     fn test_path_conversion() {
+        // 使用平台无关的路径分隔符
+        let path_str = if cfg!(unix) {
+            "/usr/local/bin"
+        } else {
+            r"C:\Users\local\bin"
+        };
+
         // 从 &str 路径
-        let path_str = "/usr/local/bin";
         let cstring = from_path(Path::new(path_str));
         assert_eq!(cstring.to_str().unwrap(), path_str);
 
         // 从 PathBuf
-        let path_buf = PathBuf::from("/usr/local/bin");
+        let path_buf = PathBuf::from(path_str);
         let cstring = from_path(&path_buf);
         assert_eq!(cstring.to_str().unwrap(), path_str);
 
-        // UTF-8 中文路径
-        let chinese = CString::new("测试/文件.txt").unwrap();
+        // UTF-8 中文路径 (使用平台特定分隔符)
+        let chinese_path = if cfg!(unix) {
+            "测试/文件.txt"
+        } else {
+            r"测试\文件.txt"
+        };
+        let chinese = CString::new(chinese_path).unwrap();
         let utf8_path = to_path(&chinese);
-        assert_eq!(utf8_path.to_str().unwrap(), "测试/文件.txt");
+        assert_eq!(utf8_path.to_str().unwrap(), chinese_path);
 
-        // GBK编码路径测试 (测试.txt)
-        let gbk = CString::new(vec![0xB2, 0xE2, 0xCA, 0xD4, 0x2E, 0x74, 0x78, 0x74]).unwrap();
-        let gbk_path = to_path(&gbk);
         #[cfg(unix)]
         {
+            // NOT UTF-8
             use std::os::unix::ffi::OsStrExt;
+            let gbk = CString::new(vec![0xB2, 0xE2, 0xCA, 0xD4, 0x2E, 0x74, 0x78, 0x74]).unwrap();
+            let gbk_path = to_path(&gbk);
             assert_eq!(
                 gbk_path.as_os_str().as_bytes(),
                 &[0xB2, 0xE2, 0xCA, 0xD4, 0x2E, 0x74, 0x78, 0x74]
@@ -157,9 +168,16 @@ mod tests {
 
         #[cfg(not(unix))]
         {
-            // Windows平台：比较转换后的字符串
-            // GBK "测试.txt" 在Windows中应该正确显示
-            assert_eq!(gbk_path, Path::new("测试.txt"));
+            use std::os::windows::ffi::{OsStrExt, OsStringExt};
+            // Windows 下使用 UTF-16 测试
+            let test_str = "测试.txt";
+            let path = Path::new(test_str);
+            let os_str = path.as_os_str();
+            let wide_chars: Vec<u16> = os_str.encode_wide().collect();
+            let os_string = OsString::from_wide(&wide_chars);
+            let cstring = from_path(&os_string);
+            let result_path = to_path(&cstring);
+            assert_eq!(result_path.to_str().unwrap(), test_str);
         }
     }
 
@@ -188,11 +206,18 @@ mod tests {
 
     #[test]
     fn test_optional_conversion() {
+        // 使用平台特定的路径
+        let test_path = if cfg!(unix) {
+            "/usr/local"
+        } else {
+            r"C:\Users\local"
+        };
+
         // Optional Path
-        let path: Option<&Path> = Some(Path::new("/usr/local"));
+        let path: Option<&Path> = Some(Path::new(test_path));
         let cstring = from_path_opt(path);
         assert!(cstring.is_some());
-        assert_eq!(cstring.unwrap().to_str().unwrap(), "/usr/local");
+        assert_eq!(cstring.unwrap().to_str().unwrap(), test_path);
 
         // Optional str
         let s: Option<&str> = Some("hello");

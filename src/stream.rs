@@ -8,7 +8,6 @@ use rsmpeg::avutil::AVDictionaryRef;
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
-use libc::c_int;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -433,9 +432,9 @@ impl std::fmt::Display for StreamInfo {
         };
         let format = unsafe {
             if self.media_type == MediaType::VIDEO {
-                utils::from_c_char(ffi::av_get_pix_fmt_name(self.format as c_int))
+                utils::from_c_char(ffi::av_get_pix_fmt_name(self.format))
             } else if self.media_type == MediaType::AUDIO {
-                utils::from_c_char(ffi::av_get_sample_fmt_name(self.format as c_int))
+                utils::from_c_char(ffi::av_get_sample_fmt_name(self.format))
             } else {
                 "unknown".to_string()
             }
@@ -605,7 +604,7 @@ impl StreamSideData<'_> {
 
 pub struct StreamSideDataIter<'a> {
     stream: &'a Stream<'a>,
-    current: c_int,
+    current: i32,
 }
 
 impl StreamSideDataIter<'_> {

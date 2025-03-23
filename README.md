@@ -21,6 +21,27 @@ interface to many common media tasks such as reading, writing, muxing, encoding,
 ⚠️ This project is still a work-in-progress, and will contain bugs. Some parts
 of the API have not been flushed out yet. Use with caution.
 
+supported platforms:
+
+| platform | architecture | link type  | toolchain        | build options                       | pkg manager           | notes                          |
+|----------|--------------|------------|------------------|-------------------------------------|-----------------------|--------------------------------|
+| Linux    | x86_64       | Static     | ✅ GCC/Clang      | ✅ default                           | ✅ apt, yum         | ✅ `pkg-config` + `glibc`       |
+| Linux    | x86_64       | Dynamic    | ✅ GCC/Clang      | ✅ default                           | ✅ apt, yum         | ✅ `pkg-config` + `glibc`       |
+| Linux    | aarch64      | Static     | ⚠️ GCC/Clang     | ⚠️                                  | ⚠️ apt, yum           | ⚠️ `pkg-config` + `glibc`      |
+| Linux    | aarch64      | Dynamic    | ⚠️ GCC/Clang     | ⚠️                                  | ⚠️ apt, yum           | ⚠️ `pkg-config` + `glibc`      |
+| macOS    | x86_64       | Static     | ✅ Apple Clang    | ❌                                   | ✅ Homebrew            | ✅ `pkg-config`                 |
+| macOS    | x86_64       | Dynamic    | ✅ Apple Clang    | ✅ default                           | ✅ Homebrew            | ✅ `pkg-config`                 |
+| macOS    | aarch64      | Static     | ✅ Apple Clang    | ❌                                   | ⚠️ Homebrew           | ✅ `pkg-config`                 |
+| macOS    | aarch64      | Dynamic    | ✅ Apple Clang    | ✅ default                           | ✅ Homebrew            | ✅ `pkg-config`                 |
+| Windows  | x86_64       | Static     | ✅ MSVC/MinGW     | ⚠️ `-Ctarget-feature=+crt-static`   | ✅ vcpkg               | ✅ `vs 2022` + `llvm` + `clang` |
+| Windows  | x86_64       | Dynamic    | ✅ MSVC/MinGW     | ✅ default                           | ✅ vcpkg               | ✅ `vs 2022` + `llvm` + `clang` |
+| Windows  | aarch64      | Static     | ✅ MSVC           | ⚠️ `-Ctarget-feature=+crt-static`   | ⚠️ vcpkg              | ✅ `vs 2022` + `llvm` + `clang` |
+| Windows  | aarch64      | Dynamic    | ✅ MSVC           | ✅ default                           | ✅ vcpkg               | ✅ `vs 2022` + `llvm` + `clang` |
+
+> **Note:**
+- ✅ support/successful
+- ❌ not support/failed
+- ⚠️ Partially supported/not clear
 
 ## Wiki
 
@@ -67,14 +88,14 @@ export FFMPEG_LIBS_DIR=$FFMPEG_DIR/lib
 export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
 ## (unix recommended):
 export FFMPEG_PKG_CONFIG_PATH=$FFMPEG_DIR/lib/pkgconfig
+## (windows recommended):
+## notes: if you install ffmpeg with vcpkg, you can add `$FFMPEG_DIR/bin` to system PATH.
 ## manually set dylib path:
 ## dynamic linking for linux:
 export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.so
 ## dynamic linking for macos:
 export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.dylib
 ## dynamic linking for windows:
-export VCPKG_ROOT=/path/to/vcpkg
-vcpkg install ffmpeg:x64-windows-static
 export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 ```
 
@@ -121,107 +142,128 @@ Use the `ndarray` feature to be able to use raw frames with the
 
 ```rust
 use rsmedia::{
-    mux::{DemuxResult, Demuxer, Muxer},
-    EncoderBuilder, MediaType, PixelFormat, SampleFormat, 
-    StreamReader, StreamWriterBuilder,
+  mux::{DemuxResult, Demuxer, Muxer},
+  EncoderBuilder, MediaType, Options, PixelFormat, SampleFormat, StreamReader,
+  StreamWriterBuilder,
 };
-
 use rsmpeg::avcodec::AVCodec;
-use rsmpeg::ffi;
 
 use anyhow::Context;
 use std::path::Path;
 
 fn main() {
-    let input_path = Path::new("/tmp/bear.mp4");
-    let stream_reader = StreamReader::new(input_path).unwrap();
-    let mut demuxer = Demuxer::from_reader(stream_reader, None).unwrap();
+  rsmedia::init().unwrap();
 
-    let output_path = Path::new("/tmp/output.mov");
-    let stream_writer = StreamWriterBuilder::new(output_path)
-        .with_format("mov")
-        .build()
-        .unwrap();
-    let mut muxer = Muxer::from_writer(stream_writer);
+  let input_path = Path::new("/tmp/bear.mp4");
+  let stream_reader = StreamReader::new(input_path).unwrap();
+  let mut demuxer = Demuxer::from_reader(stream_reader, None, None).unwrap();
 
-    // add all streams from input to output muxer
-    for in_stream in demuxer.streams() {
-        let stream_info = &in_stream.stream_info;
+  let output_path = Path::new("/tmp/output.mov");
+  let stream_writer = StreamWriterBuilder::new(output_path)
+          .with_format("mov")
+          .with_options(Options::preset_avformat_fragmented_mov())
+          .build()
+          .unwrap();
+  let mut muxer = Muxer::from_writer(stream_writer);
 
-        let encoder = {
-            if stream_info.media_type == MediaType::VIDEO {
-                // build video encoder
-                let codec = {
-                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
-                    AVCodec::find_encoder(codec_id)
-                        .context("Failed to find decoder")
-                        .unwrap()
-                };
+  // add all streams from input to output muxer
+  for in_stream in demuxer.streams() {
+    let stream_info = &in_stream.stream_info;
 
-                EncoderBuilder::new()
-                    // other
-                    .with_media_type(stream_info.media_type)
-                    .with_bit_rate(stream_info.bit_rate)
-                    .with_codec_name(codec.name().to_string_lossy().to_string())
-                    // video
-                    .with_video_size(stream_info.width as u32, stream_info.height as u32)
-                    .with_time_base_ra(stream_info.time_base)
-                    .with_frame_rate_ra(stream_info.frame_rate)
-                    .with_pixel_format(PixelFormat::from(stream_info.format))
-                    .build()
-                    .unwrap()
-            } else if stream_info.media_type == MediaType::AUDIO {
-                // build audio encoder
-                let codec = {
-                    let codec_id = stream_info.codec_id as ffi::AVCodecID;
-                    AVCodec::find_encoder(codec_id)
-                        .context("Failed to find decoder")
-                        .unwrap()
-                };
-
-                EncoderBuilder::new()
-                    // other
-                    .with_media_type(stream_info.media_type)
-                    .with_bit_rate(stream_info.bit_rate)
-                    .with_codec_name(codec.name().to_string_lossy().to_string())
-                    // audio
-                    .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
-                    .with_sample_format(SampleFormat::from(stream_info.format))
-                    .with_sample_rate(stream_info.sample_rate as u32)
-                    .build()
-                    .unwrap()
-            } else {
-                panic!("Unsupported media type: {:?}", stream_info.media_type);
-            }
+    let encoder = {
+      if stream_info.media_type == MediaType::VIDEO {
+        // build video encoder
+        let codec = {
+          // set custom video codec name, eg: libx264, libx265,
+          // Notes: options muse be match with input video encoder codec,
+          // Or if you just want to transcode, the codec stay the same,
+          // just do get codec from input stream_info.codec_id
+          // ```
+          // AVCodec::find_encoder(stream_info.codec_id);
+          // ```
+          // or set by codec name:
+          AVCodec::find_encoder_by_name(cstr::cstr!("libx264"))
+                  .context("Failed to find decoder")
+                  .unwrap()
         };
 
-        let _stream_index = muxer.add_stream(encoder).unwrap();
-    }
+        EncoderBuilder::new()
+                // cuda accel
+                // .with_hardware_device(Some(HWDeviceType::CUDA))
+                // .with_codec_name("h264_nvenc".to_string())
+                // .with_options(Options::preset_h264_nvenc())
+                // other
+                // notes: options must be match with input video encoder codec,
+                .with_options(Some(Options::preset_h264()))
+                .with_media_type(stream_info.media_type)
+                .with_bit_rate(stream_info.bit_rate)
+                .with_codec_name(Some(codec.name().to_str().unwrap().to_string()))
+                // video
+                .with_video_size(stream_info.width as u32, stream_info.height as u32)
+                .with_time_base_ra(stream_info.time_base)
+                .with_frame_rate_ra(stream_info.frame_rate)
+                .with_pixel_format(PixelFormat::from(stream_info.format))
+                .build()
+                .unwrap()
+      } else if stream_info.media_type == MediaType::AUDIO {
+        // build audio encoder
+        let codec = {
+          // set custom audio codec name, eg: aac, libmp3lame,
+          // Notes: options muse be match with input audio encoder codec,
+          // Or if you just want to transcode, the codec stay the same,
+          // just do get codec from input stream_info.codec_id
+          // ```
+          // AVCodec::find_encoder(stream_info.codec_id);
+          // ```
+          // or set by codec name:
+          AVCodec::find_encoder_by_name(cstr::cstr!("aac"))
+                  .context("Failed to find decoder")
+                  .unwrap()
+        };
 
-    // demux and mux all frames from input to output muxer
-    loop {
-        match demuxer.demux() {
-            DemuxResult::Frame(stream_index, frame) => {
-                println!("stream index:{}, {:?}", stream_index, frame);
-                let _ = muxer.mux(frame, stream_index).unwrap();
-            }
-            DemuxResult::Drain => {
-                println!("Need more data, continuing...");
-                continue;
-            }
-            DemuxResult::Flushed => {
-                println!("End of stream reached");
-                break;
-            }
-            DemuxResult::Error(e) => {
-                eprintln!("Demuxing error: {}", e);
-                break;
-            }
-        }
-    }
+        EncoderBuilder::new()
+                // other
+                .with_media_type(stream_info.media_type)
+                .with_bit_rate(stream_info.bit_rate)
+                .with_codec_name(Some(codec.name().to_str().unwrap().to_string()))
+                // audio
+                .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
+                .with_sample_format(SampleFormat::from(stream_info.format))
+                .with_sample_rate(stream_info.sample_rate as u32)
+                .build()
+                .unwrap()
+      } else {
+        panic!("Unsupported media type: {:?}", stream_info.media_type);
+      }
+    };
 
-    // finish muxing
-    muxer.finish().unwrap();
+    let _stream_index = muxer.add_stream(encoder).unwrap();
+  }
+
+  // demux and mux all frames from input to output muxer
+  loop {
+    match demuxer.demux() {
+      DemuxResult::Frame(stream_index, frame) => {
+        println!("stream index:{}, {:?}", stream_index, frame);
+        let _ = muxer.mux(frame, stream_index).unwrap();
+      }
+      DemuxResult::Drain => {
+        println!("Need more data, continuing...");
+        continue;
+      }
+      DemuxResult::Flushed => {
+        println!("Input stream EOF reached");
+        break;
+      }
+      DemuxResult::Error(e) => {
+        eprintln!("Demuxing error: {}", e);
+        break;
+      }
+    }
+  }
+
+  // finish muxer
+  muxer.finish().unwrap();
 }
 ```
 

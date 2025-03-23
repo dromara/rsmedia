@@ -1,69 +1,16 @@
 use crate::PixelFormat;
 
 use anyhow::Error;
-use rsmpeg::avutil::AVImage;
 use rsmpeg::ffi;
 
-///////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////// MyAVImage /////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct MyAVImage(pub AVImage);
-
-impl MyAVImage {
-    /// 封装 `av_image_alloc`
-    pub fn alloc(
-        pix_fmt: PixelFormat,
-        width: i32,
-        height: i32,
-        align: i32,
-    ) -> anyhow::Result<Self> {
-        let mut data: [*mut u8; ffi::AV_NUM_DATA_POINTERS as usize] =
-            [std::ptr::null_mut(); ffi::AV_NUM_DATA_POINTERS as usize];
-        let mut line_sizes: [i32; ffi::AV_NUM_DATA_POINTERS as usize] =
-            [0; ffi::AV_NUM_DATA_POINTERS as usize];
-
-        let buffer_size = unsafe {
-            ffi::av_image_alloc(
-                data.as_mut_ptr(),
-                line_sizes.as_mut_ptr(),
-                width,
-                height,
-                pix_fmt.into(),
-                align,
-            )
-        };
-
-        if buffer_size < 0 {
-            return Err(Error::msg("Failed to allocate image buffer"));
-        }
-
-        // 将分配的内存转换为 Vec<u8> 管理
-        let buffer =
-            unsafe { Vec::from_raw_parts(data[0], buffer_size as usize, buffer_size as usize) };
-
-        // Here we leak a vector to "pin" it.
-        let linear = Box::leak(Box::new(buffer));
-
-        let mut img = unsafe { AVImage::from_raw(std::ptr::NonNull::new(linear).unwrap()) };
-        img.data = data;
-        img.linesizes = line_sizes;
-        img.width = width;
-        img.height = height;
-        img.pix_fmt = pix_fmt.into();
-        Ok(MyAVImage(img))
-    }
-
-    pub fn new(img: AVImage) -> Self {
-        Self(img)
-    }
-
-    pub fn into_inner(self) -> AVImage {
-        self.0
-    }
-}
-
-/// See ffi::av_image_fill_linesizes
+/// Fill plane linesizes for an image with pixel format pix_fmt and width width.
+///
+/// # Arguments
+///
+/// * `pix_fmt` - The pixel format of the image.
+/// * `width` - The width of the image in pixels.
+///
+/// Returns an array of four integers representing the linesizes for each plane of the image.
 pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 4]> {
     let mut linesizes = [0; 4];
     let ret =
@@ -77,7 +24,14 @@ pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 
     Ok(linesizes)
 }
 
-/// See ffi::av_image_get_linesize
+/// Compute the size of an image line with format pix_fmt and width width for the plane plane.
+///
+/// # Arguments
+/// * `pix_fmt` - The pixel format of the image.
+/// * `width` - The width of the image in pixels.
+/// * `plane` - The index of the plane to compute the size for.
+///
+/// Returns The size of the image line in bytes for the specified plane.
 pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> anyhow::Result<usize> {
     // Safe because format is a valid format and this function is pure computation.
     let ret = unsafe { ffi::av_image_get_linesize(pix_fmt.into(), width as _, plane as _) };
@@ -90,7 +44,15 @@ pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> anyhow::R
     Ok(ret as usize)
 }
 
-/// See ffi::av_image_fill_plane_sizes.
+/// Fill plane sizes for an image with pixel format pix_fmt and height height.
+///
+/// # Arguments
+///
+/// * `format` - The pixel format of the image.
+/// * `linesizes` - An iterator of the linesizes for each plane of the image.
+/// * `height` - The height of the image in pixels.
+///
+/// Returns an array to be filled with the size of each image plane
 pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
     format: PixelFormat,
     linesizes: I,
@@ -132,90 +94,9 @@ pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
         .collect())
 }
 
-/// Check if the given dimension of an image is valid, meaning that all
-/// bytes of a plane of an image with the specified pix_fmt can be addressed with a signed int.
-///
-/// # Arguments
-///
-/// * @param w the width of the picture
-/// * @param h the height of the picture
-/// * @param max_pixels the maximum number of pixels the user wants to accept
-/// * @param pix_fmt the pixel format, can be AV_PIX_FMT_NONE if unknown.
-/// * @param log_offset the offset to sum to the log level for logging with log_ctx
-/// * @param log_ctx the parent logging context, it may be NULL
-/// * @return >= 0 if valid, a negative error code otherwise
-pub fn check_size2(
-    width: u32,
-    height: u32,
-    max_pixels: i64,
-    pix_fmt: PixelFormat,
-) -> anyhow::Result<()> {
-    let ret = unsafe {
-        ffi::av_image_check_size2(
-            width,
-            height,
-            max_pixels,
-            pix_fmt.into(),
-            0,
-            std::ptr::null_mut(),
-        )
-    };
-
-    // >= 0 if valid, a negative error code otherwise
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to check size2, ret: {}", ret)));
-    }
-    Ok(())
-}
-
-impl std::ops::Deref for MyAVImage {
-    type Target = AVImage;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for MyAVImage {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_my_avimage() -> anyhow::Result<()> {
-        // 测试参数
-        let width = 1920;
-        let height = 1080;
-        let pix_fmt = PixelFormat::RGB24;
-        let align = 32;
-
-        // 1. 测试图像大小检查
-        check_size2(
-            width as u32,
-            height as u32,
-            (width * height * 3) as i64,
-            pix_fmt,
-        )?;
-
-        // 2. 创建图像
-        let img = MyAVImage::alloc(pix_fmt, width, height, align)?;
-        assert_eq!(img.width, width);
-        assert_eq!(img.height, height);
-        assert_eq!(img.pix_fmt, pix_fmt.into());
-
-        // 打印调试信息
-        println!("Test configuration:");
-        println!("Width: {}, Height: {}", width, height);
-        println!("Pixel format: {:?}", pix_fmt);
-        println!("Alignment: {}", align);
-
-        Ok(())
-    }
 
     #[test]
     fn test_image_linesize_planar() -> anyhow::Result<()> {
@@ -375,42 +256,6 @@ mod tests {
             fill_plane_sizes(yuv_fmt, oversized_input, 480).is_ok(),
             "Should truncate to first 4 planes"
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_image_operations() -> anyhow::Result<()> {
-        // 创建测试图像
-        let width = 640;
-        let height = 480;
-        let pix_fmt = PixelFormat::RGB24;
-
-        let image = MyAVImage::alloc(pix_fmt, width, height, 1)?;
-        let img = image.into_inner();
-        println!(
-            "img width: {}, height: {}, pix_fmt: {:?}",
-            img.width, img.height, img.pix_fmt
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_memory_management() -> anyhow::Result<()> {
-        // 测试大尺寸图像的内存分配和释放
-        let sizes = [(1920, 1080), (3840, 2160), (7680, 4320)];
-
-        for &(width, height) in &sizes {
-            let image = MyAVImage::alloc(PixelFormat::RGB24, width, height, 32)?;
-
-            // 验证内存对齐
-            for &linesize in &image.linesizes {
-                if linesize > 0 {
-                    assert_eq!(linesize % 32, 0);
-                }
-            }
-        }
 
         Ok(())
     }

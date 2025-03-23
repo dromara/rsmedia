@@ -21,17 +21,16 @@ link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg"]
 link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
 
 [dependencies]
-url = "2"
-libc = "0.2"
+url = "2.5"
 image = "0.25"
 anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
-env_logger = "0.11"
 ndarray = { version = "0.16", optional = true }
 rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-features = false }
 
 [dev-dependencies]
+libc = "0.2"
 cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"

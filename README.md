@@ -2,8 +2,6 @@
   <code>rsmedia</code>
 </h1>
 
-This is a fork of the [video-rs](https://github.com/oddity-ai/video-rs).
-
 Low / High-level video toolkit based on [rsmpeg](https://github.com/larksuite/rsmpeg).
 
 ffmpeg 6.x, 7.x is supported based [rusty_ffmpeg](https://github.com/CCExtractor/rusty_ffmpeg)
@@ -13,35 +11,60 @@ ffmpeg 6.x, 7.x is supported based [rusty_ffmpeg](https://github.com/CCExtractor
 `rsmedia` is a general-purpose video/audio media library for Rust that uses the
 `libav`-family libraries from `ffmpeg`.
 
-It aims to provide a stable and Rusty
-interface to many common media tasks such as reading, writing, muxing, encoding, decoding, Picture Quality Enhancement and Image Processing.
+It aims to provide a stable and Rusty interface to many common media tasks,
+such as reading, writing, muxing, encoding, decoding, Picture Quality Enhancement and Image Processing.
 
 ## 🛠 S️️tatus
 
 ⚠️ This project is still a work-in-progress, and will contain bugs. Some parts
 of the API have not been flushed out yet. Use with caution.
 
-supported platforms:
+Supported Platforms:
 
-| platform | architecture | link type  | toolchain        | build options                       | pkg manager           | notes                          |
-|----------|--------------|------------|------------------|-------------------------------------|-----------------------|--------------------------------|
-| Linux    | x86_64       | Static     | ✅ GCC/Clang      | ✅ default                           | ✅ apt, yum         | ✅ `pkg-config` + `glibc`       |
-| Linux    | x86_64       | Dynamic    | ✅ GCC/Clang      | ✅ default                           | ✅ apt, yum         | ✅ `pkg-config` + `glibc`       |
-| Linux    | aarch64      | Static     | ⚠️ GCC/Clang     | ⚠️                                  | ⚠️ apt, yum           | ⚠️ `pkg-config` + `glibc`      |
-| Linux    | aarch64      | Dynamic    | ⚠️ GCC/Clang     | ⚠️                                  | ⚠️ apt, yum           | ⚠️ `pkg-config` + `glibc`      |
-| macOS    | x86_64       | Static     | ✅ Apple Clang    | ❌                                   | ✅ Homebrew            | ✅ `pkg-config`                 |
-| macOS    | x86_64       | Dynamic    | ✅ Apple Clang    | ✅ default                           | ✅ Homebrew            | ✅ `pkg-config`                 |
-| macOS    | aarch64      | Static     | ✅ Apple Clang    | ❌                                   | ⚠️ Homebrew           | ✅ `pkg-config`                 |
-| macOS    | aarch64      | Dynamic    | ✅ Apple Clang    | ✅ default                           | ✅ Homebrew            | ✅ `pkg-config`                 |
-| Windows  | x86_64       | Static     | ✅ MSVC/MinGW     | ⚠️ `-Ctarget-feature=+crt-static`   | ✅ vcpkg               | ✅ `vs 2022` + `llvm` + `clang` |
-| Windows  | x86_64       | Dynamic    | ✅ MSVC/MinGW     | ✅ default                           | ✅ vcpkg               | ✅ `vs 2022` + `llvm` + `clang` |
-| Windows  | aarch64      | Static     | ✅ MSVC           | ⚠️ `-Ctarget-feature=+crt-static`   | ⚠️ vcpkg              | ✅ `vs 2022` + `llvm` + `clang` |
-| Windows  | aarch64      | Dynamic    | ✅ MSVC           | ✅ default                           | ✅ vcpkg               | ✅ `vs 2022` + `llvm` + `clang` |
+| Platform | Arch    | Linking  | Toolchain   | Build Options | pkg Manager | Support | Notes                          |
+|----------|---------|----------|-------------|---------------|-------------|---------|--------------------------------|
+| Linux    | x86_64  | Static   | GCC/Clang   | Default       | apt, yum    | ✅       | `pkg-config` + `glibc`        |
+|          | x86_64  | Dynamic  | GCC/Clang   | Default       | apt, yum    | ✅       | `pkg-config` + `glibc`        |
+|          | aarch64 | Static   | GCC/Clang   | Default       | apt, yum    | ⚠️      | `pkg-config` + `glibc`        |
+|          | aarch64 | Dynamic  | GCC/Clang   | Default       | apt, yum    | ⚠️      | `pkg-config` + `glibc`        |
+| macOS    | x86_64  | Static   | Apple Clang | ⚠️            | Homebrew    | ❌       | `pkg-config`                  |
+|          | x86_64  | Dynamic  | Apple Clang | Default       | Homebrew    | ✅       | `pkg-config`                  |
+|          | aarch64 | Static   | Apple Clang | ⚠️            | Homebrew    | ❌       | `pkg-config`                  |
+|          | aarch64 | Dynamic  | Apple Clang | Default       | Homebrew    | ✅       | `pkg-config`                  |
+| Windows  | x86_64  | Static   | MSVC/MinGW  | `+crt-static` | vcpkg       | ✅       | `vs-2022` + `llvm` + `clang`  |
+|          | x86_64  | Dynamic  | MSVC/MinGW  | Default       | vcpkg       | ✅       | `vs-2022` + `llvm` + `clang`  |
+|          | aarch64 | Static   | MSVC        | `+crt-static` | vcpkg       | ✅       | `vs-2022` + `llvm` + `clang`  |
+|          | aarch64 | Dynamic  | MSVC        | Default       | vcpkg       | ✅       | `vs-2022` + `llvm` + `clang`  |
+
+Hardware acceleration:
+
+| API        | Platform  | Arch    | Hardware Requirements        | Support         | Notes                   |
+|------------|-----------|---------|------------------------------|-----------------|-------------------------|
+| VDPAU      | Linux     | x86_64  | NVIDIA GPU                   | ⚠️ Full         | `nvidia-vdpau-driver`   |
+|            | Linux     | aarch64 | NVIDIA GPU                   | ⚠️ Full         | Jetson AGX support      |
+| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)    | ✅ Full          | Container-ready         |
+|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)    | ✅ Full          | Jetson/Orin             |
+|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)    | ✅ Full          |                         |
+|            | Windows   | arm64   | NVIDIA GPU (Compute ≥3.5)    | ⚠️ Partial      | Limited driver support  |
+| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU     | ⚠️ Full         | `intel-media-driver`    |
+|            | Linux     | aarch64 | Mali/AMD GPU                 | ⚠️ Partial      | Kernel 5.15+ required   |
+| DXVA2      | Windows   | x86_64  | DX11-compatible GPU          | ⚠️ Full         | WDDM 2.0+               |
+| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)        | ⚠️ Full         | `intel-media-va-driver` |
+|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)        | ⚠️ Full         | Intel Media SDK         |
+| TOOLBOX    | macOS     | x86_64  | Intel GPU                    | ✅ Native        | macOS 10.13+            |
+|            | macOS     | arm64   | Apple Silicon GPU (M series) | ✅ Native        |                         |
+| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU          | ⚠️ Full         |                         |
+|            | Windows   | arm64   | DX11-compatible GPU          | ⚠️ Partial      | ARM64 Windows 11 only   |
+| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU               | ⚠️ Partial      | `libdrm` + KMS          |
+|            | Linux     | aarch64 | Mali GPU                     | ⚠️ Partial      |                         |
+| MEDIACODEC | Android   | arm64   | Hardware decoder             | ⚠️ Full         | Android 12+             |
+| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU          | ⚠️ Experimental | FFmpeg 7.0+             |
+|            | Windows   | arm64   | DX12-compatible GPU          | ⚠️ Experimental | FFmpeg 7.0+             |
 
 > **Note:**
-- ✅ support/successful
-- ❌ not support/failed
-- ⚠️ Partially supported/not clear
+- ✅ Full support / Successful
+- ❌ Not support / Failed
+- ⚠️ Partially supported / Not clear
 
 ## Wiki
 
@@ -69,8 +92,6 @@ supported platforms:
 > <https://github.com/larksuite/rsmpeg>
 >
 > <https://github.com/oddity-ai/video-rs>
->
-> <https://github.com/remotia/remotia-ffmpeg-codecs>
 
 
 ##  📦 Advanced usage
@@ -101,9 +122,7 @@ export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 
 ## Features
 
-- `ndarray`:
-Use the `ndarray` feature to be able to use raw frames with the
-[`ndarray`](https://github.com/rust-ndarray/ndarray) crate:
+- `ndarray`: enable support to use raw frames with the [`ndarray`](https://github.com/rust-ndarray/ndarray)
 
 - `ffmpeg6`: enable support for `ffmpeg` 6.x.
 
@@ -114,7 +133,7 @@ Use the `ndarray` feature to be able to use raw frames with the
 - `link_vcpkg_ffmpeg`: windows linking ffmpeg with vcpkg.
 
 > usage:
-> 
+>
 > - ffmpeg 7.x for unix:
 >
 > ```toml
@@ -449,8 +468,7 @@ RUST_LOG=video=debug cargo run
 `rsmedia` only exists thanks to the following organizations and people:
 
 * All [video-rs contributors](https://github.com/oddity-ai/video-rs/graphs/contributors) for their work!
-* [Provincie Utrecht](https://www.provincie-utrecht.nl/) for supporting this project as part of the "Situational Awareness Software" project.
-* [rsmpeg contributors](https://github.com/larksuite/rsmpeg) for maintaining.
+* All [rsmpeg contributors](https://github.com/larksuite/rsmpeg) for maintaining.
 * The [FFmpeg project](https://ffmpeg.org/) for `ffmpeg` and the `ffmpeg` libraries.
 
 ## ⚖️ License

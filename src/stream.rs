@@ -333,17 +333,6 @@ impl StreamInfo {
                         _ => None,
                     }
                 }
-                HWDeviceType::VIDEOTOOLBOX => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_VP9 => Some("vp9_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
-                    _ => None,
-                },
                 HWDeviceType::VULKAN => match codec_id {
                     ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
                     ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
@@ -363,7 +352,7 @@ impl StreamInfo {
         }
     }
 
-    /// find encoder name, if have hw_device_type, will use hw accelerated codec name
+    /// find encoder name, if we have hw_device_type, will use hw accelerated codec name
     /// if not, will use current stream codec name
     pub fn find_encoder_name(
         stream_info: &StreamInfo,

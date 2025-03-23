@@ -26,6 +26,7 @@ image = "0.25"
 anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
+once_cell = "1.21"
 ndarray = { version = "0.16", optional = true }
 rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-features = false }
 
@@ -36,8 +37,6 @@ camino = "1.1"
 chrono = "0.4"
 yuvutils-rs = "0.8"
 colorutils-rs = "0.7"
-lazy_static = "1.5"
-once_cell = "1.21.1"
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 

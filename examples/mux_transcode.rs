@@ -45,11 +45,10 @@ fn main() {
                 };
 
                 EncoderBuilder::new()
-                    // cuda accel
+                    // cuda acceleration
                     // .with_hardware_device(Some(HWDeviceType::CUDA))
                     // .with_codec_name("h264_nvenc".to_string())
                     // .with_options(Options::preset_h264_nvenc())
-                    // other
                     // notes: options must be match with input video encoder codec,
                     .with_options(Some(Options::preset_h264()))
                     .with_media_type(stream_info.media_type)

@@ -1,11 +1,15 @@
 use crate::pixel::PixelFormat;
 use crate::{utils, Options};
 
-use anyhow::{Context, Error, Result};
-
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext};
 use rsmpeg::{ffi, UnsafeDerefMut};
+
+use anyhow::{Context, Error, Result};
+use once_cell::sync::Lazy;
+use std::cell::UnsafeCell;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 /// Hardware device configuration.
 /// This struct contains all the necessary information to create a hardware device context.
@@ -95,6 +99,43 @@ impl HWDeviceConfig {
     }
 }
 
+impl std::hash::Hash for HWDeviceConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.device_type.hash(state);
+        self.device_id.hash(state);
+        self.hw_pixel_format.hash(state);
+        self.sw_pixel_format.hash(state);
+        if let Some(opts) = &self.options {
+            let pairs: HashMap<String, String> = opts.into();
+            for (key, value) in pairs {
+                key.hash(state);
+                value.hash(state);
+            }
+        }
+    }
+}
+
+impl PartialEq for HWDeviceConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.device_type == other.device_type
+            && self.device_id == other.device_id
+            && self.hw_pixel_format == other.hw_pixel_format
+            && self.sw_pixel_format == other.sw_pixel_format
+            && match (&self.options, &other.options) {
+                (Some(a), Some(b)) => {
+                    let pairs_a: HashMap<String, String> = a.into();
+                    let pairs_b: HashMap<String, String> = b.into();
+                    pairs_a.len() == pairs_b.len()
+                        && pairs_a.iter().all(|(k, v)| pairs_b.get(k) == Some(v))
+                }
+                (None, None) => true,
+                _ => false,
+            }
+    }
+}
+
+impl Eq for HWDeviceConfig {}
+
 impl std::fmt::Debug for HWDeviceConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -115,15 +156,30 @@ impl std::fmt::Display for HWDeviceConfig {
     }
 }
 
+/// `HWContext` cache for safe sharing of hardware device contexts.
+static HW_CTX_CACHE: Lazy<Mutex<HashMap<HWDeviceConfig, Arc<HWContext>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
 pub struct HWContext {
     config: HWDeviceConfig,
-    device_ctx: AVHWDeviceContext,
+    device_ctx: UnsafeCell<AVHWDeviceContext>,
 }
 
 impl HWContext {
     /// create a new HWContext with the given HWDeviceConfig
-    pub fn new(config: HWDeviceConfig) -> Result<Self> {
-        let device_ctx = {
+    pub fn new(config: HWDeviceConfig) -> Result<Arc<HWContext>> {
+        let mut cache = HW_CTX_CACHE.lock().unwrap();
+
+        if let Some(ctx) = cache.get(&config) {
+            log::debug!(
+                "Reusing existing hardware device context. config:{:?}",
+                config
+            );
+            return Ok(ctx.clone());
+        }
+
+        // create a new hardware device context
+        let hw_device_ctx = {
             let device = utils::from_str_opt(config.device_id.as_ref());
             let opts = config.options.as_ref().map(|opts| opts.as_dict());
             AVHWDeviceContext::create(config.device_type.into(), device.as_deref(), opts, 0)
@@ -135,7 +191,13 @@ impl HWContext {
             config
         );
 
-        Ok(Self { config, device_ctx })
+        let ctx = Arc::new(Self {
+            config: config.clone(),
+            device_ctx: UnsafeCell::new(hw_device_ctx),
+        });
+        cache.insert(config, ctx.clone());
+
+        Ok(ctx)
     }
 
     /// initialize HWFramesContext for the given codec context
@@ -147,25 +209,25 @@ impl HWContext {
     /// * `width` - The width of the input/output frames
     /// * `height` - The height of the input/output frames
     pub fn setup_hw_frames(
-        &mut self,
+        &self,
         is_decoder: bool,
         codec_ctx: &mut AVCodecContext,
         width: i32,
         height: i32,
     ) -> Result<()> {
-        let mut hw_frames_ref = self.device_ctx.hwframe_ctx_alloc();
+        let hw_device_ctx_ref = unsafe { &mut *self.device_ctx.get() };
+        let mut hw_frames_ctx = hw_device_ctx_ref.hwframe_ctx_alloc();
+        hw_frames_ctx.data().format = self.get_format(true);
+        hw_frames_ctx.data().sw_format = self.get_format(false);
+        hw_frames_ctx.data().width = width;
+        hw_frames_ctx.data().height = height;
+        hw_frames_ctx.data().initial_pool_size = 20;
 
-        hw_frames_ref.data().format = self.get_format(true);
-        hw_frames_ref.data().sw_format = self.get_format(false);
-        hw_frames_ref.data().width = width;
-        hw_frames_ref.data().height = height;
-        hw_frames_ref.data().initial_pool_size = 20;
-
-        hw_frames_ref
+        hw_frames_ctx
             .init()
             .context("Failed to initialize hardware frame context")?;
 
-        codec_ctx.set_hw_frames_ctx(hw_frames_ref);
+        codec_ctx.set_hw_frames_ctx(hw_frames_ctx);
         codec_ctx.set_pix_fmt(self.get_format(true));
 
         // only used by decoders
@@ -175,7 +237,7 @@ impl HWContext {
                 ctx_mut_ptr.opaque = self.get_format(true) as *mut std::os::raw::c_void;
                 ctx_mut_ptr.get_format = Some(hwaccel_get_format);
                 ctx_mut_ptr.sw_pix_fmt = self.get_format(false);
-                ctx_mut_ptr.hw_device_ctx = self.device_ctx.as_mut_ptr();
+                ctx_mut_ptr.hw_device_ctx = hw_device_ctx_ref.as_mut_ptr();
             }
         }
 
@@ -402,6 +464,9 @@ impl HWContext {
         }
     }
 }
+
+unsafe impl Send for HWContext {}
+unsafe impl Sync for HWContext {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum HWDeviceType {

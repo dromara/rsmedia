@@ -10,9 +10,11 @@ use crate::stream::StreamInfo;
 use crate::time::Time;
 use crate::{swctx, utils, MediaType, PixelFormat, RawFrame};
 
-use anyhow::{Context, Error, Result};
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::ffi;
+
+use anyhow::{Context, Error, Result};
+use std::sync::Arc;
 
 /// Builds a [`Decoder`].
 #[derive(Debug, Clone)]
@@ -136,7 +138,7 @@ impl DecoderBuilder {
             .map(|cfg| {
                 // create hardware context
                 HWContext::new(cfg)
-                    .and_then(|mut ctx| {
+                    .and_then(|ctx| {
                         ctx.setup_hw_frames(true, &mut decode_ctx, width, height)?;
                         Ok(ctx)
                     })
@@ -192,7 +194,7 @@ impl Default for DecoderBuilder {
 /// ```
 pub struct Decoder {
     decode_ctx: AVCodecContext,
-    hw_context: Option<HWContext>,
+    hw_context: Option<Arc<HWContext>>,
     time_base: ffi::AVRational,
     media_type: MediaType,
     stream_index: usize,
@@ -460,7 +462,7 @@ impl Decoder {
             })
             .unwrap();
 
-        // handle scaling frame if needed (if not, size_out is the same as size)
+        // handle scaling frame if needed (is not, size_out is the same as size)
         match self.rescale_frame(sw_frame) {
             Ok(scaled_frame) => DecodeRawResult::Frame(scaled_frame),
             Err(e) => DecodeRawResult::Error(e),
@@ -489,13 +491,8 @@ impl Decoder {
 
     /// Rescale frame if needed.
     fn rescale_frame(&self, frame: RawFrame) -> Result<RawFrame> {
-        let input_format = self
-            .hw_context
-            .as_ref()
-            .map_or(frame.format, |ctx| ctx.get_format(false));
-
         let (resize_width, resize_height) = self.size_out();
-        let is_scale_needed = !(input_format == PixelFormat::YUV420P.into()
+        let is_scale_needed = !(frame.format == PixelFormat::YUV420P.into()
             && frame.width as u32 == resize_width
             && frame.height as u32 == resize_height);
 

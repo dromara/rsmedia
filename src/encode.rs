@@ -13,7 +13,7 @@ use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
-use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Builds an [`Encoder`].
 #[derive(Clone, Debug)]
@@ -250,7 +250,7 @@ impl EncoderBuilder {
             encoder.set_time_base(avutil::ra(1, self.sample_rate));
             encoder.set_sample_fmt(self.sample_format as _);
         } else {
-            panic!("{}", format!("Unsupport media type:{:?}", media_type))
+            panic!("{}", format!("Unsupported media type:{:?}", media_type))
         }
         unsafe {
             (*encoder.as_mut_ptr()).thread_count = self.thread_count;
@@ -264,7 +264,7 @@ impl EncoderBuilder {
     /// # Arguments
     ///
     /// * `writer` - [`StreamWriter`] to create encoder from.
-    /// * `interleaved` - Whether or not to use interleaved write.
+    /// * `interleaved` - Whether to use interleaved write.
     /// * `settings` - Encoder settings to use.
     pub fn build(self) -> Result<Encoder> {
         let codec = {
@@ -315,7 +315,7 @@ impl EncoderBuilder {
                 // create hardware context
                 let (width, height) = (encode_ctx.width, encode_ctx.height);
                 HWContext::new(cfg)
-                    .and_then(|mut ctx| {
+                    .and_then(|ctx| {
                         ctx.setup_hw_frames(false, &mut encode_ctx, width, height)?;
                         Ok(ctx)
                     })
@@ -366,7 +366,7 @@ impl Default for EncoderBuilder {
 /// ```
 pub struct Encoder {
     encode_ctx: AVCodecContext,
-    hw_context: Option<HWContext>,
+    hw_context: Option<Arc<HWContext>>,
     media_type: MediaType,
     frame_count: u64,
     keyframe_interval: u64,
@@ -439,17 +439,17 @@ impl Encoder {
         }
 
         let mut av_frame = if self.media_type == MediaType::VIDEO {
-            // 根据编码器类型选择目标像素格式
-            let target_format = if self.hw_context.is_some() {
-                self.encode_ctx
-                    .hw_frames_ctx_mut()
-                    .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
-                    .unwrap_or(PixelFormat::YUV420P)
-            } else {
-                PixelFormat::YUV420P
-            };
+            // get target pixel format for codec context,
+            // if hardware acceleration is enabled, use the format of the hardware context
+            // otherwise, YUV420P is used as the default format
+            let target_format = self
+                .hw_context
+                .as_ref()
+                .and_then(|_| self.encode_ctx.hw_frames_ctx_mut())
+                .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
+                .unwrap_or(PixelFormat::YUV420P);
 
-            // Reformat frame to target pixel format if need
+            // Reformat frame to target pixel format if we need
             let sw_frame = if raw_frame.format != target_format.into() {
                 swctx::scale_frame(raw_frame, raw_frame.width, raw_frame.height, target_format)
                     .unwrap()
@@ -457,25 +457,23 @@ impl Encoder {
                 raw_frame.clone()
             };
 
-            if self.hw_context.is_some() {
-                let hw_ctx = self.hw_context.as_ref().unwrap();
-                if hw_ctx.is_sw_frame(&sw_frame) {
-                    // 上传到硬件内存并获取硬件帧 (sw_frame -> hw_frame)
+            match &self.hw_context {
+                Some(hw_ctx) if hw_ctx.is_sw_frame(&sw_frame) => {
+                    // sw_frame -> hw_frame
                     hw_ctx
                         .hw_upload(&mut self.encode_ctx, &sw_frame)
                         .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))
                         .unwrap()
-                } else {
-                    log::warn!("Invalid sw_frame.");
-                    sw_frame
                 }
-            } else {
-                sw_frame
+                _ => sw_frame,
             }
         } else if self.media_type == MediaType::AUDIO {
             raw_frame.clone()
         } else {
-            panic!("{}", format!("Unsupport mediaType :{:?}", self.media_type))
+            panic!(
+                "{}",
+                format!("Unsupported mediaType :{:?}", self.media_type)
+            )
         };
 
         // Producer key frame every once in a while
@@ -497,7 +495,7 @@ impl Encoder {
             .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))
             .unwrap();
 
-        // Increment frame count regardless of whether or not frame is written,
+        // Increment frame count regardless of whether frame is written,
         // see https://github.com/oddity-ai/video-rs/issues/46.
         self.frame_count += 1;
 
@@ -628,21 +626,6 @@ impl Encoder {
 impl Drop for Encoder {
     fn drop(&mut self) {
         // let _ = self.flush();
-    }
-}
-
-impl PartialEq for Encoder {
-    fn eq(&self, other: &Self) -> bool {
-        self.encode_ctx.as_ptr() == other.encode_ctx.as_ptr() && self.media_type == other.media_type
-    }
-}
-
-impl Eq for Encoder {}
-
-impl Hash for Encoder {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.encode_ctx.as_ptr().hash(state);
-        self.media_type.hash(state);
     }
 }
 

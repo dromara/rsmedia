@@ -7,7 +7,7 @@ pub const AV_PIX_FMT_NB: i32 = 228;
 
 /// Pixel format definitions in bindings.
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PixelFormat {
     /// Invalid pixel format value
     NONE,

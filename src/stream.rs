@@ -4,12 +4,13 @@ use crate::{utils, MediaType, Options};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecParametersRef, AVPacket};
 use rsmpeg::avformat::{AVInputFormatRef, AVStream};
-use rsmpeg::avutil::AVDictionaryRef;
+use rsmpeg::avutil::{self, AVDictionaryRef, AVPixFmtDescriptorRef};
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::ptr::NonNull;
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
@@ -28,6 +29,11 @@ pub struct StreamInfo {
     pub codec_tag: u32,
     /// Pixel format / Sample format
     pub format: i32,
+    /// the number of bits actually used for storing the pixel information,
+    /// that is padding bits are not counted.
+    pub bits_per_pixel: i32,
+    /// codec bits per sample
+    pub bits_per_sample: i32,
 
     /// time_base
     pub time_base: ffi::AVRational,
@@ -99,6 +105,8 @@ pub struct StreamInfo {
     pub bits_per_coded_sample: i32,
     /// Raw Sample Bit Depth
     pub bits_per_raw_sample: i32,
+    /// number of bytes per sample
+    pub bytes_per_sample: Option<usize>,
 
     // extra
     pub extra_data: Option<Vec<u8>>,
@@ -144,6 +152,16 @@ impl StreamInfo {
         let metadata = stream
             .metadata()
             .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into());
+        let bytes_per_sample = if codecpar.codec_type().is_audio() {
+            avutil::get_bytes_per_sample(codecpar.format as ffi::AVSampleFormat)
+        } else {
+            None
+        };
+        let bits_per_sample = unsafe { ffi::av_get_bits_per_sample(codecpar.codec_id) };
+        let bits_per_pixel = unsafe {
+            let pix_fmt_desc = AVPixFmtDescriptorRef::get(codecpar.format).unwrap();
+            ffi::av_get_bits_per_pixel(pix_fmt_desc.deref())
+        };
         Ok(Self {
             id: stream.id,
             index: stream.index as usize,
@@ -152,6 +170,8 @@ impl StreamInfo {
             codec_id: codecpar.codec_id as u32,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
+            bits_per_pixel,
+            bits_per_sample,
             time_base: stream.time_base,
             duration: stream.duration,
             start_time: stream.start_time,
@@ -188,6 +208,7 @@ impl StreamInfo {
             seek_preroll: codecpar.seek_preroll,
             bits_per_coded_sample: codecpar.bits_per_coded_sample,
             bits_per_raw_sample: codecpar.bits_per_raw_sample,
+            bytes_per_sample,
             // extra
             metadata,
             extra_data: Self::get_extra_data(stream),
@@ -234,7 +255,7 @@ impl StreamInfo {
     #[allow(dead_code)]
     fn set_stream_display_rotation(stream: &mut AVStream, angle: f64) {
         // Display matrix in libavcodec is [i32; 9] where each point is 16.16
-        // fixed point, but all this is opaque here..
+        // fixed point, but all this is opaque here.
         const MATRIX_LEN: usize = 9 * size_of::<i32>();
         let mut matrix = [0u8; MATRIX_LEN];
 

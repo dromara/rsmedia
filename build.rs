@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
@@ -13,39 +13,51 @@ fn main() {
     }
 }
 
-fn configure_linux(target_arch: &str) {
-    println!("cargo:rustc-link-lib=dylib=c");
-    println!("cargo:rustc-link-lib=dylib=dl");
-    println!("cargo:rustc-link-lib=dylib=pthread");
-
-    if target_arch == "x86_64" {
-        println!("cargo:rustc-link-search=native=/lib/x86_64-linux-gnu");
-        println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
-    } else if target_arch == "aarch64" {
-        println!("cargo:rustc-link-search=native=/lib/aarch64-linux-gnu");
-        println!("cargo:rustc-link-search=native=/usr/lib/aarch64-linux-gnu");
-    }
-
-    println!("cargo:rustc-link-search=native=/usr/local/lib");
-    println!("cargo:rustc-link-search=native=/usr/lib");
-    println!("cargo:rustc-link-search=native=/lib");
-}
+static FFMPEG_LIBS: [&str; 7] = [
+    "avutil",
+    "avcodec",
+    "avdevice",
+    "avfilter",
+    "avformat",
+    "swresample",
+    "swscale",
+];
 
 fn configure_macos() {
     println!("cargo:rustc-link-lib=dylib=c");
     println!("cargo:rustc-link-lib=dylib=dl");
     println!("cargo:rustc-link-lib=dylib=pthread");
+
     println!("cargo:rustc-link-search=native=/usr/lib");
     println!("cargo:rustc-link-search=native=/usr/local/lib");
 
     // Support Homebrew
-    if std::path::Path::new("/opt/homebrew/lib").exists() {
-        // Apple Silicon (M1/M2)
+    if Path::new("/opt/homebrew/lib").exists() {
+        // Apple Silicon (M1/M2...)
         println!("cargo:rustc-link-search=native=/opt/homebrew/lib");
     }
-    if std::path::Path::new("/usr/local/opt").exists() {
+    if Path::new("/usr/local/opt").exists() {
         // Intel
         println!("cargo:rustc-link-search=native=/usr/local/opt");
+    }
+}
+
+fn configure_linux(target_arch: &str) {
+    println!("cargo:rustc-link-lib=dylib=c");
+    println!("cargo:rustc-link-lib=dylib=dl");
+    println!("cargo:rustc-link-lib=dylib=pthread");
+
+    println!("cargo:rustc-link-search=native=/lib");
+    println!("cargo:rustc-link-search=native=/usr/lib");
+    println!("cargo:rustc-link-search=native=/usr/local/lib");
+
+    let arch_specific_paths = match target_arch {
+        "x86_64" => vec!["/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu"],
+        "aarch64" => vec!["/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu"],
+        _ => vec![],
+    };
+    for path in arch_specific_paths {
+        println!("cargo:rustc-link-search=native={}", path);
     }
 }
 
@@ -95,18 +107,7 @@ fn configure_windows(target_arch: &str) {
         println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
     }
 
-    // FFmpeg
-    let ffmpeg_libs = [
-        "avutil",
-        "swscale",
-        "swresample",
-        "avcodec",
-        "avformat",
-        "avfilter",
-        "avdevice",
-    ];
-
-    for lib in ffmpeg_libs.iter() {
+    for lib in FFMPEG_LIBS.iter() {
         if is_static {
             println!("cargo:rustc-link-lib=static={}", lib);
         } else {
@@ -157,17 +158,35 @@ fn configure_windows(target_arch: &str) {
         println!("cargo:rustc-link-lib={}", lib);
     }
 
-    // 显式链接
-    println!("cargo:rustc-link-arg=mfuuid.lib");
-    println!("cargo:rustc-link-arg=strmiids.lib");
-    println!("cargo:rustc-link-arg=secur32.lib");
-    println!("cargo:rustc-link-arg=bcrypt.lib");
-    println!("cargo:rustc-link-arg=dxva2.lib");
-    println!("cargo:rustc-link-arg=ole32.lib");
-    println!("cargo:rustc-link-arg=user32.lib");
-
     // 链接器选项
     let mut linker_flags = vec![
+        // 多媒体核心库
+        "mf.lib",
+        "mfuuid.lib",
+        "mfplat.lib",
+        "mfplay.lib",
+        "mfreadwrite.lib",
+        "strmiids.lib",
+        // 视频硬件加速
+        "dxgi.lib",
+        "dxva2.lib",
+        "d3d11.lib",
+        // 音频处理
+        "winmm.lib",
+        "dsound.lib",
+        "ksuser.lib",
+        // Windows系统核心库
+        "ole32.lib",
+        "user32.lib",
+        "gdi32.lib",
+        "shell32.lib",
+        "advapi32.lib",
+        "kernel32.lib",
+        // 安全相关
+        "secur32.lib",
+        "crypt32.lib",
+        "bcrypt.lib",
+        "ncrypt.lib",
         // 基础安全选项
         "/NXCOMPAT",          // 启用数据执行保护 (DEP)
         "/DYNAMICBASE",       // 启用 ASLR

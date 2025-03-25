@@ -19,7 +19,7 @@ env:
 jobs:
 
   build-linux:
-    name: build / linux-x86_64 / ffmpeg ${{ matrix.ffmpeg_version }}
+    name: build / linux-x86_64 / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
     container: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
 
@@ -128,24 +128,22 @@ jobs:
         run: cargo test --all --all-features --verbose -- --nocapture
 
   build-windows:
-    name: build / windows-x86_64 / ffmpeg ${{ matrix.config.ffmpeg_version }}
+    name: build / windows-${{ matrix.config.vcpkg_triplet }} / ffmpeg-7.1
     runs-on: windows-latest
+
+    env:
+      FFMPEG_VERSION: "7.1"
+      BUILD_FEATURES: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
 
     strategy:
       matrix:
         config:
-          - ffmpeg_version: "7.1"
-            feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
-            target: "x86_64-pc-windows-msvc"
+          - target: "x86_64-pc-windows-msvc"
             vcpkg_triplet: "x64-windows-static"
             rustflags: "-Ctarget-feature=+crt-static"
-          - ffmpeg_version: "7.1"
-            feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
-            target: "x86_64-pc-windows-msvc"
+          - target: "x86_64-pc-windows-msvc"
             vcpkg_triplet: "x64-windows-static-md"
-          - ffmpeg_version: "7.1"
-            feature: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
-            target: "x86_64-pc-windows-msvc"
+          - target: "x86_64-pc-windows-msvc"
             vcpkg_triplet: "x64-windows"
             dynamic: true
       fail-fast: false
@@ -208,7 +206,7 @@ jobs:
           VCPKG_DEFAULT_TRIPLET: ${{ matrix.config.vcpkg_triplet }}
           LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
           LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo clippy --no-default-features --features ${{ matrix.config.feature }} --target ${{ matrix.config.target }} -- -D warnings
+        run: cargo clippy --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} -- -D warnings
 
       - name: Build
         shell: bash
@@ -218,7 +216,7 @@ jobs:
           VCPKG_DEFAULT_TRIPLET: ${{ matrix.config.vcpkg_triplet }}
           LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
           LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo build --no-default-features --features ${{ matrix.config.feature }} --target ${{ matrix.config.target }} --verbose
+        run: cargo build --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} --verbose
 
       - name: Run Test
         shell: bash
@@ -228,7 +226,7 @@ jobs:
           VCPKG_DEFAULT_TRIPLET: ${{ matrix.config.vcpkg_triplet }}
           LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
           LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo test --no-default-features --features ${{ matrix.config.feature }} --target ${{ matrix.config.target }} --verbose -- --nocapture
+        run: cargo test --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} --verbose -- --nocapture
 
   test:
     runs-on: ubuntu-latest

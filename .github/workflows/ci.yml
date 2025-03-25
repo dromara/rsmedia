@@ -83,21 +83,6 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy, rust-src, llvm-tools-preview, rust-analysis
 
-      - name: Configure Rust linker
-        run: |
-          mkdir -p .cargo
-          cat > .cargo/config.toml << EOF
-          [target.x86_64-unknown-linux-gnu]
-          rustflags = [
-            "-C", "link-arg=-Wl,--no-as-needed",
-            "-C", "link-arg=-ldl",
-            "-C", "link-arg=-pthread",
-            "-C", "link-arg=-lc",
-            "-C", "link-arg=-Wl,--copy-dt-needed-entries",
-            "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
-          ]
-          EOF
-
       - name: Clippy check
         run: cargo clippy --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
@@ -296,21 +281,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Configure Rust linker settings
-        run: |
-          mkdir -p .cargo
-          cat > .cargo/config.toml << EOF
-          [target.x86_64-unknown-linux-gnu]
-          rustflags = [
-            "-C", "link-arg=-Wl,--no-as-needed",
-            "-C", "link-arg=-ldl",
-            "-C", "link-arg=-pthread",
-            "-C", "link-arg=-lc",
-            "-C", "link-arg=-Wl,--copy-dt-needed-entries",
-            "-C", "link-arg=-dynamic-linker=/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
-          ]
-          EOF
 
       - name: Test
         run: cargo test --all --all-features --verbose -- --nocapture

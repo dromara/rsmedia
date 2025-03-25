@@ -47,10 +47,7 @@ fn configure_linux(target_arch: &str) {
     println!("cargo:rustc-link-lib=dylib=dl");
     println!("cargo:rustc-link-lib=dylib=pthread");
 
-    println!("cargo:rustc-link-search=native=/lib");
-    println!("cargo:rustc-link-search=native=/usr/lib");
-    println!("cargo:rustc-link-search=native=/usr/local/lib");
-
+    // arch-specific paths prioritized
     let arch_specific_paths = match target_arch {
         "x86_64" => vec!["/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu"],
         "aarch64" => vec!["/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu"],
@@ -59,6 +56,11 @@ fn configure_linux(target_arch: &str) {
     for path in arch_specific_paths {
         println!("cargo:rustc-link-search=native={}", path);
     }
+
+    // common
+    println!("cargo:rustc-link-search=native=/usr/local/lib");
+    println!("cargo:rustc-link-search=native=/usr/lib");
+    println!("cargo:rustc-link-search=native=/lib");
 }
 
 fn configure_windows(target_arch: &str) {

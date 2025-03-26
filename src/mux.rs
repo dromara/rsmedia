@@ -228,9 +228,8 @@ impl<R: Reader> Demuxer<R> {
             let stream_info = StreamInfo::from_reader(&reader, stream_idx)?;
             // auto detect hardware acceleration decoder codec
             let codec_name = stream_info.find_decoder_name(device_type);
-            let decoder = DecoderBuilder::new()
+            let decoder = DecoderBuilder::new(stream_info.media_type)
                 .with_hardware_device(device_config.clone())
-                .with_media_type(stream_info.media_type)
                 .with_codec_name(codec_name)
                 .with_resize(resize)
                 .build(&reader)
@@ -486,9 +485,7 @@ mod tests {
         let output_path = Path::new("/tmp/test_mux_demux_video.mp4");
 
         let (width, height) = (1920, 1080);
-        let video_encoder = EncoderBuilder::new()
-            .with_video_size(width, height)
-            .build()?;
+        let video_encoder = Encoder::new_video(width, height).unwrap();
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
@@ -545,23 +542,12 @@ mod tests {
     fn test_mux_demux_audio_aac() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_audio_aac.aac");
         let sample_rate = 44_100;
-        let bit_rate = 128_000;
         // aac 要求输入的样本数必须是1024
         let nb_samples = 1024;
         let channels = 2;
 
         // 添加音频流
-        let audio_encoder = EncoderBuilder::new()
-            .with_media_type(MediaType::AUDIO) // 指定音频编码
-            .with_nb_channels(channels) // 立体声
-            .with_sample_rate(sample_rate) // 采样率
-            // 音频的时间基通常设置为1/采样率，这样PTS值就直接对应于样本数
-            .with_time_base(1, sample_rate as i32) // 设置时间基为1/采样率
-            .with_bit_rate(bit_rate) // 128kbps 比特率
-            .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
-            .with_codec_name(Some("aac".to_string())) // 指定AAC编码
-            .build()?;
-
+        let audio_encoder = Encoder::new_audio(channels, sample_rate, SampleFormat::FLTP).unwrap();
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
 
@@ -627,7 +613,7 @@ mod tests {
     #[test]
     #[ignore = "test_mux_demux_audio_mp3 需要写文件操作"]
     fn test_mux_demux_audio_mp3() -> Result<()> {
-        let output_path = Path::new("/tmp/test_mux_demux_audio_aac_mp3.mp3");
+        let output_path = Path::new("/tmp/test_mux_demux_audio_mp3.mp3");
         let sample_rate = 44_100;
         let bit_rate = 128_000;
         // MP3通常使用1152个样本/帧
@@ -635,15 +621,11 @@ mod tests {
         let channels = 2;
 
         // 修改音频编码器为MP3
-        let audio_encoder = EncoderBuilder::new()
-            .with_media_type(MediaType::AUDIO)
-            .with_nb_channels(channels)
-            .with_sample_rate(sample_rate)
-            .with_bit_rate(bit_rate)
-            .with_sample_format(SampleFormat::FLTP) // MP3也支持平面浮点格式
-            .with_time_base(1, sample_rate as i32)
-            .with_codec_name(Some("libmp3lame".to_string())) // 使用LAME MP3编码器
-            .build()?;
+        let audio_encoder =
+            EncoderBuilder::new_audio(bit_rate, channels, sample_rate, SampleFormat::FLTP)
+                // 使用LAME MP3编码器
+                .with_codec_name(Some("libmp3lame".to_string()))
+                .build()?;
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
@@ -695,29 +677,18 @@ mod tests {
         // 音频参数
         pub const AUDIO_SAMPLE_RATE: u32 = 48_000;
         pub const AUDIO_CHANNELS: u32 = 2;
-        pub const AUDIO_BITRATE: i64 = 128_000;
         pub const SAMPLES_PER_FRAME: u32 = 1024;
 
         let output_path = Path::new("/tmp/test_multiple_streams.mp4");
 
-        let video_encoder = EncoderBuilder::new()
-            .with_media_type(MediaType::VIDEO)
-            .with_video_size(VIDEO_WIDTH, VIDEO_HEIGHT)
+        let video_encoder = EncoderBuilder::new_video(VIDEO_WIDTH, VIDEO_HEIGHT)
             .with_frame_rate(VIDEO_FPS as i32, 1)
-            .with_time_base(1, 90_000) // 使用标准的90kHz时间基
-            .with_gop_size(VIDEO_FPS as i32) // 每秒一个关键帧
-            .with_codec_name(Some("libx264".to_string()))
+            // 使用标准的90kHz时间基
+            .with_time_base(1, 90_000)
             .build()?;
 
-        let audio_encoder = EncoderBuilder::new()
-            .with_media_type(MediaType::AUDIO) // 指定音频编码
-            .with_nb_channels(AUDIO_CHANNELS) // 立体声
-            .with_sample_rate(AUDIO_SAMPLE_RATE) // 采样率
-            .with_bit_rate(AUDIO_BITRATE) // 比特率
-            .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
-            .with_time_base(1, AUDIO_SAMPLE_RATE as i32) // 使用采样率作为时间基
-            .with_codec_name(Some("aac".to_string())) // 指定AAC编码
-            .build()?;
+        let audio_encoder =
+            Encoder::new_audio(AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, SampleFormat::FLTP).unwrap();
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);

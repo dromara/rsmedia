@@ -14,8 +14,7 @@ use std::path::Path;
 fn main() {
     rsmedia::init().unwrap();
 
-    let mut encoder = EncoderBuilder::new()
-        .with_video_size(1280, 720)
+    let mut encoder = EncoderBuilder::new_video(1280, 720)
         // use hwaccel cuda
         // .with_hardware_device(HWDeviceType::CUDA)
         // libx264, libx265, h264_nvenc, h264_vaapi etc.

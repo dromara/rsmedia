@@ -64,42 +64,52 @@ impl EncoderBuilder {
     const VIDEO_CODEC_NAME: &'static str = "libx264";
     const AUDIO_CODEC_NAME: &'static str = "aac";
 
-    /// Create an encoder with the specified destination and settings.
+    /// Create a video encoder with the specified destination
     ///
-    /// * `destination` - Where to encode to.
+    /// # Arguments
+    ///
     /// * `width` - The width of the video stream.
     /// * `height` - The height of the video stream.
     /// * `pixel_format` - The desired pixel format for the video stream.
-    /// * `options` - Custom H264 encoding options.
-    pub fn new() -> Self {
-        Self {
-            // video
-            width: 0,
-            height: 0,
-            pixel_format: PixelFormat::YUV420P,
-            time_base: time::TIME_BASE,
-            pkt_time_base: time::TIME_BASE,
-            bit_rate: Self::VIDEO_BIT_RATE,
-            frame_rate: avutil::ra(Self::FRAME_RATE, 1),
-            keyframe_interval: Self::KEY_FRAME_INTERVAL,
-            gop_size: 0,
-            max_b_frames: 0,
-            oformat_flags: AvFormatFlags::GLOBAL_HEADER as i32,
-            // audio
-            nb_channels: 2,
-            sample_rate: 44100,
-            sample_format: SampleFormat::FLTP,
-            // common
-            media_type: MediaType::VIDEO,
-            thread_count: 0,
-            codec_name: None,
-            codec_opts: None,
-            hw_device_config: None,
-        }
+    ///
+    /// note: default video codec is `libx264`
+    pub fn new_video(width: u32, height: u32) -> Self {
+        Self::default().with_width(width).with_height(height)
     }
 
-    pub fn with_video_size(mut self, width: u32, height: u32) -> Self {
+    /// Create an audio encoder with the specified parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `bit_rate` - The bit rate of the audio stream.
+    /// * `nb_channels` - The number of channels in the audio stream.
+    /// * `sample_rate` - The sample rate of the audio stream.
+    /// * `sample_format` - The sample format of the audio stream.
+    ///
+    /// note: default audio codec is `aac`
+    pub fn new_audio(
+        bit_rate: i64,
+        nb_channels: u32,
+        sample_rate: u32,
+        sample_format: SampleFormat,
+    ) -> Self {
+        Self::default()
+            .with_bit_rate(bit_rate)
+            .with_nb_channels(nb_channels)
+            .with_sample_rate(sample_rate)
+            .with_time_base(1, sample_rate as i32)
+            .with_sample_format(sample_format)
+            .with_media_type(MediaType::AUDIO)
+    }
+
+    /// Set the width of the video stream.
+    pub fn with_width(mut self, width: u32) -> Self {
         self.width = width as i32;
+        self
+    }
+
+    /// Set the height of the video stream.
+    pub fn with_height(mut self, height: u32) -> Self {
         self.height = height as i32;
         self
     }
@@ -340,7 +350,30 @@ impl EncoderBuilder {
 
 impl Default for EncoderBuilder {
     fn default() -> Self {
-        Self::new()
+        Self {
+            // video
+            width: 0,
+            height: 0,
+            pixel_format: PixelFormat::YUV420P,
+            time_base: time::TIME_BASE,
+            pkt_time_base: time::TIME_BASE,
+            bit_rate: Self::VIDEO_BIT_RATE,
+            frame_rate: avutil::ra(Self::FRAME_RATE, 1),
+            keyframe_interval: Self::KEY_FRAME_INTERVAL,
+            gop_size: 0,
+            max_b_frames: 0,
+            oformat_flags: AvFormatFlags::GLOBAL_HEADER as i32,
+            // audio
+            nb_channels: 2,
+            sample_rate: 44100,
+            sample_format: SampleFormat::FLTP,
+            // common
+            media_type: MediaType::VIDEO,
+            thread_count: 0,
+            codec_name: None,
+            codec_opts: None,
+            hw_device_config: None,
+        }
     }
 }
 
@@ -373,13 +406,34 @@ pub struct Encoder {
 }
 
 impl Encoder {
-    /// Create an encoder with the specified destination and settings.
+    /// Create a video encoder with the specified destination
     ///
-    /// * `destination` - Where to encode to.
-    /// * `settings` - Encoding settings.
+    /// # Arguments
+    ///
+    /// * `width` - The width of the video stream.
+    /// * `height` - The height of the video stream.
+    ///
+    /// note: default video codec is `libx264`
     #[inline]
-    pub fn new() -> Result<Encoder> {
-        EncoderBuilder::new().build()
+    pub fn new_video(width: u32, height: u32) -> Result<Encoder> {
+        EncoderBuilder::new_video(width, height).build()
+    }
+
+    /// Create a audio encoder with the specified parameters.
+    ///
+    /// * `bit_rate` - Bit rate in bits per second. default is 128k.
+    /// * `nb_channels` - Number of channels.
+    /// * `sample_rate` - Sample rate in Hz.
+    /// * `sample_format` - Sample format.
+    ///
+    /// note: default audio codec is `aac`
+    #[inline]
+    pub fn new_audio(
+        nb_channels: u32,
+        sample_rate: u32,
+        sample_format: SampleFormat,
+    ) -> Result<Encoder> {
+        EncoderBuilder::new_audio(128_000, nb_channels, sample_rate, sample_format).build()
     }
 
     /// Encode a single `ndarray` frame.
@@ -666,10 +720,7 @@ mod tests {
 
         let output_path = Path::new("/tmp/h264_encode_video.mp4");
 
-        let mut encoder = EncoderBuilder::new()
-            .with_video_size(1280, 720)
-            .with_media_type(MediaType::VIDEO)
-            .build()?;
+        let mut encoder = Encoder::new_video(1280, 720).unwrap();
 
         // build writer
         let mut stream_writer = StreamWriter::new(output_path)?;
@@ -738,8 +789,6 @@ mod tests {
 
     /// 音频采样率
     const DEFAULT_SAMPLE_RATE: u32 = 44_100;
-    /// 比特率
-    const DEFAULT_BIT_RATE: i64 = 128_000;
     /// 正弦波振幅
     const SAFE_AMPLITUDE: f32 = 0.7;
     /// 时长(秒)
@@ -846,15 +895,7 @@ mod tests {
     fn test_encode_audio() -> Result<()> {
         let output_path = Path::new("/tmp/aac_encode_audio.aac");
 
-        let mut encoder = EncoderBuilder::new()
-            .with_media_type(MediaType::AUDIO) // 指定音频编码
-            .with_nb_channels(2) // 立体声
-            .with_sample_rate(DEFAULT_SAMPLE_RATE) // 采样率
-            .with_bit_rate(DEFAULT_BIT_RATE) // 128kbps 比特率
-            .with_sample_format(SampleFormat::FLTP) // 平面浮点格式
-            .with_codec_name(Some("aac".to_string())) // 指定AAC编码
-            .build()
-            .unwrap();
+        let mut encoder = Encoder::new_audio(2, DEFAULT_SAMPLE_RATE, SampleFormat::FLTP).unwrap();
 
         let mut stream_writer = StreamWriter::new(output_path)?;
         let audio_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());

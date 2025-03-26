@@ -38,28 +38,28 @@ Supported Platforms:
 
 Hardware acceleration:
 
-| API        | Platform  | Arch    | Hardware Requirements          | Support         | Notes                   |
-|------------|-----------|---------|--------------------------------|-----------------|-------------------------|
-| VDPAU      | Linux     | x86_64  | NVIDIA GPU                     | ⚠️ Full         | `nvidia-vdpau-driver`   |
-|            | Linux     | aarch64 | NVIDIA GPU                     | ⚠️ Full         | Jetson AGX support      |
-| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full          | Container-ready         |
-|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ✅ Full          | Jetson/Orin             |
-|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full          |                         |
-|            | Windows   | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ⚠️ Partial      | Limited driver support  |
-| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU       | ⚠️ Full         | `intel-media-driver`    |
-|            | Linux     | aarch64 | Mali/AMD GPU                   | ⚠️ Partial      | Kernel 5.15+ required   |
-| DXVA2      | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full         | WDDM 2.0+               |
-| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full         | `intel-media-va-driver` |
-|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full         | Intel Media SDK         |
-| TOOLBOX    | macOS     | x86_64  | Intel GPU                      | ✅ Native        | macOS 10.13+            |
-|            | macOS     | aarch64 | Apple Silicon GPU (M series)   | ✅ Native        |                         |
-| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full         |                         |
-|            | Windows   | aarch64 | DX11-compatible GPU            | ⚠️ Partial      | ARM64 Windows 11        |
-| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU                 | ⚠️ Partial      | `libdrm` + KMS          |
-|            | Linux     | aarch64 | Mali GPU                       | ⚠️ Partial      |                         |
-| MEDIACODEC | Android   | arm64   | Hardware decoder               | ⚠️ Full         | Android 12+             |
-| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU            | ⚠️ Experimental | FFmpeg 7.0+             |
-|            | Windows   | aarch64 | DX12-compatible GPU            | ⚠️ Experimental | FFmpeg 7.0+             |
+| API        | Platform  | Arch    | Hardware Requirements          | Support           | Notes                    |
+|------------|-----------|---------|--------------------------------|-------------------|--------------------------|
+| VDPAU      | Linux     | x86_64  | NVIDIA GPU                     | ⚠️ Full           | `nvidia-vdpau-driver`    |
+|            | Linux     | aarch64 | NVIDIA GPU                     | ⚠️ Full           | Jetson AGX support       |
+| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full            | Container-ready          |
+|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ✅ Full            | Jetson/Orin              |
+|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full            |                          |
+|            | Windows   | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ⚠️ Partial        | Limited driver support   |
+| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU       | ⚠️ Full           | `intel-media-driver`     |
+|            | Linux     | aarch64 | Mali/AMD GPU                   | ⚠️ Partial        | Kernel 5.15+ required    |
+| DXVA2      | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full           | WDDM 2.0+                |
+| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full           | `intel-media-va-driver`  |
+|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full           | Intel Media SDK          |
+| TOOLBOX    | macOS     | x86_64  | Intel GPU                      | ✅ Native          | macOS 10.13+             |
+|            | macOS     | aarch64 | Apple Silicon GPU (M series)   | ✅ Native          |                          |
+| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full           |                          |
+|            | Windows   | aarch64 | DX11-compatible GPU            | ⚠️ Partial        | ARM64 Windows 11         |
+| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU                 | ⚠️ Partial        | `libdrm` + KMS           |
+|            | Linux     | aarch64 | Mali GPU                       | ⚠️ Partial        |                          |
+| MEDIACODEC | Android   | arm64   | Hardware decoder               | ⚠️ Full           | Android 12+              |
+| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU            | ⚠️ Experimental   | FFmpeg 7.0+              |
+|            | Windows   | aarch64 | DX12-compatible GPU            | ⚠️ Experimental   | FFmpeg 7.0+              |
 
 > **Note:**
 - ✅ Full support / Successful
@@ -165,9 +165,7 @@ use rsmedia::{
   EncoderBuilder, MediaType, Options, PixelFormat, SampleFormat, StreamReader,
   StreamWriterBuilder,
 };
-use rsmpeg::avcodec::AVCodec;
 
-use anyhow::Context;
 use std::path::Path;
 
 fn main() {
@@ -192,33 +190,14 @@ fn main() {
     let encoder = {
       if stream_info.media_type == MediaType::VIDEO {
         // build video encoder
-        let codec = {
-          // set custom video codec name, eg: libx264, libx265,
-          // Notes: options muse be match with input video encoder codec,
-          // Or if you just want to transcode, the codec stay the same,
-          // just do get codec from input stream_info.codec_id
-          // ```
-          // AVCodec::find_encoder(stream_info.codec_id);
-          // ```
-          // or set by codec name:
-          AVCodec::find_encoder_by_name(cstr::cstr!("libx264"))
-                  .context("Failed to find decoder")
-                  .unwrap()
-        };
-
-        EncoderBuilder::new()
-                // cuda accel
+        EncoderBuilder::new_video(stream_info.width as u32, stream_info.height as u32)
+                // cuda acceleration
                 // .with_hardware_device(Some(HWDeviceType::CUDA))
                 // .with_codec_name("h264_nvenc".to_string())
-                // .with_options(Options::preset_h264_nvenc())
-                // other
                 // notes: options must be match with input video encoder codec,
-                .with_options(Some(Options::preset_h264()))
-                .with_media_type(stream_info.media_type)
+                // .with_options(Options::preset_h264_nvenc())
                 .with_bit_rate(stream_info.bit_rate)
-                .with_codec_name(Some(codec.name().to_str().unwrap().to_string()))
                 // video
-                .with_video_size(stream_info.width as u32, stream_info.height as u32)
                 .with_time_base_ra(stream_info.time_base)
                 .with_frame_rate_ra(stream_info.frame_rate)
                 .with_pixel_format(PixelFormat::from(stream_info.format))
@@ -226,29 +205,12 @@ fn main() {
                 .unwrap()
       } else if stream_info.media_type == MediaType::AUDIO {
         // build audio encoder
-        let codec = {
-          // set custom audio codec name, eg: aac, libmp3lame,
-          // Notes: options muse be match with input audio encoder codec,
-          // Or if you just want to transcode, the codec stay the same,
-          // just do get codec from input stream_info.codec_id
-          // ```
-          // AVCodec::find_encoder(stream_info.codec_id);
-          // ```
-          // or set by codec name:
-          AVCodec::find_encoder_by_name(cstr::cstr!("aac"))
-                  .context("Failed to find decoder")
-                  .unwrap()
-        };
-
-        EncoderBuilder::new()
-                // other
-                .with_media_type(stream_info.media_type)
-                .with_bit_rate(stream_info.bit_rate)
-                .with_codec_name(Some(codec.name().to_str().unwrap().to_string()))
-                // audio
-                .with_nb_channels(stream_info.channel_layout.nb_channels as u32)
-                .with_sample_format(SampleFormat::from(stream_info.format))
-                .with_sample_rate(stream_info.sample_rate as u32)
+        EncoderBuilder::new_audio(
+          stream_info.bit_rate,
+          stream_info.channel_layout.nb_channels as u32,
+          stream_info.sample_rate as u32,
+          SampleFormat::from(stream_info.format),
+        )
                 .build()
                 .unwrap()
       } else {

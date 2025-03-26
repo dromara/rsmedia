@@ -35,17 +35,29 @@ libc = "0.2"
 cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"
+
+## security & async
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 
-## image & video
+## parallel
+rayon = "1.10"
+num_cpus = "1.16"
+
+## color
 libblur = "0.17"
 pic-scale = "0.5"
 yuvutils-rs = "0.8"
 colorutils-rs = "0.7"
 histogram_equalization = "0.2"
 
+## image & video
+imageproc = "0.25"
+oxipng = "9.1"
+palette = "0.7.3"
+
 ## audio & sound
+dasp = "0.11"
 cpal = "0.15"
 rodio = { version = "0.20", features = ["symphonia-all", "tracing"] }
 

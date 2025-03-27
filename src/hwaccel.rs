@@ -35,8 +35,8 @@ impl HWDeviceConfig {
     /// * `hw_pixel_format` - The pixel format of the hardware device
     /// * `sw_pixel_format` - The pixel format of the software device
     /// * `device_id` - The type-specific string identifying of the GPU device,
-    ///     e.g. for NVIDIA CUDA, device_id should be explicitly the GPU ID  "0" or "1",
-    ///         for VAAPI: device_id should be set like "/dev/dri/renderD128"
+    ///   e.g. for NVIDIA CUDA, device_id should be explicitly the GPU ID  "0" or "1",
+    ///   for VAAPI: device_id should be set like "/dev/dri/renderD128"
     /// * `options` - Additional (type-specific) options to use in opening the device
     pub fn new(
         device_type: HWDeviceType,

@@ -709,29 +709,134 @@ mod tests {
     use crate::io::private::{Output, Write};
     use crate::io::StreamWriter;
     use crate::stream::StreamInfo;
+    use crate::StreamWriterBuilder;
+    use std::collections::HashMap;
     use std::path::Path;
 
-    #[test]
+    /// 动态码率/帧率调整、关键帧间隔控制
+    /// 完善主流编码格式支持（H.264/265, VP9/AV1, AAC/Opus）
+    ///
+    /// | 容器格式 | 标准时间基         | 说明                      |
+    /// | :------- | :-------------- | :------------------------|
+    /// | MP4      | 1/90_000        | 90kHz，源自MPEG-2标准      |
+    /// | MOV      | 1/10_000_000    | 10MHz，苹果QuickTime格式   |
+    /// | MKV      | 1/1_000_000_000 | 纳秒级精度                 |
+    /// | FLV      | 1/1_000         | 毫秒级，Flash视频标准       |
+    /// | TS       | 1/90_000        | 90kHz，MPEG传输流          |
+    /// | AVI      | 1/{帧率}         | 基于帧计数，或1/1000        |
+    /// | WebM     | 1/1_000_000_000 | 纳秒级，基于MKV            |
+    /// | 3GP      | 1/90_000        | 移动设备视频标准            |
+    /// | ASF/WMV  | 1/10_000_000    | 100纳秒单位，Windows Media |
+    /// | OGG/OGV  | 1/1_000_000     | 微秒级，开源标准            |
+    /// | MPEG     | 1/90_000        | 90kHz，MPEG标准           |
     #[cfg(feature = "ndarray")]
-    #[ignore = "ignore video output file"]
-    fn test_encode_video() -> Result<()> {
+    fn test_encode_video_for_container(container_type: &str, fps: f64) -> Result<()> {
         use crate::time::Time;
         use crate::FrameArray;
 
-        let output_path = Path::new("/tmp/h264_encode_video.mp4");
+        // 根据容器格式选择合适的时间基
+        let (time_base_num, time_base_den) = match container_type {
+            "mp4" => (1, 90_000),                 // 90kHz
+            "mov" => (1, 10_000_000),             // 10MHz (100ns单位)
+            "mkv" | "webm" => (1, 1_000_000_000), // 纳秒级
+            "flv" => (1, 1_000),                  // 毫秒级
+            "ts" | "mts" | "m2ts" => (1, 90_000), // 90kHz
+            "avi" => {
+                // AVI通常使用帧率作为时间基
+                let fps_rounded = fps.round() as i32;
+                (1, fps_rounded)
+            }
+            "3gp" => (1, 90_000),             // 通常为90kHz
+            "wmv" | "asf" => (1, 10_000_000), // 100纳秒单位
+            "ogg" | "ogv" => (1, 1_000_000),  // 微秒级
+            "mpg" | "mpeg" => (1, 90_000),    // 90kHz
+            // 任何其他格式使用安全默认值
+            _ => (1, 90_000), // 90kHz
+        };
 
-        let mut encoder = Encoder::new_video(1280, 720).unwrap();
+        // 使用EncoderBuilder明确设置时间基和编码参数
+        let mut encoder_builder =
+            EncoderBuilder::new_video(1280, 720).with_time_base(time_base_num, time_base_den);
 
-        // build writer
-        let mut stream_writer = StreamWriter::new(output_path)?;
+        // 针对特定容器格式的额外编码配置
+        let codec_name = match container_type {
+            "avi" => {
+                // AVI通常限制较多，可能需要特殊编码配置
+                // 例如：设置较低的配置文件，兼容性更好的编码参数等
+                let mut opts = HashMap::new();
+                opts.insert("profile".to_string(), "baseline".to_string());
+                opts.insert("level".to_string(), "3.0".to_string());
+                encoder_builder = encoder_builder.with_options(Some(opts.into()));
+                None
+            }
+            "ogg" | "ogv" => {
+                // OGG/OGV通常使用 音频 Vorbis + 视频 Theora 编码
+                Some("libtheora".to_string())
+            }
+            "webm" => {
+                // WebM通常使用VP8/VP9编码而非H.264
+                // libvpx-vp8, libvpx-vp9
+                Some("libvpx-vp9".to_string())
+            }
+            _ => None,
+        };
+
+        encoder_builder = encoder_builder.with_codec_name(codec_name);
+        // 创建编码器
+        let mut encoder = encoder_builder.build().unwrap();
+
+        // 确定输出路径和扩展名
+        let output_file = format!("/tmp/test_encode_video.{}", container_type);
+        let output_path = Path::new(output_file.as_str());
+        // 创建流写入器
+        let mut writer_builder = StreamWriterBuilder::new(output_path);
+
+        // 容器特定配置
+        match container_type {
+            "mkv" => {
+                let mut opts = HashMap::new();
+                opts.insert("strict".to_string(), "experimental".to_string());
+                writer_builder = writer_builder.with_options(opts.into());
+            }
+            "mov" => {
+                writer_builder =
+                    writer_builder.with_options(Options::preset_avformat_fragmented_mov());
+            }
+            "flv" => {
+                writer_builder = writer_builder.with_options(Options::preset_avformat_flv());
+            }
+            "avi" => {
+                // 确保AVI使用兼容格式
+                let mut opts = HashMap::new();
+                opts.insert("strict".to_string(), "normal".to_string());
+                writer_builder = writer_builder.with_options(opts.into());
+            }
+            "wmv" => {
+                // WMV可能需要特殊处理
+                let mut opts = HashMap::new();
+                opts.insert("strict".to_string(), "normal".to_string());
+                writer_builder = writer_builder.with_options(opts.into());
+            }
+            _ => {}
+        }
+
+        let mut stream_writer = writer_builder.build().unwrap();
         let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());
         let stream_info = StreamInfo::from_writer(&stream_writer, video_index).unwrap();
 
+        // 输出实际使用的时间基（可能与请求的不同）
+        println!(
+            "Requested timebase: {}/{}, Actual encoder timebase: {}/{}, Stream timebase: {}/{}",
+            time_base_num,
+            time_base_den,
+            encoder.time_base().num,
+            encoder.time_base().den,
+            stream_info.time_base.num,
+            stream_info.time_base.den
+        );
+
         // write header
         stream_writer.write_header().unwrap();
-
-        let duration: Time = Time::from_nth_of_a_second(24);
-        let mut position = Time::zero();
 
         fn rainbow_frame(p: f32) -> FrameArray {
             use crate::colors;
@@ -739,7 +844,25 @@ mod tests {
             FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
         }
 
-        // frame encode and write to file
+        let actual_timebase = encoder.time_base();
+        let frame_duration_seconds = 1.0 / fps;
+
+        // 将秒转换为对应时间基单位
+        let duration_units = (frame_duration_seconds * actual_timebase.den as f64
+            / actual_timebase.num as f64)
+            .round() as i64;
+
+        let duration = Time::new(Some(duration_units), actual_timebase);
+
+        // 初始化position时使用正确的时间基
+        let mut position = Time::new(Some(0), avutil::ra(time_base_num, time_base_den));
+
+        println!(
+            "Encoding {} with actual timebase: {}/{}, duration units: {}, fps: {}",
+            container_type, actual_timebase.num, actual_timebase.den, duration_units, fps
+        );
+
+        // 帧编码并写入文件
         for i in 0..256 {
             let frame = rainbow_frame(i as f32 / 256.0);
 
@@ -747,9 +870,17 @@ mod tests {
                 EncodeResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(video_index as i32);
+
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
                     // encode_ctx_timebase => out_stream_time_base
+                    let orig_pts = packet.pts;
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
+                    let new_pts = packet.pts;
+                    // 只打印少量帧以避免日志过多
+                    if i < 5 || i % 30 == 0 {
+                        println!("Frame {}: orig_pts={}, new_pts={}", i, orig_pts, new_pts);
+                    }
+
                     stream_writer.write_frame(&mut packet)?;
                 }
                 EncodeResult::Drain => {
@@ -766,12 +897,11 @@ mod tests {
                 }
             }
 
-            println!("Encoded frame {} at position {:?}", i, position);
-
+            // 使用aligned_with确保时间基一致进行加法操作
             position = position.aligned_with(duration).add();
         }
 
-        // flush encoder and write trailer
+        // flush encoder
         encoder
             .flush(
                 &mut stream_writer,
@@ -783,6 +913,22 @@ mod tests {
 
         // write trailer
         stream_writer.write_trailer().unwrap();
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "ignore video output file"]
+    fn test_encode_video() -> Result<()> {
+        // 测试所有主要容器格式
+        let formats = [
+            "mp4", "mkv", "avi", "mov", "flv", "ts", "webm", "wmv", "3gp", "ogv",
+        ];
+        for format in formats {
+            println!("Testing format: {}...", format);
+            test_encode_video_for_container(format, 24.0)?;
+            println!("Testing format: {} done.", format);
+        }
 
         Ok(())
     }

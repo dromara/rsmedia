@@ -46,6 +46,8 @@ rayon = "1.10"
 num_cpus = "1.16"
 
 ## color
+ab_glyph = "0.2"
+colorous = "1.0"
 libblur = "0.17"
 pic-scale = "0.5"
 yuvutils-rs = "0.8"

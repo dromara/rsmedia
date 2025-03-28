@@ -50,7 +50,10 @@ impl CodecConfig {
             .cloned()
             .collect();
 
-        let supported_sample_rates = codec.supported_samplerates().unwrap_or(&[]).to_vec();
+        let supported_sample_rates = codec
+            .supported_samplerates()
+            .unwrap_or(&[44_100, 48_000])
+            .to_vec();
 
         let frame_size = if codec.capabilities & ffi::AV_CODEC_CAP_VARIABLE_FRAME_SIZE as i32 != 0 {
             1024
@@ -270,7 +273,7 @@ fn encode_audio(
         .supported_sample_rates
         .first()
         .copied()
-        .unwrap_or(44100);
+        .unwrap();
 
     println!(
         "{}",

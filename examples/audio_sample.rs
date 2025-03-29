@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -219,7 +221,6 @@ impl Default for EchoParams {
 }
 
 /// 回声处理器
-#[allow(dead_code)]
 pub struct EchoProcessor {
     buffer: Vec<Vec<f32>>,
     params: EchoParams,

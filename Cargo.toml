@@ -35,6 +35,7 @@ libc = "0.2"
 cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"
+ringbuf = "0.4"
 tracing-subscriber = {version = "0.3", features = ["fmt", "env-filter", "chrono"]}
 
 ## security & async
@@ -62,7 +63,7 @@ palette = "0.7.3"
 ## audio & sound
 cpal = "0.15"
 rubato = "0.16"
-dasp = {version = "0.11", features = ["all-no-std"]}
+dasp = {version = "0.11", features = ["all"]}
 rodio = { version = "0.20", features = ["symphonia-all", "tracing"] }
 
 [package.metadata.docs.rs]

@@ -721,7 +721,9 @@ mod tests {
         supported_frame_rates: Option<Vec<ffi::AVRational>>,
         /// 支持的像素格式列表（VIDEO）
         supported_pix_fmts: Vec<ffi::AVPixelFormat>,
+        /// 特定编码器选项
         codec_options: Option<HashMap<String, String>>,
+        /// 特定格式选项
         format_options: Option<HashMap<String, String>>,
     }
 
@@ -942,13 +944,11 @@ mod tests {
         // 确定输出路径和扩展名
         let output_file = format!("/tmp/test_encode_video.{}", container_type);
         let output_path = Path::new(output_file.as_str());
-        // 创建流写入器
-        let mut writer_builder = StreamWriterBuilder::new(output_path);
-        if let Some(opts) = config.format_options {
-            writer_builder = writer_builder.with_options(opts.into());
-        }
 
-        let mut stream_writer = writer_builder.build()?;
+        // 创建流写入器
+        let mut stream_writer = StreamWriterBuilder::new(output_path)
+            .with_options(config.format_options.map(|opts| opts.into()))
+            .build()?;
         let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());
         let stream_info = StreamInfo::from_writer(&stream_writer, video_index)?;
 

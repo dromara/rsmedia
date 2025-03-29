@@ -101,8 +101,8 @@ impl<'a> StreamReaderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to input.
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = Some(options);
+    pub fn with_options(mut self, options: Option<Options>) -> Self {
+        self.options = options;
         self
     }
 
@@ -289,8 +289,8 @@ impl<'a> StreamWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = Some(options);
+    pub fn with_options(mut self, options: Option<Options>) -> Self {
+        self.options = options;
         self
     }
 
@@ -379,8 +379,8 @@ impl<'a> BufferWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = Some(options);
+    pub fn with_options(mut self, options: Option<Options>) -> Self {
+        self.options = options;
         self
     }
 
@@ -462,8 +462,8 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = Some(options);
+    pub fn with_options(mut self, options: Option<Options>) -> Self {
+        self.options = options;
         self
     }
 

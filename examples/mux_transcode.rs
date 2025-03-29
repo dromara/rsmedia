@@ -25,7 +25,7 @@ fn main() {
     let output_path = Path::new("/tmp/output.mov");
     let stream_writer = StreamWriterBuilder::new(output_path)
         .with_format("mov")
-        .with_options(Options::preset_avformat_fragmented_mov())
+        .with_options(Some(Options::preset_avformat_fragmented_mov()))
         .build()
         .unwrap();
     let mut muxer = Muxer::from_writer(stream_writer);

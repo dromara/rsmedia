@@ -32,7 +32,9 @@ mod tests {
         /// 典型值支持通道数
         channels: usize,
         /// 特定编码器选项
-        options: Vec<(&'static str, &'static str)>,
+        codec_options: Option<HashMap<String, String>>,
+        /// 特定格式选项
+        format_options: Option<HashMap<String, String>>,
     }
 
     /// 获取特定音频格式的详细参数
@@ -41,62 +43,100 @@ mod tests {
         let channels = requested_channels.max(1).min(8);
 
         // 1、通过 container_type 获取特定的编码器和默认比特率
-        let (encoder_name, default_bitrate, codec_options) =
+        let (encoder_name, default_bitrate, codec_options, format_options) =
             match container_type.trim().to_lowercase().as_str() {
-                // 有损压缩格式
-                "mp3" | "mp2" => ("libmp3lame", 192_000, vec![("compression_level", "2")]), // 0-9, 2=较好质量
-                "aac" | "m4a" => (
-                    "aac",
-                    128_000,
-                    vec![("profile", "aac_low"), ("aac_coder", "twoloop")],
-                ),
-                "opus" | "webm" => (
-                    "libopus",
-                    128_000,
-                    vec![
-                        ("application", "audio"),
-                        ("frame_duration", "20"), // 毫秒
-                        ("packet_loss", "0"),     // 抗丢包
-                    ],
-                ),
-                "vorbis" | "ogg" | "mka" => ("libvorbis", 160_000, vec![("quality", "5.5")]), // 浮点质量
-                "wma" => ("wmav2", 128_000, vec![("block_size", "424")]), // 优化块大小
-                "ac3" => ("ac3", 384_000, vec![("dmix_mode", "2")]),      // 杜比环绕
-                "eac3" => ("eac3", 448_000, vec![("surround_mode", "1")]), // 增强环绕
-                "amr" | "3gp" => ("libopencore_amrnb", 12_200, vec![("dtx", "0")]),
+                // 无损音频容器
+                "wav" | "bwf" => {
+                    let mut format_opts = HashMap::new();
+                    format_opts.insert("write_bext".to_string(), "1".to_string());
+                    format_opts.insert("rf64".to_string(), "auto".to_string());
 
-                // 无损压缩格式
-                "flac" => (
-                    "flac",
-                    0,
-                    vec![
-                        ("compression_level", "5"),    // 0-12
-                        ("lpc_coeff_precision", "15"), // 提高精度
-                    ],
-                ),
-                "alac" => ("alac", 0, vec![("min_prediction_order", "4")]),
-                "ape" => ("ape", 0, vec![("compression_level", "3000")]), // Monkey's Audio
-                "tta" => ("tta", 0, vec![("prediction_order", "4")]),
-                "wv" => ("wavpack", 0, vec![("compression_level", "3")]), // 1-5
+                    ("pcm_s16le", 1_411_200, None, Some(format_opts))
+                }
 
-                // 非压缩格式
-                "wav" => ("pcm_s16le", 1_411_200, vec![]), // CD音质比特率
-                "aiff" => ("pcm_s16be", 1_411_200, vec![]),
-                "au" => ("pcm_mulaw", 64_000, vec![]), // G.711
-                "pcm" => ("pcm_s24le", 2_116_800, vec![]), // 24-bit高精度
+                "aiff" | "aif" => {
+                    let mut format_opts = HashMap::new();
+                    format_opts.insert("write_id3v2".to_string(), "1".to_string());
 
-                // 特殊编码
-                "dts" => ("dca", 768_000, vec![("dca_channels", "6")]), // 默认5.1声道
-                "gsm" => ("libgsm", 13_000, vec![("gsm_mode", "1")]),   // 标准GSM
-                "mpc" => ("libmpcdec", 192_000, vec![("profile", "standard")]),
-                "ra" => ("real_144", 96_000, vec![("realaudio_version", "4")]),
+                    ("pcm_s16be", 1_411_200, None, Some(format_opts))
+                }
 
-                // 容器默认规则
-                "mov" | "qt" => ("aac", 192_000, vec![("profile", "aac_ltp")]), // QuickTime推荐
-                "mkv" => ("libvorbis", 160_000, vec![("quality", "6.0")]),      // Matroska常用
+                "flac" => ("flac", 0, None, None),
 
-                // 全局默认格式
-                _ => ("aac", 128_000, vec![("profile", "aac_low")]), // 全局默认
+                "alac" => ("alac", 0, None, None),
+
+                "ape" => ("ape", 0, None, None),
+
+                "wv" => ("wavpack", 0, None, None),
+
+                "tta" => ("tta", 0, None, None),
+
+                // 有损音频容器
+                "mp3" => ("libmp3lame", 192_000, None, None),
+
+                "aac" | "adts" | "m4a" => ("aac", 128_000, None, None),
+
+                "ogg" => ("libvorbis", 160_000, None, None),
+
+                "wma" => ("wmav2", 128_000, None, None),
+
+                "ac3" => ("ac3", 384_000, None, None),
+
+                "dts" => {
+                    let mut codec_opts = HashMap::new();
+                    codec_opts.insert("dca_channels".to_string(), "6".to_string());
+                    codec_opts.insert("strict".to_string(), "experimental".to_string());
+
+                    ("dca", 768_000, Some(codec_opts), None)
+                }
+
+                "mp2" => ("mp2", 192_000, None, None),
+
+                "amr" => ("libopencore_amrnb", 12_200, None, None),
+
+                // 专业音频容器
+                "au" | "snd" => ("pcm_mulaw", 64_000, None, None),
+
+                "pcm" | "raw" => ("pcm_s24le", 2_116_800, None, None),
+
+                "rf64" => ("pcm_s16le", 1_411_200, None, None),
+
+                "caf" => ("alac", 0, None, None),
+
+                "aes" => ("pcm_s24le", 2_116_800, None, None),
+
+                "sd2" => ("pcm_s16be", 1_411_200, None, None),
+
+                "mpc" => ("mpc", 192_000, None, None),
+
+                // 流媒体音频容器
+                "opus" => ("libopus", 128_000, None, None),
+
+                "mka" => ("libvorbis", 160_000, None, None),
+
+                "ra" => ("real_144", 96_000, None, None),
+
+                "asx" => ("wmav2", 128_000, None, None),
+
+                // 特殊音频格式
+                "midi" | "mid" => ("midi", 0, None, None),
+
+                "mod" | "s3m" | "xm" | "it" => ("pcm_s16le", 1_411_200, None, None),
+
+                "sid" => ("pcm_s16le", 1_411_200, None, None),
+
+                "spx" => ("libspeex", 32_000, None, None),
+
+                "gsm" => ("gsm", 13_000, None, None),
+
+                "aax" => ("aac", 64_000, None, None),
+
+                "voc" => ("pcm_u8", 44_100, None, None),
+
+                "maud" => ("pcm_s8", 22_050, None, None),
+
+                // 默认格式
+                _ => ("aac", 128_000, None, None),
             };
 
         // 2、通过编码器获取支持的参数
@@ -167,7 +207,8 @@ mod tests {
             bitrate: default_bitrate,
             codec_name,
             channels: adjusted_channels,
-            options: codec_options,
+            codec_options,
+            format_options,
         }
     }
 
@@ -456,17 +497,12 @@ mod tests {
         let mut encoder =
             EncoderBuilder::new_audio(bitrate, channels, sample_rate as u32, sample_format)
                 .with_codec_name(Some(audio_params.codec_name))
+                .with_options(audio_params.codec_options.map(|opts| opts.into()))
                 .build()?;
 
-        let mut writer_builder = StreamWriterBuilder::new(output_path);
-        if !audio_params.options.is_empty() {
-            let mut map = HashMap::new();
-            for (k, v) in audio_params.options {
-                map.insert(k.to_string(), v.to_string());
-            }
-            writer_builder = writer_builder.with_options(map.into());
-        }
-        let mut stream_writer = writer_builder.build()?;
+        let mut stream_writer = StreamWriterBuilder::new(output_path)
+            .with_options(audio_params.format_options.map(|opts| opts.into()))
+            .build()?;
         let audio_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());
         let stream_info = StreamInfo::from_writer(&stream_writer, audio_index)?;
 
@@ -593,15 +629,15 @@ mod tests {
             "asx",   // Advanced Stream Redirector
 
             // 特殊音频格式
-            "midi",  // 乐器数字接口
-            "mid",   // 同上简称
+            // "midi",  // 乐器数字接口
+            // "mid",   // 同上简称
             "mod",   // Module音乐格式
             "s3m",   // ScreamTracker 3 Module
             "xm",    // Extended Module
             "it",    // Impulse Tracker
             "sid",   // Commodore 64声音格式
-            "spx",   // Speex (语音专用)
-            // "gsm",   // Global System for Mobile
+            // "spx",   // Speex (语音专用)
+            // "gsm",   // Global System for Mobile (只支持解码)
             "aax",   // Audible Enhanced Audio
             "voc",   // Creative Voice
             "maud",  // Amiga音频

@@ -22,7 +22,11 @@ link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
 
 [dependencies]
 url = "2.5"
+rayon = "1.10"
+palette = "0.7"
+ab_glyph = "0.2"
 image = "0.25"
+imageproc = "0.25"
 anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
@@ -38,16 +42,12 @@ chrono = "0.4"
 ringbuf = "0.4"
 tracing-subscriber = {version = "0.3", features = ["fmt", "env-filter", "chrono"]}
 
+## parallel
 ## security & async
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 
-## parallel
-rayon = "1.10"
-num_cpus = "1.16"
-
 ## color
-ab_glyph = "0.2"
 colorous = "1.0"
 libblur = "0.17"
 pic-scale = "0.5"
@@ -56,11 +56,8 @@ colorutils-rs = "0.7"
 histogram_equalization = "0.2"
 
 ## image & video
-imageproc = "0.25"
-oxipng = "9.1"
-palette = "0.7.3"
 
-## audio & sound
+## sound & audio
 cpal = "0.15"
 wavers = "1.5"
 rubato = "0.16"

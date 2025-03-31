@@ -171,7 +171,7 @@ jobs:
 
       # Using this since it's used by clang-sys's CI
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1
+        uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
           directory: ${{ github.workspace }}/clang

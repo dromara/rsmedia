@@ -318,6 +318,16 @@ mod tests {
 
     const OUTPUT_DIR: &str = "output";
 
+    #[ctor::ctor]
+    fn before() {
+        std::fs::create_dir_all(OUTPUT_DIR).unwrap();
+    }
+
+    #[ctor::dtor]
+    fn after() {
+        std::fs::remove_dir_all(OUTPUT_DIR).unwrap();
+    }
+
     /// allow floating point error comparison
     macro_rules! assert_approx_eq {
         ($a:expr, $b:expr) => {

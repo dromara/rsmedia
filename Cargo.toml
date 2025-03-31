@@ -40,6 +40,8 @@ cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"
 ringbuf = "0.4"
+ctor = "0.4"
+rstest = "0.25"
 tracing-subscriber = {version = "0.3", features = ["fmt", "env-filter", "chrono"]}
 
 ## parallel

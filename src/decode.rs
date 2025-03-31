@@ -127,9 +127,11 @@ impl DecoderBuilder {
         let (width, height) = (decode_ctx.width, decode_ctx.height);
         let hw_context = self
             .hw_device_config
-            .filter(|cfg| {
+            .filter(|_cfg| {
                 // hardware acceleration enabled for video
-                let is_video = self.media_type == MediaType::VIDEO;
+                self.media_type == MediaType::VIDEO
+            })
+            .map(|cfg| {
                 // codec support or not for hardware acceleration
                 let hw_pixel = cfg
                     .device_type
@@ -137,12 +139,17 @@ impl DecoderBuilder {
                     .ok_or_else(|| {
                         let codec_name = utils::to_string(codec.name()).unwrap();
                         Error::msg(format!(
-                            "HW acceleration encoder not supported for codec: {codec_name}"
+                            "Decoder with HW acceleration is not supported for codec: {codec_name}"
                         ))
-                    });
-                is_video && hw_pixel.is_ok()
-            })
-            .map(|cfg| {
+                    })?;
+
+                log::info!(
+                    "Video decoder with HW acceleration codec: {:?}, hw_pixel: {:?}, config: {:#?}",
+                    codec.name(),
+                    PixelFormat::from(hw_pixel),
+                    cfg
+                );
+
                 // create hardware context
                 HWContext::new(cfg)
                     .and_then(|ctx| {

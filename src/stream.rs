@@ -149,19 +149,26 @@ impl StreamInfo {
 
     pub fn from_stream(stream: &AVStream) -> Result<Self> {
         let codecpar = stream.codecpar();
+        let codec_type = codecpar.codec_type();
         let metadata = stream
             .metadata()
             .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into());
-        let bytes_per_sample = if codecpar.codec_type().is_audio() {
+        let bytes_per_sample = if codec_type.is_audio() {
             avutil::get_bytes_per_sample(codecpar.format as ffi::AVSampleFormat)
         } else {
             None
         };
-        let bits_per_sample = unsafe { ffi::av_get_bits_per_sample(codecpar.codec_id) };
-        let bits_per_pixel = unsafe {
-            let pix_fmt_desc = AVPixFmtDescriptorRef::get(codecpar.format).unwrap();
-            ffi::av_get_bits_per_pixel(pix_fmt_desc.deref())
+        let (bits_per_sample, bits_per_pixel) = unsafe {
+            let bits_per_sample = ffi::av_get_bits_per_sample(codecpar.codec_id);
+            let bits_per_pixel = if codec_type.is_video() | codec_type.is_audio() {
+                let pix_fmt_desc = AVPixFmtDescriptorRef::get(codecpar.format).unwrap();
+                ffi::av_get_bits_per_pixel(pix_fmt_desc.deref())
+            } else {
+                0
+            };
+            (bits_per_sample, bits_per_pixel)
         };
+
         Ok(Self {
             id: stream.id,
             index: stream.index as usize,

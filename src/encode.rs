@@ -1,10 +1,10 @@
+use crate::filter::{FilterChain, ScaleFilter};
 use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::swctx;
 use crate::time;
 use crate::{utils, MediaType, RawFrame, SampleFormat, Writer};
 
@@ -16,7 +16,7 @@ use anyhow::{Context, Error, Result};
 use std::sync::Arc;
 
 /// Builds an [`Encoder`].
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct EncoderBuilder {
     /// Video
     width: i32,
@@ -39,6 +39,7 @@ pub struct EncoderBuilder {
     media_type: MediaType,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
+    filter_chain: Option<FilterChain>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -232,6 +233,12 @@ impl EncoderBuilder {
         self
     }
 
+    /// Add a filter chain to the encoder
+    pub fn with_filter_chain(mut self, filter_chain: Option<FilterChain>) -> Self {
+        self.filter_chain = filter_chain;
+        self
+    }
+
     /// Apply the settings to an encoder.
     ///
     /// # Arguments
@@ -277,11 +284,12 @@ impl EncoderBuilder {
     /// * `interleaved` - Whether to use interleaved write.
     /// * `settings` - Encoder settings to use.
     pub fn build(self) -> Result<Encoder> {
+        let media_type = self.media_type;
         let codec = {
             let codec_name = if let Some(codec_name) = &self.codec_name {
                 codec_name.as_ref()
             } else {
-                match self.media_type {
+                match media_type {
                     MediaType::VIDEO => Self::VIDEO_CODEC_NAME,
                     MediaType::AUDIO => Self::AUDIO_CODEC_NAME,
                     _ => panic!("Unsupported media type, please specify codec name."),
@@ -302,13 +310,13 @@ impl EncoderBuilder {
             encode_ctx.set_flags(encode_ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
         }
 
-        self.apply_to(&mut encode_ctx, self.media_type);
+        self.apply_to(&mut encode_ctx, media_type);
 
         let hw_context = self
             .hw_device_config
             .filter(|_cfg| {
                 // hardware acceleration enabled for video
-                self.media_type == MediaType::VIDEO
+                media_type == MediaType::VIDEO
             })
             .map(|cfg| {
                 // codec support or not for hardware acceleration
@@ -345,11 +353,34 @@ impl EncoderBuilder {
             .open(dict)
             .context("Failed to open encode context")?;
 
+        let filter_chain = {
+            // get encoder target pixel format for codec context,
+            // if hardware acceleration is enabled, use the format of the hardware context
+            // otherwise, YUV420P is used as the default format
+            let target_format = hw_context
+                .as_ref()
+                .and_then(|_| encode_ctx.hw_frames_ctx_mut())
+                .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
+                .unwrap_or(PixelFormat::YUV420P);
+
+            let mut chain = self
+                .filter_chain
+                .unwrap_or_else(|| FilterChain::new(media_type));
+            let scale_filter = ScaleFilter::new(
+                encode_ctx.width as u32,
+                encode_ctx.height as u32,
+                target_format,
+            );
+            chain.add_filter(Box::new(scale_filter))?;
+            Some(chain)
+        };
+
         Ok(Encoder {
             encode_ctx,
             hw_context,
+            media_type,
+            filter_chain,
             frame_count: 0,
-            media_type: self.media_type,
             keyframe_interval: self.keyframe_interval,
         })
     }
@@ -379,6 +410,7 @@ impl Default for EncoderBuilder {
             thread_count: 0,
             codec_name: None,
             codec_opts: None,
+            filter_chain: None,
             hw_device_config: None,
         }
     }
@@ -406,6 +438,7 @@ impl Default for EncoderBuilder {
 /// ```
 pub struct Encoder {
     encode_ctx: AVCodecContext,
+    filter_chain: Option<FilterChain>,
     hw_context: Option<Arc<HWContext>>,
     media_type: MediaType,
     frame_count: u64,
@@ -452,15 +485,8 @@ impl Encoder {
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
     pub fn encode(&mut self, frame: &FrameArray, source_timestamp: crate::Time) -> EncodeResult {
-        let (height, width, channels) = frame.dim();
-        if height != self.encode_ctx.height as usize
-            || width != self.encode_ctx.width as usize
-            || channels != 3
-        {
-            return EncodeResult::Error(Error::msg("Invalid frame format."));
-        }
-
-        let mut frame = frame::ndarray_yuv_to_avframe(frame).unwrap();
+        // TODO: support audio frame, not just video with size
+        let mut frame = frame::ndarray_to_avframe(frame).unwrap();
 
         frame.set_pts(
             source_timestamp
@@ -469,7 +495,7 @@ impl Encoder {
                 .unwrap(),
         );
 
-        match self.encode_raw(&frame) {
+        match self.encode_raw(frame) {
             EncodeRawResult::Packet(pkt) => EncodeResult::Packet(pkt),
             EncodeRawResult::Drain => EncodeResult::Drain,
             EncodeRawResult::Flushed => EncodeResult::Flushed,
@@ -482,85 +508,53 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, raw_frame: &RawFrame) -> EncodeRawResult {
+    pub fn encode_raw(&mut self, raw_frame: RawFrame) -> EncodeRawResult {
         log::info!(
             "raw_frame: {:?}, time_base: {:?}",
             raw_frame,
             raw_frame.time_base
         );
-        if raw_frame.width != self.encode_ctx.width || raw_frame.height != self.encode_ctx.height {
-            return EncodeRawResult::Error(Error::msg(format!(
-                "Invalid frame pixel format: {:?}, or dimensions: expected {}x{}, got {}x{}",
-                PixelFormat::from(raw_frame.format),
-                self.encode_ctx.width,
-                self.encode_ctx.height,
-                raw_frame.width,
-                raw_frame.height
-            )));
-        }
-
-        let mut av_frame = if self.media_type == MediaType::VIDEO {
-            // get target pixel format for codec context,
-            // if hardware acceleration is enabled, use the format of the hardware context
-            // otherwise, YUV420P is used as the default format
-            let target_format = self
-                .hw_context
-                .as_ref()
-                .and_then(|_| self.encode_ctx.hw_frames_ctx_mut())
-                .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
-                .unwrap_or(PixelFormat::YUV420P);
-
-            // Reformat frame to target pixel format if we need
-            let sw_frame = if raw_frame.format != target_format.into() {
-                swctx::scale_frame(raw_frame, raw_frame.width, raw_frame.height, target_format)
-                    .unwrap()
-            } else {
-                raw_frame.clone()
-            };
-
-            match &self.hw_context {
-                Some(hw_ctx) if hw_ctx.is_sw_frame(&sw_frame) => {
-                    // sw_frame -> hw_frame
-                    hw_ctx
-                        .hw_upload(&mut self.encode_ctx, &sw_frame)
-                        .map_err(|e| Error::msg(format!("Failed to upload frame: {}", e)))
-                        .unwrap()
-                }
-                _ => sw_frame,
-            }
-        } else if self.media_type == MediaType::AUDIO {
-            raw_frame.clone()
-        } else {
-            panic!(
-                "{}",
-                format!("Unsupported mediaType :{:?}", self.media_type)
-            )
-        };
-
-        // Producer key frame every once in a while
-        if self.frame_count % self.keyframe_interval == 0 {
-            // not set for now
-            // av_frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
-        }
-        av_frame.set_pict_type(ffi::AV_PICTURE_TYPE_NONE);
-
-        log::debug!(
-            "send encoder {:?}, time_base: {:?}",
-            av_frame,
-            av_frame.time_base
-        );
 
         // send frame to encoder
-        self.encode_ctx
-            .send_frame(Some(&av_frame))
-            .map_err(|e| Error::msg(format!("Failed to send frame: {}", e)))
-            .unwrap();
+        self.filter_send_frame(Some(raw_frame)).unwrap();
 
         // Increment frame count regardless of whether frame is written,
-        // see https://github.com/oddity-ai/video-rs/issues/46.
         self.frame_count += 1;
 
         self.receive_packet()
+    }
+
+    fn filter_send_frame(&mut self, frame_opt: Option<RawFrame>) -> Result<()> {
+        let mut hw_frame = if let Some(mut filter_frame) = frame_opt {
+            if let Some(ref mut filter_chain) = self.filter_chain {
+                filter_chain.process_frame(&mut filter_frame)?;
+            }
+
+            let hw_frame = match self.hw_context.as_ref() {
+                Some(hw_ctx) if hw_ctx.is_sw_frame(&filter_frame) => {
+                    // sw_frame -> hw_frame
+                    hw_ctx
+                        .hw_upload(&mut self.encode_ctx, &filter_frame)
+                        .map_err(|e| {
+                            Error::msg(format!("HWContext failed to upload frame: {}", e))
+                        })?
+                }
+                _ => filter_frame.clone(),
+            };
+            Some(hw_frame)
+        } else {
+            None
+        };
+
+        if let Some(f) = hw_frame.as_mut() {
+            // Video Producer key frame every once in a while
+            if self.media_type == MediaType::VIDEO && self.frame_count % self.keyframe_interval == 0
+            {
+                f.set_pict_type(ffi::AV_PICTURE_TYPE_I);
+            }
+        }
+
+        Ok(self.encode_ctx.send_frame(hw_frame.as_ref())?)
     }
 
     /// Get encoder time base.
@@ -642,8 +636,8 @@ impl Encoder {
             return Ok(());
         }
 
-        // Notify the encoder that the last frame has been sent.
-        self.send_eof().context("Send EOF frame failed.")?;
+        // EOF: Notify the encoder that the last frame has been sent.
+        self.filter_send_frame(None)?;
 
         // drain the items still on the queue before giving up.
         loop {
@@ -676,11 +670,6 @@ impl Encoder {
         }
 
         Ok(())
-    }
-
-    /// encode context send EOF for flush encoder
-    fn send_eof(&mut self) -> Result<()> {
-        Ok(self.encode_ctx.send_frame(None)?)
     }
 }
 

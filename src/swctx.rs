@@ -1,7 +1,7 @@
 use crate::PixelFormat;
 
 use rsmpeg::avcodec::AVCodecContext;
-use rsmpeg::avutil::{AVFrame, AVSamples};
+use rsmpeg::avutil::{self, AVFrame, AVSamples};
 use rsmpeg::ffi;
 use rsmpeg::swresample::SwrContext;
 use rsmpeg::swscale::SwsContext;
@@ -119,6 +119,9 @@ pub fn scale(
     }
 
     let mut dst_frame = AVFrame::new();
+    dst_frame.set_width(dst_width);
+    dst_frame.set_height(dst_height);
+    dst_frame.set_format(dst_pix_fmt.into());
     // copy props
     let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
     if ret < 0 {
@@ -237,7 +240,7 @@ pub fn convert(
         anyhow::bail!("Hardware frames are not supported in this software re-sampler");
     }
 
-    let sample_fmt = rsmpeg::avutil::get_sample_fmt_name(src_frame.format);
+    let sample_fmt = avutil::get_sample_fmt_name(src_frame.format);
     if src_frame.sample_rate < 0 || sample_fmt.is_none() {
         return Err(Error::msg("Invalid input frame."));
     }
@@ -314,6 +317,7 @@ pub fn convert_frame(
     dst_frame.set_format(encode_context.sample_fmt);
     dst_frame.set_ch_layout(encode_context.ch_layout);
     dst_frame.set_sample_rate(encode_context.sample_rate);
+    dst_frame.set_time_base(avutil::ra(1, encode_context.sample_rate));
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;

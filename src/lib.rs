@@ -6,6 +6,7 @@ pub mod frame;
 pub use frame::FrameArray;
 pub mod avimg;
 pub mod colors;
+pub mod filter;
 pub mod flags;
 pub mod hwaccel;
 pub mod init;

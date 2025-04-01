@@ -1,3 +1,4 @@
+use crate::filter::{FilterChain, ScaleFilter};
 use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{self, FrameArray};
@@ -8,7 +9,7 @@ use crate::resize::Resize;
 use crate::stream::StreamInfo;
 #[cfg(feature = "ndarray")]
 use crate::time::Time;
-use crate::{swctx, utils, MediaType, PixelFormat, RawFrame};
+use crate::{utils, MediaType, PixelFormat, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::ffi;
@@ -17,13 +18,14 @@ use anyhow::{Context, Error, Result};
 use std::sync::Arc;
 
 /// Builds a [`Decoder`].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DecoderBuilder {
     flags: AvCodecFlags,
     media_type: MediaType,
     resize: Option<Resize>,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
+    filter_chain: Option<FilterChain>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -39,6 +41,7 @@ impl DecoderBuilder {
             resize: None,
             codec_name: None,
             codec_opts: None,
+            filter_chain: None,
             hw_device_config: None,
             flags: AvCodecFlags::LOW_DELAY,
         }
@@ -64,6 +67,11 @@ impl DecoderBuilder {
     ///
     /// * `resize` - Resizing to apply.
     pub fn with_resize(mut self, resize: Option<Resize>) -> Self {
+        assert_eq!(
+            self.media_type,
+            MediaType::VIDEO,
+            "Resizing is only supported for video"
+        );
         self.resize = resize;
         self
     }
@@ -86,6 +94,12 @@ impl DecoderBuilder {
     /// * `device_config` - Device to use for hardware acceleration.
     pub fn with_hardware_device(mut self, device_config: Option<HWDeviceConfig>) -> Self {
         self.hw_device_config = device_config;
+        self
+    }
+
+    /// Add a filter chain to the decoder
+    pub fn with_filter_chain(mut self, filter_chain: Option<FilterChain>) -> Self {
+        self.filter_chain = filter_chain;
         self
     }
 
@@ -168,20 +182,28 @@ impl DecoderBuilder {
         let stream_info = StreamInfo::from_stream(input_stream)?;
         log::info!("{}", stream_info);
 
-        let (resize_width, resize_height) = match self.resize {
-            Some(resize) => resize
+        let filter_chain = if let Some(resize) = self.resize {
+            let mut chain = self
+                .filter_chain
+                .unwrap_or_else(|| FilterChain::new(self.media_type));
+            let (resize_width, resize_height) = resize
                 .compute_for((width as u32, height as u32))
-                .ok_or(Error::msg("Invalid resize parameters"))?,
-            None => (width as u32, height as u32),
+                .ok_or(Error::msg("Invalid resize parameters"))?;
+
+            let scale_filter =
+                ScaleFilter::new(resize_width, resize_height, decode_ctx.pix_fmt.into());
+            chain.add_filter(Box::new(scale_filter))?;
+            Some(chain)
+        } else {
+            None
         };
 
         Ok(Decoder {
             decode_ctx,
             hw_context,
+            filter_chain,
             time_base,
             media_type: self.media_type,
-            size: (width as u32, height as u32),
-            size_out: (resize_width, resize_height),
             stream_index,
             draining: false,
         })
@@ -203,11 +225,10 @@ impl DecoderBuilder {
 pub struct Decoder {
     decode_ctx: AVCodecContext,
     hw_context: Option<Arc<HWContext>>,
+    filter_chain: Option<FilterChain>,
     time_base: ffi::AVRational,
     media_type: MediaType,
     stream_index: usize,
-    size: (u32, u32),
-    size_out: (u32, u32),
     draining: bool,
 }
 
@@ -235,13 +256,7 @@ impl Decoder {
     /// Get the decoders input size (resolution dimensions): width * height.
     #[inline(always)]
     pub fn size(&self) -> (u32, u32) {
-        self.size
-    }
-
-    /// Get the decoders output size after resizing is applied (resolution dimensions): width * height.
-    #[inline(always)]
-    pub fn size_out(&self) -> (u32, u32) {
-        self.size_out
+        (self.decode_ctx.width as u32, self.decode_ctx.height as u32)
     }
 
     /// Get decoder time base.
@@ -456,11 +471,6 @@ impl Decoder {
             _ => return decode_result,
         };
 
-        // handle hwaccel decoding and rescale frame only for video
-        if self.media_type != MediaType::VIDEO {
-            return DecodeRawResult::Frame(frame);
-        }
-
         let sw_frame = self
             .hw_context
             .as_ref()
@@ -480,8 +490,8 @@ impl Decoder {
             })
             .unwrap();
 
-        // handle scaling frame if needed (is not, size_out is the same as size)
-        match self.rescale_frame(sw_frame) {
+        // filter chain processing
+        match self.filter_processor(sw_frame) {
             Ok(scaled_frame) => DecodeRawResult::Frame(scaled_frame),
             Err(e) => DecodeRawResult::Error(e),
         }
@@ -508,22 +518,12 @@ impl Decoder {
     }
 
     /// Rescale frame if needed.
-    fn rescale_frame(&self, frame: RawFrame) -> Result<RawFrame> {
-        let (resize_width, resize_height) = self.size_out();
-        let is_scale_needed = !(frame.format == PixelFormat::YUV420P.into()
-            && frame.width as u32 == resize_width
-            && frame.height as u32 == resize_height);
-
-        if is_scale_needed {
-            return swctx::scale_frame(
-                &frame,
-                resize_width as i32,
-                resize_height as i32,
-                PixelFormat::YUV420P,
-            );
+    fn filter_processor(&mut self, frame: RawFrame) -> Result<RawFrame> {
+        let mut filter_frame = frame;
+        if let Some(ref mut filter_chain) = self.filter_chain {
+            filter_chain.process_frame(&mut filter_frame)?;
         }
-
-        Ok(frame)
+        Ok(filter_frame)
     }
 
     #[cfg(feature = "ndarray")]
@@ -533,7 +533,7 @@ impl Decoder {
         let timestamp = Time::new(Some(frame.pkt_dts), self.time_base());
         // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
         // after I convert it, If you want RGB24, always remember to convert it yourself!
-        let frame = frame::avframe_yuv_to_ndarray(frame).unwrap();
+        let frame = frame::avframe_to_ndarray(frame).unwrap();
 
         Ok((timestamp, frame))
     }

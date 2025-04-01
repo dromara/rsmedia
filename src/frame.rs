@@ -1,14 +1,131 @@
 use crate::pixel::PixelFormat;
 
 use anyhow::{Context, Error, Result};
-use rsmpeg::avutil::AVFrame;
+use rsmpeg::avutil::{AVChannelLayout, AVFrame};
+use rsmpeg::{avutil, ffi};
 
-/// A frame array is the `ndarray` version of `AVFrame`. It is 3-dimensional array with dims `(H, W,
-/// C)` and type byte.
+/// A frame array is the `ndarray` version of `AVFrame`.
+/// It is 3-dimensional array with dims `(H, W, C)` and type byte.
 pub type FrameArray = ndarray::Array3<u8>;
 
+//////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// AVFrame -> Array3 ///////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+
+pub fn avframe_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
+    // 检查是否为音频帧 (没有宽高但有采样数)
+    if frame.width == 0 && frame.height == 0 && frame.nb_samples > 0 {
+        avframe_audio_to_ndarray(frame)
+    } else {
+        // 处理视频帧
+        if frame.format == ffi::AV_PIX_FMT_RGB24 {
+            avframe_rgb_to_ndarray(frame)
+        } else if frame.format == ffi::AV_PIX_FMT_YUV420P {
+            avframe_yuv_to_ndarray(frame)
+        } else {
+            return Err(Error::msg(format!(
+                "Unsupported pixel format: {}",
+                frame.format
+            )));
+        }
+    }
+}
+
+fn avframe_audio_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
+    unsafe {
+        let channels = frame.ch_layout.nb_channels as usize;
+        let nb_samples = frame.nb_samples as usize;
+
+        if frame.data[0].is_null() {
+            return Err(Error::msg("Audio AVFrame data is null"));
+        }
+
+        // 创建包含所有音频通道的 Array2
+        let mut array = FrameArray::zeros((channels, nb_samples, 1));
+
+        // 判断是否为平面格式
+        let is_planar = matches!(frame.format,
+            fmt if fmt == ffi::AV_SAMPLE_FMT_U8P
+                || fmt == ffi::AV_SAMPLE_FMT_S16P
+                || fmt == ffi::AV_SAMPLE_FMT_S32P
+                || fmt == ffi::AV_SAMPLE_FMT_FLTP
+                || fmt == ffi::AV_SAMPLE_FMT_DBLP
+                || fmt == ffi::AV_SAMPLE_FMT_S64P);
+
+        // 根据音频格式处理数据
+        #[rustfmt::skip]
+        match frame.format {
+            // 无符号8位
+            fmt if fmt == ffi::AV_SAMPLE_FMT_U8 || fmt == ffi::AV_SAMPLE_FMT_U8P => {
+                process_audio_samples::<u8>(frame, &mut array, channels, nb_samples, is_planar, |sample| (sample as i16 - 128) as f32)
+            },
+            // 有符号16位
+            fmt if fmt == ffi::AV_SAMPLE_FMT_S16 || fmt == ffi::AV_SAMPLE_FMT_S16P => {
+                process_audio_samples::<i16>(frame, &mut array, channels, nb_samples, is_planar, |sample| sample as f32)
+            },
+            // 有符号32位
+            fmt if fmt == ffi::AV_SAMPLE_FMT_S32 || fmt == ffi::AV_SAMPLE_FMT_S32P => {
+                process_audio_samples::<i32>(frame, &mut array, channels, nb_samples, is_planar, |sample| sample as f32)
+            },
+            // 32位浮点
+            fmt if fmt == ffi::AV_SAMPLE_FMT_FLT || fmt == ffi::AV_SAMPLE_FMT_FLTP => {
+                process_audio_samples::<f32>(frame, &mut array, channels, nb_samples, is_planar, |sample| sample)
+            },
+            // 64位浮点
+            fmt if fmt == ffi::AV_SAMPLE_FMT_DBL || fmt == ffi::AV_SAMPLE_FMT_DBLP => {
+                process_audio_samples::<f64>(frame, &mut array, channels, nb_samples, is_planar, |sample| sample as f32)
+            },
+            // 有符号64位
+            fmt if fmt == ffi::AV_SAMPLE_FMT_S64 || fmt == ffi::AV_SAMPLE_FMT_S64P => {
+                process_audio_samples::<i64>(frame, &mut array, channels, nb_samples, is_planar, |sample| sample as f32)
+            },
+            // 未知格式
+            _ => return Err(Error::msg(format!("Unsupported audio format: {}", frame.format))),
+        }?;
+
+        Ok(array)
+    }
+}
+
+/// 处理音频样本的通用函数
+unsafe fn process_audio_samples<T>(
+    frame: &AVFrame,
+    array: &mut FrameArray,
+    channels: usize,
+    nb_samples: usize,
+    is_planar: bool,
+    convert: impl Fn(T) -> f32,
+) -> Result<()>
+where
+    T: Copy,
+{
+    if is_planar {
+        // 平面格式处理
+        for ch in 0..channels {
+            if frame.data[ch].is_null() {
+                return Err(Error::msg(format!("Audio channel {} data is null", ch)));
+            }
+
+            let samples = std::slice::from_raw_parts(frame.data[ch] as *const T, nb_samples);
+            for i in 0..nb_samples {
+                array[[ch, i, 0]] = convert(samples[i]) as u8;
+            }
+        }
+    } else {
+        // 交错格式处理
+        let samples = std::slice::from_raw_parts(frame.data[0] as *const T, nb_samples * channels);
+        for i in 0..nb_samples {
+            for ch in 0..channels {
+                array[[ch, i, 0]] = convert(samples[i * channels + ch]) as u8;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// RGB24 格式的 AVFrame 转换为 Array3
-pub fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
+fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
     let width = frame.width as usize;
     let height = frame.height as usize;
 
@@ -38,7 +155,7 @@ pub fn avframe_rgb_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
 }
 
 /// YUV420P 格式的 AVFrame 转换为 Array3
-pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
+fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
     let width = frame.width as usize;
     let height = frame.height as usize;
 
@@ -89,12 +206,82 @@ pub fn avframe_yuv_to_ndarray(frame: &AVFrame) -> Result<FrameArray> {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// Array3 -> AVFrame ////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
+pub fn ndarray_to_avframe(array: &FrameArray) -> Result<AVFrame> {
+    let (dim0, dim1, dim2) = array.dim();
+
+    // 根据数组维度判断是音频还是视频
+    match (dim0, dim1, dim2) {
+        // Video: (height, width, channels)
+        (height, width, 3) if height > 1 && width > 1 => ndarray_yuv_to_avframe(array),
+
+        // Audio: (frames, samples, channels)
+        (frames, _, 1) if frames >= 1 => ndarray_audio_to_avframe(array),
+
+        // 不支持的格式
+        (_, _, channels) if channels != 1 && channels != 3 => Err(Error::msg(format!(
+            "Unsupported format with {} channels",
+            channels
+        ))),
+
+        // 其他不符合条件的维度组合
+        _ => Err(Error::msg(format!(
+            "Unsupported array dimensions: ({}, {}, {})",
+            dim0, dim1, dim2
+        ))),
+    }
+}
+
+fn ndarray_audio_to_avframe(array: &FrameArray) -> Result<AVFrame> {
+    // frames：表示音频帧数/时间段数
+    // samples：表示每帧的采样点数
+    // channels：表示音频通道数（如1为单声道，2为立体声）
+    let (frames, nb_samples, channels) = array.dim();
+    if frames != 1 {
+        return Err(Error::msg(format!(
+            "Invalid audio array shape: {:?}",
+            array.shape()
+        )));
+    }
+
+    unsafe {
+        // 创建音频帧
+        let mut frame = AVFrame::new();
+        frame.set_nb_samples(nb_samples as i32);
+        frame.set_ch_layout(AVChannelLayout::from_nb_channels(channels as i32).into_inner());
+        frame.set_format(ffi::AV_SAMPLE_FMT_FLTP); // 使用平面浮点格式
+        frame.set_sample_rate(44100); // 默认采样率，可能需要从外部传入
+        frame.set_time_base(avutil::ra(1, 44100));
+
+        frame
+            .alloc_buffer()
+            .context("Failed to allocate buffer for AVFrame")?;
+
+        // 将数组数据复制到音频帧
+        for ch in 0..channels {
+            if frame.data[ch].is_null() {
+                return Err(Error::msg(format!("Audio frame data[{}] is null", ch)));
+            }
+
+            let dst = std::slice::from_raw_parts_mut(frame.data[ch] as *mut f32, nb_samples);
+
+            for i in 0..nb_samples {
+                dst[i] = array[[ch, i, 0]] as f32;
+            }
+        }
+
+        Ok(frame)
+    }
+}
+
 /// Array3 转换为 RGB24 格式的 AVFrame
-pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame> {
+fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     assert!(array.is_standard_layout());
 
-    let height = array.shape()[0];
-    let width = array.shape()[1];
+    let (height, width, _channels) = array.dim();
 
     let mut frame = AVFrame::new();
     frame.set_format(PixelFormat::RGB24.into());
@@ -123,11 +310,10 @@ pub fn ndarray_rgb_to_avframe(array: &FrameArray) -> Result<AVFrame> {
 }
 
 /// Array3 转换为 YUV420P 格式的 AVFrame
-pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame> {
+fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame> {
     assert!(array.is_standard_layout());
 
-    let height = array.shape()[0];
-    let width = array.shape()[1];
+    let (height, width, _channels) = array.dim();
 
     // 确保尺寸是偶数（YUV420P 要求）
     if width % 2 != 0 || height % 2 != 0 {
@@ -183,6 +369,10 @@ pub fn ndarray_yuv_to_avframe(array: &FrameArray) -> Result<AVFrame> {
 
     Ok(frame)
 }
+
+////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// convert //////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
 
 /// ndarray RGB24 => ndarray YUV420P
 pub fn convert_ndarray_rgb_to_yuv(rgb: &FrameArray) -> Result<FrameArray> {

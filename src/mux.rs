@@ -116,7 +116,7 @@ impl<W: Writer> Muxer<W> {
         if self.have_written_header {
             let mux_stream = self.get_stream_mut(stream_idx)?;
 
-            match mux_stream.encoder.encode_raw(&frame) {
+            match mux_stream.encoder.encode_raw(frame) {
                 EncodeRawResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(mux_stream.stream_idx as i32);

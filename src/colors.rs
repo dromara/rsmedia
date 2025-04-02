@@ -192,7 +192,10 @@ where
                     .into_color()
                 }
                 // White pixel default
-                _ => palette::Srgb::new(1.0, 1.0, 1.0).into_color(),
+                _ => {
+                    log::warn!("Unsupported pixel format: {}", channels.len());
+                    palette::Srgb::new(1.0, 1.0, 1.0).into_color()
+                }
             };
 
             // 处理颜色
@@ -787,5 +790,36 @@ mod tests {
 
         img.save(format!("{}/output_custom_gradient.png", OUTPUT_DIR))
             .unwrap();
+    }
+
+    #[test]
+    fn test_large_image_processing() {
+        let width = 4000;
+        let height = 3000;
+        let mut img = image::DynamicImage::new_rgb8(width, height);
+
+        // 创建一个简单的渐变
+        for y in 0..height {
+            for x in 0..width {
+                let r = (x as f32 / width as f32 * 255.0) as u8;
+                let g = (y as f32 / height as f32 * 255.0) as u8;
+                let b = 128u8;
+                img.put_pixel(x, y, Rgba([r, g, b, 255]));
+            }
+        }
+
+        // 测量处理时间
+        let start = std::time::Instant::now();
+
+        // 执行一个简单的处理
+        image_processing(&mut img, |color: palette::Srgb<f32>| {
+            let mut hsv = palette::Hsv::from_color(color);
+            hsv.saturation *= 1.2;
+            hsv.value *= 1.1;
+            palette::Srgb::from_color(hsv)
+        });
+
+        let duration = start.elapsed();
+        println!("处理时间: {:?}", duration);
     }
 }

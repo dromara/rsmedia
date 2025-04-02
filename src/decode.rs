@@ -1,14 +1,12 @@
 use crate::filter::{FilterChain, ScaleFilter};
 use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
-use crate::frame::{self, FrameArray};
+use crate::frame::MediaFrame;
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
 use crate::resize::Resize;
 use crate::stream::StreamInfo;
-#[cfg(feature = "ndarray")]
-use crate::time::Time;
 use crate::{utils, MediaType, PixelFormat, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
@@ -253,10 +251,16 @@ impl Decoder {
         DecoderBuilder::new_audio().build(reader)
     }
 
-    /// Get the decoders input size (resolution dimensions): width * height.
+    /// Get the decoders input size width
     #[inline(always)]
-    pub fn size(&self) -> (u32, u32) {
-        (self.decode_ctx.width as u32, self.decode_ctx.height as u32)
+    pub fn width(&self) -> usize {
+        self.decode_ctx.width as usize
+    }
+
+    /// Get the decoders input size height
+    #[inline(always)]
+    pub fn height(&self) -> usize {
+        self.decode_ctx.height as usize
     }
 
     /// Get decoder time base.
@@ -300,7 +304,18 @@ impl Decoder {
     /// }
     /// ```
     #[cfg(feature = "ndarray")]
-    pub fn decode(&mut self, packet: &AVPacket) -> DecodeResult {
+    pub fn decode<T>(&mut self, packet: &AVPacket) -> DecodeResult<T>
+    where
+        T: 'static
+            + Clone
+            + Copy
+            + Send
+            + Sync
+            + PartialOrd
+            + num_traits::Zero
+            + num_traits::NumCast
+            + num_traits::NumAssign,
+    {
         if !self.draining() {
             self._decode(packet)
         } else {
@@ -363,12 +378,21 @@ impl Decoder {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    fn _decode(&mut self, packet: &AVPacket) -> DecodeResult {
-        let decode_result = self._decode_raw(packet);
-        match decode_result {
-            DecodeRawResult::Frame(mut frame) => match self.raw_frame_to_time_and_frame(&mut frame)
-            {
-                Ok(frame_arr) => DecodeResult::Frame(frame_arr),
+    fn _decode<T>(&mut self, packet: &AVPacket) -> DecodeResult<T>
+    where
+        T: 'static
+            + Clone
+            + Copy
+            + Send
+            + Sync
+            + PartialOrd
+            + num_traits::Zero
+            + num_traits::NumCast
+            + num_traits::NumAssign,
+    {
+        match self._decode_raw(packet) {
+            DecodeRawResult::Frame(raw_frame) => match self.raw_frame_to_media_frame(&raw_frame) {
+                Ok(media_frame) => DecodeResult::Frame(media_frame),
                 Err(e) => DecodeResult::Error(e),
             },
             DecodeRawResult::Drain => DecodeResult::Drain,
@@ -405,12 +429,21 @@ impl Decoder {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    pub fn drain(&mut self) -> DecodeResult {
-        let decode_result = self.drain_raw();
-        match decode_result {
-            DecodeRawResult::Frame(mut frame) => match self.raw_frame_to_time_and_frame(&mut frame)
-            {
-                Ok(frame_arr) => DecodeResult::Frame(frame_arr),
+    pub fn drain<T>(&mut self) -> DecodeResult<T>
+    where
+        T: 'static
+            + Clone
+            + Copy
+            + Send
+            + Sync
+            + PartialOrd
+            + num_traits::Zero
+            + num_traits::NumCast
+            + num_traits::NumAssign,
+    {
+        match self.drain_raw() {
+            DecodeRawResult::Frame(raw_frame) => match self.raw_frame_to_media_frame(&raw_frame) {
+                Ok(media_frame) => DecodeResult::Frame(media_frame),
                 Err(e) => DecodeResult::Error(e),
             },
             DecodeRawResult::Drain => DecodeResult::Drain,
@@ -527,15 +560,23 @@ impl Decoder {
     }
 
     #[cfg(feature = "ndarray")]
-    fn raw_frame_to_time_and_frame(&self, frame: &mut RawFrame) -> Result<(Time, FrameArray)> {
-        // We use the packet DTS here (which is `frame->pkt_dts`) because that is what the
-        // encoder will use when encoding for the `PTS` field.
-        let timestamp = Time::new(Some(frame.pkt_dts), self.time_base());
+    fn raw_frame_to_media_frame<T>(&self, frame: &RawFrame) -> Result<MediaFrame<T>>
+    where
+        T: 'static
+            + Clone
+            + Copy
+            + Send
+            + Sync
+            + PartialOrd
+            + num_traits::Zero
+            + num_traits::NumCast
+            + num_traits::NumAssign,
+    {
         // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
         // after I convert it, If you want RGB24, always remember to convert it yourself!
-        let frame = frame::avframe_to_ndarray(frame).unwrap();
+        let frame = MediaFrame::<T>::from_avframe(frame)?;
 
-        Ok((timestamp, frame))
+        Ok(frame)
     }
 }
 
@@ -598,9 +639,9 @@ unsafe impl Sync for Decoder {}
 /// decode result
 #[cfg(feature = "ndarray")]
 #[derive(Debug)]
-pub enum DecodeResult {
-    /// decoded frame as [`FrameArray`]
-    Frame((Time, FrameArray)),
+pub enum DecodeResult<T> {
+    /// decoded frame as [`MediaFrame`]
+    Frame(MediaFrame<T>),
     /// decoder is drained
     Drain,
     /// decoder is flushed reached

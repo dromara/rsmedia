@@ -528,7 +528,7 @@ mod tests {
             // 设置精确时间戳
             frame.set_pts(frame_idx * frame_size as i64);
 
-            match encoder.encode_raw(&frame) {
+            match encoder.encode_raw(frame.clone()) {
                 EncodeRawResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(audio_index as i32);
@@ -559,7 +559,7 @@ mod tests {
             frame.set_pts(total_samples - remaining as i64);
 
             // write last frame
-            if let EncodeRawResult::Packet(mut packet) = encoder.encode_raw(&frame) {
+            if let EncodeRawResult::Packet(mut packet) = encoder.encode_raw(frame) {
                 packet.set_pos(-1);
                 packet.set_stream_index(audio_index as i32);
                 // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基

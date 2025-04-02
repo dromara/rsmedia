@@ -385,7 +385,7 @@ mod tests {
     use std::path::Path;
 
     /// 生成YUV420P格式的视频帧,彩色渐变测试图
-    fn generate_video_frame(width: u32, height: u32, frame_index: i64) -> AVFrame {
+    fn generate_video_frame(width: usize, height: usize, frame_index: i64) -> AVFrame {
         let mut frame = AVFrame::new();
         frame.set_width(width as i32);
         frame.set_height(height as i32);
@@ -410,7 +410,7 @@ mod tests {
         // 填充Y平面 (亮度)
         for y in 0..height {
             for x in 0..width {
-                let index = (y * y_linesize as u32 + x) as usize;
+                let index = y * y_linesize as usize + x;
                 let gradient = (x as f32 / width as f32 * 255.0) as u8;
                 unsafe {
                     *y_plane.add(index) = gradient;
@@ -421,7 +421,7 @@ mod tests {
         // 填充U平面 (蓝色分量)
         for y in 0..(height / 2) {
             for x in 0..(width / 2) {
-                let index = (y * u_linesize as u32 + x) as usize;
+                let index = y * u_linesize as usize + x;
                 let u_value = ((time_factor * 128.0) as u8).wrapping_add(128);
                 unsafe {
                     *u_plane.add(index) = u_value;
@@ -432,7 +432,7 @@ mod tests {
         // 填充V平面 (红色分量)
         for y in 0..(height / 2) {
             for x in 0..(width / 2) {
-                let index = (y * v_linesize as u32 + x) as usize;
+                let index = (y * v_linesize as usize + x) as usize;
                 let v_value = (((1.0 - time_factor) * 128.0) as u8).wrapping_add(128);
                 unsafe {
                     *v_plane.add(index) = v_value;
@@ -669,9 +669,9 @@ mod tests {
     #[ignore = "demux test_multiple_streams"]
     fn test_multiple_streams() -> Result<()> {
         // 视频参数
-        pub const VIDEO_WIDTH: u32 = 1280;
-        pub const VIDEO_HEIGHT: u32 = 720;
-        pub const VIDEO_FPS: u32 = 30;
+        pub const VIDEO_WIDTH: usize = 1280;
+        pub const VIDEO_HEIGHT: usize = 720;
+        pub const VIDEO_FPS: i32 = 30;
         pub const VIDEO_DURATION_SEC: u32 = 10;
 
         // 音频参数
@@ -682,7 +682,7 @@ mod tests {
         let output_path = Path::new("/tmp/test_multiple_streams.mp4");
 
         let video_encoder = EncoderBuilder::new_video(VIDEO_WIDTH, VIDEO_HEIGHT)
-            .with_frame_rate(VIDEO_FPS as i32, 1)
+            .with_frame_rate(VIDEO_FPS, 1)
             // 使用标准的90kHz时间基
             .with_time_base(1, 90_000)
             .build()?;
@@ -701,7 +701,7 @@ mod tests {
         let audio_idx = muxer.add_stream(audio_encoder)?;
 
         // 计算总视频帧数
-        let total_video_frames = (VIDEO_FPS * VIDEO_DURATION_SEC) as i64;
+        let total_video_frames = (VIDEO_FPS as u32 * VIDEO_DURATION_SEC) as i64;
 
         // 计算每个视频帧对应的音频样本数，例如：48000Hz / 30fps = 1600个(样本/视频帧)
         let audio_samples_per_video_frame = (AUDIO_SAMPLE_RATE as f64 / VIDEO_FPS as f64) as usize;

@@ -37,7 +37,7 @@ fn main() {
         let encoder = {
             if stream_info.media_type == MediaType::VIDEO {
                 // build video encoder
-                EncoderBuilder::new_video(stream_info.width as u32, stream_info.height as u32)
+                EncoderBuilder::new_video(stream_info.width as usize, stream_info.height as usize)
                     // cuda acceleration
                     // .with_hardware_device(Some(HWDeviceType::CUDA))
                     // .with_codec_name("h264_nvenc".to_string())

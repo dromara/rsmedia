@@ -166,7 +166,7 @@ impl Time {
     /// # Arguments
     ///
     /// * `time_base` - Target time base.
-    pub(crate) fn aligned_with_rational(&self, time_base: AVRational) -> Time {
+    pub fn aligned_with_rational(&self, time_base: AVRational) -> Time {
         Time {
             time: self
                 .time

@@ -1,7 +1,7 @@
 use image::{ImageBuffer, Rgb};
 
 use rsmedia::{
-    decode::DecodeResult, frame, DecoderBuilder, FrameArray, MediaType, Reader, Resize,
+    decode::DecodeResult, frame, DecoderBuilder, MediaFrame, MediaType, Reader, Resize,
     StreamReader,
 };
 
@@ -57,8 +57,8 @@ async fn main() -> Result<()> {
                     // 注意时间转换
                     packet.rescale_ts(stream.time_base(), decoder.time_base());
 
-                    match decoder.decode(&packet) {
-                        DecodeResult::Frame((_t, yuv_frame)) => {
+                    match decoder.decode::<u8>(&packet) {
+                        DecodeResult::Frame(yuv_frame) => {
                             println!(
                                 "{:?} #{}, {:?}",
                                 MediaType::from(stream.parameters().codec_type),
@@ -66,8 +66,8 @@ async fn main() -> Result<()> {
                                 packet
                             );
 
-                            let (width, height) = decoder.size();
-                            process_frame(yuv_frame, width, height)?;
+                            let (width, height) = (decoder.width(), decoder.height());
+                            process_frame(yuv_frame, width as u32, height as u32)?;
                         }
                         DecodeResult::Drain => {
                             println!("Need more data for decoding");
@@ -112,11 +112,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn process_frame(yuv_frame: FrameArray, width: u32, height: u32) -> Result<()> {
-    let rgb_frame = frame::convert_ndarray_yuv_to_rgb(&yuv_frame).unwrap();
+fn process_frame(yuv_frame: MediaFrame<u8>, width: u32, height: u32) -> Result<()> {
+    let rgb_frame = yuv_frame.convert_yuv_to_rgb()?;
 
     let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-        ImageBuffer::from_raw(width, height, rgb_frame.as_slice().unwrap().to_vec())
+        ImageBuffer::from_raw(width, height, rgb_frame.data.as_slice().unwrap().to_vec())
             .context("failed to create image buffer")?;
 
     let frame_path = format!(

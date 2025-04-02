@@ -1,7 +1,7 @@
 use crate::filter::{FilterChain, ScaleFilter};
 use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
-use crate::frame::{self, FrameArray};
+use crate::frame::MediaFrame;
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
@@ -19,8 +19,8 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct EncoderBuilder {
     /// Video
-    width: i32,
-    height: i32,
+    width: usize,
+    height: usize,
     pixel_format: PixelFormat,
     gop_size: i32,
     time_base: ffi::AVRational,
@@ -74,7 +74,7 @@ impl EncoderBuilder {
     /// * `pixel_format` - The desired pixel format for the video stream.
     ///
     /// note: default video codec is `libx264`
-    pub fn new_video(width: u32, height: u32) -> Self {
+    pub fn new_video(width: usize, height: usize) -> Self {
         Self::default().with_width(width).with_height(height)
     }
 
@@ -104,14 +104,14 @@ impl EncoderBuilder {
     }
 
     /// Set the width of the video stream.
-    pub fn with_width(mut self, width: u32) -> Self {
-        self.width = width as i32;
+    pub fn with_width(mut self, width: usize) -> Self {
+        self.width = width;
         self
     }
 
     /// Set the height of the video stream.
-    pub fn with_height(mut self, height: u32) -> Self {
-        self.height = height as i32;
+    pub fn with_height(mut self, height: usize) -> Self {
+        self.height = height;
         self
     }
 
@@ -250,8 +250,8 @@ impl EncoderBuilder {
     /// New encoder with settings applied.
     fn apply_to(&self, encoder: &mut AVCodecContext, media_type: MediaType) {
         if media_type == MediaType::VIDEO {
-            encoder.set_width(self.width);
-            encoder.set_height(self.height);
+            encoder.set_width(self.width as i32);
+            encoder.set_height(self.height as i32);
             encoder.set_bit_rate(self.bit_rate);
             encoder.set_gop_size(self.gop_size);
             encoder.set_max_b_frames(self.max_b_frames);
@@ -455,7 +455,7 @@ impl Encoder {
     ///
     /// note: default video codec is `libx264`
     #[inline]
-    pub fn new_video(width: u32, height: u32) -> Result<Encoder> {
+    pub fn new_video(width: usize, height: usize) -> Result<Encoder> {
         EncoderBuilder::new_video(width, height).build()
     }
 
@@ -484,16 +484,19 @@ impl Encoder {
     /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
-    pub fn encode(&mut self, frame: &FrameArray, source_timestamp: crate::Time) -> EncodeResult {
-        // TODO: support audio frame, not just video with size
-        let mut frame = frame::ndarray_to_avframe(frame).unwrap();
-
-        frame.set_pts(
-            source_timestamp
-                .aligned_with_rational(self.time_base())
-                .into_value()
-                .unwrap(),
-        );
+    pub fn encode<T>(&mut self, frame: MediaFrame<T>) -> EncodeResult
+    where
+        T: 'static
+            + Clone
+            + Copy
+            + Send
+            + Sync
+            + PartialOrd
+            + num_traits::Zero
+            + num_traits::NumCast
+            + num_traits::NumAssign,
+    {
+        let frame = frame.to_avframe().unwrap();
 
         match self.encode_raw(frame) {
             EncodeRawResult::Packet(pkt) => EncodeResult::Packet(pkt),
@@ -742,7 +745,6 @@ mod tests {
     #[cfg(feature = "ndarray")]
     fn test_encode_video_for_container(container_type: &str, fps: f64) -> Result<()> {
         use crate::time::Time;
-        use crate::FrameArray;
 
         // 使用单一match获取基本参数
         let (codec_name, time_base, codec_options, format_options) = match container_type {
@@ -931,7 +933,9 @@ mod tests {
         };
 
         // 创建编码器
-        let mut encoder = EncoderBuilder::new_video(1280, 720)
+        let width = 1280_usize;
+        let height = 720_usize;
+        let mut encoder = EncoderBuilder::new_video(width, height)
             .with_time_base(time_base.0, time_base.1)
             .with_codec_name(Some(config.codec_name))
             .with_options(config.codec_options.map(|opts| opts.into()))
@@ -962,10 +966,20 @@ mod tests {
         // write header
         stream_writer.write_header()?;
 
-        fn rainbow_frame(p: f32) -> FrameArray {
+        fn rainbow_frame(w: usize, h: usize, p: f32) -> MediaFrame<u8> {
             use crate::colors;
             let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-            FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
+            let mut frame =
+                MediaFrame::<u8>::new_video_frame(w, h, PixelFormat::RGB24, avutil::ra(1, 24))
+                    .unwrap();
+            for y in 0..h {
+                for x in 0..w {
+                    frame.data[[y, x, 0]] = rgb[0];
+                    frame.data[[y, x, 1]] = rgb[1];
+                    frame.data[[y, x, 2]] = rgb[2];
+                }
+            }
+            frame
         }
 
         let actual_timebase = encoder.time_base();
@@ -988,9 +1002,14 @@ mod tests {
 
         // 帧编码并写入文件
         for i in 0..10 {
-            let frame = rainbow_frame(i as f32 / 10.0);
-
-            match encoder.encode(&frame, position) {
+            let mut frame = rainbow_frame(width, height, i as f32 / 10.0);
+            frame.set_pts(
+                position
+                    .aligned_with_rational(encoder.time_base())
+                    .into_value()
+                    .unwrap(),
+            );
+            match encoder.encode(frame) {
                 EncodeResult::Packet(mut packet) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(video_index as i32);

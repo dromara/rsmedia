@@ -1,14 +1,15 @@
 use rsmedia::{
     colors,
     encode::EncodeResult,
-    frame::FrameArray,
+    frame::MediaFrame,
     io::private::{Output, Write},
     stream::StreamInfo,
     time::Time,
-    EncoderBuilder, StreamWriter,
+    EncoderBuilder, PixelFormat, StreamWriter,
 };
 
 use anyhow::Context;
+use rsmpeg::avutil;
 use std::path::Path;
 
 fn main() {
@@ -23,7 +24,9 @@ fn main() {
 
     rsmedia::init().unwrap();
 
-    let mut encoder = EncoderBuilder::new_video(1280, 720)
+    let width = 1280;
+    let height = 720;
+    let mut encoder = EncoderBuilder::new_video(width, height)
         // encoder with CUDA acceleration
         // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
         // libx264, libx265, h264_nvenc, h264_vaapi
@@ -45,9 +48,14 @@ fn main() {
 
     for i in 0..256 {
         // This will create a smooth rainbow animation video!
-        let frame = rainbow_frame(i as f32 / 256.0);
-
-        match encoder.encode(&frame, position) {
+        let mut frame = rainbow_frame(width, height, i as f32 / 256.0);
+        frame.set_pts(
+            position
+                .aligned_with_rational(encoder.time_base())
+                .into_value()
+                .unwrap(),
+        );
+        match encoder.encode(frame) {
             EncodeResult::Packet(mut packet) => {
                 packet.set_pos(-1);
                 packet.set_stream_index(video_index as i32);
@@ -89,12 +97,22 @@ fn main() {
     stream_writer.write_trailer().unwrap();
 }
 
-fn rainbow_frame(p: f32) -> FrameArray {
+fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
     // This is what generated the rainbow effect!
     // We loop through the HSV color spectrum and convert to RGB.
     let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
 
     // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
     // pixel are equal, and determined by the `rgb` we chose above.
-    FrameArray::from_shape_fn((720, 1280, 3), |(_y, _x, c)| rgb[c])
+    let mut frame =
+        MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, avutil::ra(1, 24))
+            .unwrap();
+    for y in 0..height {
+        for x in 0..width {
+            frame.data[[y, x, 0]] = rgb[0];
+            frame.data[[y, x, 1]] = rgb[1];
+            frame.data[[y, x, 2]] = rgb[2];
+        }
+    }
+    frame
 }

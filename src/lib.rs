@@ -4,11 +4,11 @@ pub mod encode;
 pub mod frame;
 #[cfg(feature = "ndarray")]
 pub use frame::MediaFrame;
-pub mod avimg;
 pub mod colors;
 pub mod filter;
 pub mod flags;
 pub mod hwaccel;
+pub mod imgutils;
 pub mod init;
 pub mod io;
 pub mod location;

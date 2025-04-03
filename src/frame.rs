@@ -807,9 +807,9 @@ mod tests {
         // 测试数据访问和修改
         let (r, g, b) = create_test_pattern(TEST_WIDTH, TEST_HEIGHT);
 
-        for y in 0..TEST_HEIGHT as usize {
-            for x in 0..TEST_WIDTH as usize {
-                let idx = (y * TEST_WIDTH as usize + x) as usize;
+        for y in 0..TEST_HEIGHT {
+            for x in 0..TEST_WIDTH {
+                let idx = y * TEST_WIDTH + x;
                 frame.data[[y, x, 0]] = r[idx];
                 frame.data[[y, x, 1]] = g[idx];
                 frame.data[[y, x, 2]] = b[idx];
@@ -817,9 +817,9 @@ mod tests {
         }
 
         // 验证数据正确性
-        for y in 0..TEST_HEIGHT as usize {
-            for x in 0..TEST_WIDTH as usize {
-                let idx = (y * TEST_WIDTH as usize + x) as usize;
+        for y in 0..TEST_HEIGHT {
+            for x in 0..TEST_WIDTH {
+                let idx = y * TEST_WIDTH + x;
                 assert_eq!(frame.data[[y, x, 0]], r[idx]);
                 assert_eq!(frame.data[[y, x, 1]], g[idx]);
                 assert_eq!(frame.data[[y, x, 2]], b[idx]);
@@ -923,9 +923,9 @@ mod tests {
 
         // 填充测试数据
         let (r, g, b) = create_test_pattern(TEST_WIDTH, TEST_HEIGHT);
-        for y in 0..TEST_HEIGHT as usize {
-            for x in 0..TEST_WIDTH as usize {
-                let idx = (y * TEST_WIDTH as usize + x) as usize;
+        for y in 0..TEST_HEIGHT {
+            for x in 0..TEST_WIDTH {
+                let idx = y * TEST_WIDTH + x;
                 original.data[[y, x, 0]] = r[idx];
                 original.data[[y, x, 1]] = g[idx];
                 original.data[[y, x, 2]] = b[idx];
@@ -1031,8 +1031,8 @@ mod tests {
             MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, time_base)?;
 
         // 填充一些测试数据
-        for y in 0..height as usize {
-            for x in 0..width as usize {
+        for y in 0..height {
+            for x in 0..width {
                 frame.data[[y, x, 0]] = (x % 255) as u8; // R
                 frame.data[[y, x, 1]] = (y % 255) as u8; // G
                 frame.data[[y, x, 2]] = ((x + y) % 255) as u8; // B

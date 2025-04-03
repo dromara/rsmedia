@@ -228,12 +228,21 @@ impl<R: Reader> Demuxer<R> {
             let stream_info = StreamInfo::from_reader(&reader, stream_idx)?;
             // auto detect hardware acceleration decoder codec
             let codec_name = stream_info.find_decoder_name(device_type);
-            let decoder = DecoderBuilder::new(stream_info.media_type)
-                .with_hardware_device(device_config.clone())
-                .with_codec_name(codec_name)
-                .with_resize(resize)
-                .build(&reader)
-                .context("Failed to build decoder")?;
+            let decoder = if stream_info.media_type == MediaType::VIDEO {
+                DecoderBuilder::new(stream_info.media_type)
+                    .with_hardware_device(device_config.clone())
+                    .with_codec_name(codec_name)
+                    .with_resize(resize)
+                    .build(&reader)
+                    .context("Failed to build decoder")?
+            } else {
+                DecoderBuilder::new(stream_info.media_type)
+                    .with_hardware_device(device_config.clone())
+                    .with_codec_name(codec_name)
+                    .build(&reader)
+                    .context("Failed to build decoder")?
+            };
+
             streams.push(DemuxerStream::new(decoder, stream_info));
         }
 

@@ -1,4 +1,3 @@
-use crate::filter::{FilterChain, ScaleFilter};
 use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::MediaFrame;
@@ -7,7 +6,7 @@ use crate::io::Reader;
 use crate::options::Options;
 use crate::resize::Resize;
 use crate::stream::StreamInfo;
-use crate::{utils, MediaType, PixelFormat, RawFrame};
+use crate::{swctx, utils, MediaType, PixelFormat, RawFrame};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::ffi;
@@ -23,7 +22,6 @@ pub struct DecoderBuilder {
     resize: Option<Resize>,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
-    filter_chain: Option<FilterChain>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -39,7 +37,6 @@ impl DecoderBuilder {
             resize: None,
             codec_name: None,
             codec_opts: None,
-            filter_chain: None,
             hw_device_config: None,
             flags: AvCodecFlags::LOW_DELAY,
         }
@@ -95,19 +92,14 @@ impl DecoderBuilder {
         self
     }
 
-    /// Add a filter chain to the decoder
-    pub fn with_filter_chain(mut self, filter_chain: Option<FilterChain>) -> Self {
-        self.filter_chain = filter_chain;
-        self
-    }
-
     /// Build [`Decoder`].
     pub fn build<R: Reader>(self, reader: &R) -> Result<Decoder> {
         self.build_from_reader(reader)
     }
 
     pub fn build_from_reader<R: Reader>(self, reader: &R) -> Result<Decoder> {
-        let (stream_index, codec_name) = reader.find_best_stream(self.media_type)?;
+        let media_type = self.media_type;
+        let (stream_index, codec_name) = reader.find_best_stream(media_type)?;
         let input_stream = reader
             .input()
             .streams()
@@ -141,7 +133,7 @@ impl DecoderBuilder {
             .hw_device_config
             .filter(|_cfg| {
                 // hardware acceleration enabled for video
-                self.media_type == MediaType::VIDEO
+                media_type == MediaType::VIDEO
             })
             .map(|cfg| {
                 // codec support or not for hardware acceleration
@@ -180,18 +172,15 @@ impl DecoderBuilder {
         let stream_info = StreamInfo::from_stream(input_stream)?;
         log::info!("{}", stream_info);
 
-        let filter_chain = if let Some(resize) = self.resize {
-            let mut chain = self
-                .filter_chain
-                .unwrap_or_else(|| FilterChain::new(self.media_type));
+        let rescale = if let Some(resize) = self.resize {
             let (resize_width, resize_height) = resize
                 .compute_for((width as u32, height as u32))
                 .ok_or(Error::msg("Invalid resize parameters"))?;
-
-            let scale_filter =
-                ScaleFilter::new(resize_width, resize_height, decode_ctx.pix_fmt.into());
-            chain.add_filter(Box::new(scale_filter))?;
-            Some(chain)
+            Some((
+                resize_width as usize,
+                resize_height as usize,
+                PixelFormat::from(decode_ctx.pix_fmt),
+            ))
         } else {
             None
         };
@@ -199,9 +188,9 @@ impl DecoderBuilder {
         Ok(Decoder {
             decode_ctx,
             hw_context,
-            filter_chain,
+            rescale,
             time_base,
-            media_type: self.media_type,
+            media_type,
             stream_index,
             draining: false,
         })
@@ -223,7 +212,7 @@ impl DecoderBuilder {
 pub struct Decoder {
     decode_ctx: AVCodecContext,
     hw_context: Option<Arc<HWContext>>,
-    filter_chain: Option<FilterChain>,
+    rescale: Option<(usize, usize, PixelFormat)>,
     time_base: ffi::AVRational,
     media_type: MediaType,
     stream_index: usize,
@@ -415,7 +404,7 @@ impl Decoder {
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
     fn _decode_raw(&mut self, packet: &AVPacket) -> DecodeRawResult {
         assert!(!self.draining());
-        self.send_packet_to_decoder(packet).unwrap();
+        self.send_packet_to_decoder(Some(packet)).unwrap();
         self.receive_frame_from_decoder()
     }
 
@@ -462,17 +451,10 @@ impl Decoder {
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
     pub fn drain_raw(&mut self) -> DecodeRawResult {
         if !self.draining() {
-            self.send_eof().unwrap();
+            self.send_packet_to_decoder(None).unwrap();
             self.set_draining(true);
         }
         self.receive_frame_from_decoder()
-    }
-
-    /// Sends a NULL packet to the decoder to signal end of stream and enter
-    /// draining mode.
-    fn send_eof(&mut self) -> Result<()> {
-        self.decode_ctx.send_packet(None)?;
-        Ok(())
     }
 
     /// Reset the decoder to be used again after draining.
@@ -489,9 +471,9 @@ impl Decoder {
 
     /// Send packet to decoder.
     /// Ensure rescaling timestamps accordingly before sending to decoder.
-    fn send_packet_to_decoder(&mut self, packet: &AVPacket) -> Result<()> {
+    fn send_packet_to_decoder(&mut self, packet: Option<&AVPacket>) -> Result<()> {
         self.decode_ctx
-            .send_packet(Some(packet))
+            .send_packet(packet)
             .context("Failed to send packet to decoder")?;
         Ok(())
     }
@@ -524,7 +506,7 @@ impl Decoder {
             .unwrap();
 
         // filter chain processing
-        match self.filter_processor(sw_frame) {
+        match self.rescale_frame(sw_frame) {
             Ok(scaled_frame) => DecodeRawResult::Frame(scaled_frame),
             Err(e) => DecodeRawResult::Error(e),
         }
@@ -551,12 +533,19 @@ impl Decoder {
     }
 
     /// Rescale frame if needed.
-    fn filter_processor(&mut self, frame: RawFrame) -> Result<RawFrame> {
-        let mut filter_frame = frame;
-        if let Some(ref mut filter_chain) = self.filter_chain {
-            filter_chain.process_frame(&mut filter_frame)?;
+    fn rescale_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
+        if let Some((dst_w, dst_h, pix_fmt)) = self.rescale {
+            let is_scale_needed = !(frame.format == pix_fmt.into()
+                && frame.width == dst_w as i32
+                && frame.height == dst_h as i32);
+            let scaled_frame = if is_scale_needed {
+                swctx::scale(&frame, dst_w as i32, dst_h as i32, pix_fmt)?
+            } else {
+                frame
+            };
+            return Ok(scaled_frame);
         }
-        Ok(filter_frame)
+        Ok(frame)
     }
 
     #[cfg(feature = "ndarray")]
@@ -585,7 +574,7 @@ impl Decoder {
 impl Drop for Decoder {
     fn drop(&mut self) {
         // We need to drain the items still in the decoders queue.
-        if let Ok(()) = self.send_eof() {
+        if let Ok(()) = self.send_packet_to_decoder(None) {
             loop {
                 match self.decoder_receive_frame() {
                     DecodeRawResult::Frame(_) => {

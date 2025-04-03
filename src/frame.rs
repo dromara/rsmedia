@@ -5,7 +5,6 @@ use rsmpeg::avutil::{AVChannelLayout, AVFrame};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
-use rayon::prelude::*;
 use yuvutils_rs::{
     BufferStoreMut, YuvConversionMode, YuvPlanarImage, YuvPlanarImageMut, YuvRange,
     YuvStandardMatrix,
@@ -440,38 +439,6 @@ where
     }
 }
 
-#[inline(always)]
-fn cast_from_f64<T>(value: f64) -> Result<T>
-where
-    T: num_traits::NumCast,
-{
-    num_traits::cast(value).ok_or_else(|| Error::msg("Failed to cast f64 to target type"))
-}
-
-#[inline(always)]
-fn cast_to_f64<T>(value: T) -> Result<f64>
-where
-    T: num_traits::NumCast,
-{
-    num_traits::cast(value).ok_or_else(|| Error::msg("Failed to cast to f32"))
-}
-
-#[inline(always)]
-fn cast_from_u8<T>(value: u8) -> Result<T>
-where
-    T: num_traits::NumCast,
-{
-    num_traits::cast(value).ok_or_else(|| Error::msg("Failed to cast u8 to target type"))
-}
-
-#[inline(always)]
-fn cast_to_u8<T>(value: T) -> Result<u8>
-where
-    T: num_traits::NumCast,
-{
-    num_traits::cast(value).ok_or_else(|| Error::msg("Failed to cast to u8"))
-}
-
 /// 音频采样格式是否为平面布局
 pub fn is_sample_format_planar(sample_fmt: ffi::AVSampleFormat) -> bool {
     matches!(
@@ -740,19 +707,19 @@ mod tests {
     }
 
     /// 创建测试用的 RGB AVFrame
-    fn create_test_rgb_frame(width: i32, height: i32) -> AVFrame {
+    fn create_test_rgb_frame(width: usize, height: usize) -> AVFrame {
         let mut frame = AVFrame::new();
         frame.set_format(PixelFormat::RGB24.into());
-        frame.set_width(width);
-        frame.set_height(height);
+        frame.set_width(width as i32);
+        frame.set_height(height as i32);
         frame.alloc_buffer().unwrap();
 
         unsafe {
             // 填充测试数据
             let data = frame.data[0];
             let linesize = frame.linesize[0] as usize;
-            for y in 0..height as usize {
-                for x in 0..width as usize {
+            for y in 0..height {
+                for x in 0..width {
                     let offset = y * linesize + x * 3;
                     *data.add(offset) = (x % 256) as u8; // R
                     *data.add(offset + 1) = (y % 256) as u8; // G
@@ -765,19 +732,19 @@ mod tests {
     }
 
     /// 创建测试用的 YUV420P AVFrame
-    fn create_test_yuv_frame(width: i32, height: i32) -> AVFrame {
+    fn create_test_yuv_frame(width: usize, height: usize) -> AVFrame {
         let mut frame = AVFrame::new();
         frame.set_format(PixelFormat::YUV420P.into());
-        frame.set_width(width);
-        frame.set_height(height);
+        frame.set_width(width as i32);
+        frame.set_height(height as i32);
         frame.alloc_buffer().unwrap();
 
         unsafe {
             // 填充 Y 平面
             let y_data = frame.data[0];
             let y_linesize = frame.linesize[0] as usize;
-            for y in 0..height as usize {
-                for x in 0..width as usize {
+            for y in 0..height {
+                for x in 0..width {
                     *y_data.add(y * y_linesize + x) = ((x + y) % 256) as u8;
                 }
             }
@@ -785,8 +752,8 @@ mod tests {
             // 填充 U 平面
             let u_data = frame.data[1];
             let u_linesize = frame.linesize[1] as usize;
-            for y in 0..height as usize / 2 {
-                for x in 0..width as usize / 2 {
+            for y in 0..height / 2 {
+                for x in 0..width / 2 {
                     *u_data.add(y * u_linesize + x) = (x % 256) as u8;
                 }
             }
@@ -794,8 +761,8 @@ mod tests {
             // 填充 V 平面
             let v_data = frame.data[2];
             let v_linesize = frame.linesize[2] as usize;
-            for y in 0..height as usize / 2 {
-                for x in 0..width as usize / 2 {
+            for y in 0..height / 2 {
+                for x in 0..width / 2 {
                     *v_data.add(y * v_linesize + x) = (y % 256) as u8;
                 }
             }
@@ -1064,15 +1031,15 @@ mod tests {
     fn test_create_yuv420p_frame() -> Result<()> {
         let width = 1920;
         let height = 1080;
-        let time_base = ffi::AVRational { num: 1, den: 30 }; // 30 fps
 
         // 创建空的YUV420P帧
-        let mut frame =
-            MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::YUV420P, time_base)?;
+        let yuv_frame = create_test_yuv_frame(width, height);
 
-        // 填充一些测试数据
-        for y in 0..height as usize {
-            for x in 0..width as usize {
+        let mut frame = MediaFrame::<u8>::from_avframe(&yuv_frame)?;
+
+        // array 重新 填充一些测试数据
+        for y in 0..height {
+            for x in 0..width {
                 frame.data[[y, x, 0]] = (x + y) as u8; // Y
                 if y % 2 == 0 && x % 2 == 0 {
                     frame.data[[y, x, 1]] = 128u8; // U

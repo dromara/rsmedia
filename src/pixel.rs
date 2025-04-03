@@ -1,5 +1,9 @@
-use anyhow::{Error, Result};
+use crate::utils;
+
+use rsmpeg::avutil::AVPixFmtDescriptorRef;
 use rsmpeg::ffi;
+
+use anyhow::{Error, Result};
 
 /// Number of pixel formats
 /// DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
@@ -1243,6 +1247,30 @@ impl From<PixelFormat> for ffi::AVPixelFormat {
 //////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////
 
+impl PixelFormat {
+    /// 获取像素格式描述符
+    pub fn descriptor(&self) -> AVPixFmtDescriptorRef {
+        AVPixFmtDescriptorRef::get((*self).into()).unwrap()
+    }
+
+    /// 获取像素格式名称
+    pub fn get_pix_fmt_name(&self) -> String {
+        unsafe {
+            let name = ffi::av_get_pix_fmt_name((*self).into());
+            utils::from_c_char(name)
+        }
+    }
+
+    /// get number of planes in pix_fmt
+    pub fn pix_fmt_count_planes(pix_fmt: PixelFormat) -> Result<i32> {
+        let cnt = unsafe { ffi::av_pix_fmt_count_planes(pix_fmt as _) };
+        if cnt < 0 {
+            return Err(Error::msg(format!("Failed to get plane count:{}", cnt)));
+        }
+        Ok(cnt)
+    }
+}
+
 /// 返回最佳像素格式，或错误
 pub fn find_best_pix_fmt(
     dst_pix_fmt1: PixelFormat,
@@ -1322,15 +1350,6 @@ pub fn get_pix_fmt_loss(
     }
 
     Ok(loss)
-}
-
-/// See ffi::av_pix_fmt_count_planes
-pub fn pix_fmt_count_planes(pix_fmt: PixelFormat) -> Result<i32> {
-    let cnt = unsafe { ffi::av_pix_fmt_count_planes(pix_fmt as _) };
-    if cnt < 0 {
-        return Err(Error::msg(format!("Failed to get plane count:{}", cnt)));
-    }
-    Ok(cnt)
 }
 
 #[cfg(test)]

@@ -254,7 +254,7 @@ impl From<HashMap<String, String>> for Options {
     /// let opts: Options = my_opts.into();
     /// ```
     fn from(item: HashMap<String, String>) -> Self {
-        let mut dict = AVDictionary::new(&utils::from_str(""), &utils::from_str(""), 0);
+        let mut dict = AVDictionary::new(c"", c"", 0);
         for (k, v) in item {
             dict = dict.set(&utils::from_str(&k), &utils::from_str(&v), 0);
         }

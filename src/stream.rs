@@ -1,10 +1,10 @@
 use crate::hwaccel::HWDeviceType;
 use crate::io::{Reader, Writer};
-use crate::{utils, MediaType, Options};
+use crate::{utils, MediaType, Options, PixelFormat, SampleFormat};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecParametersRef, AVPacket};
 use rsmpeg::avformat::{AVInputFormatRef, AVStream};
-use rsmpeg::avutil::{self, AVDictionaryRef, AVPixFmtDescriptorRef};
+use rsmpeg::avutil::AVDictionaryRef;
 use rsmpeg::ffi;
 
 use anyhow::{Error, Result};
@@ -29,11 +29,16 @@ pub struct StreamInfo {
     pub codec_tag: u32,
     /// Pixel format / Sample format
     pub format: i32,
+    /// codec bits per sample
+    pub bits_per_sample: i32,
+    /// codec bits per sample
+    pub exact_bits_per_sample: i32,
     /// the number of bits actually used for storing the pixel information,
     /// that is padding bits are not counted.
     pub bits_per_pixel: i32,
-    /// codec bits per sample
-    pub bits_per_sample: i32,
+    /// the number of bits per pixel for the pixel format
+    /// including any padding or unused bits.
+    pub padded_bits_per_pixel: i32,
 
     /// time_base
     pub time_base: ffi::AVRational,
@@ -154,19 +159,29 @@ impl StreamInfo {
             .metadata()
             .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into());
         let bytes_per_sample = if codec_type.is_audio() {
-            avutil::get_bytes_per_sample(codecpar.format as ffi::AVSampleFormat)
+            SampleFormat::from(codecpar.format).get_bytes_per_sample()
         } else {
             None
         };
-        let (bits_per_sample, bits_per_pixel) = unsafe {
-            let bits_per_sample = ffi::av_get_bits_per_sample(codecpar.codec_id);
-            let bits_per_pixel = if codec_type.is_video() | codec_type.is_audio() {
-                let pix_fmt_desc = AVPixFmtDescriptorRef::get(codecpar.format).unwrap();
-                ffi::av_get_bits_per_pixel(pix_fmt_desc.deref())
+
+        let (bits_per_sample, exact_bits_per_sample, bits_per_pixel, padded_bits_per_pixel) = unsafe {
+            let bits_sample = ffi::av_get_bits_per_sample(codecpar.codec_id);
+            let exact_bits_sample = ffi::av_get_exact_bits_per_sample(codecpar.codec_id);
+            let (bits_pixel, padded_bits_pixel) = if codec_type.is_video() {
+                let pix_fmt_desc = PixelFormat::from(codecpar.format).descriptor();
+                (
+                    ffi::av_get_bits_per_pixel(pix_fmt_desc.deref()),
+                    ffi::av_get_padded_bits_per_pixel(pix_fmt_desc.deref()),
+                )
             } else {
-                0
+                (0, 0)
             };
-            (bits_per_sample, bits_per_pixel)
+            (
+                bits_sample,
+                exact_bits_sample,
+                bits_pixel,
+                padded_bits_pixel,
+            )
         };
 
         Ok(Self {
@@ -177,8 +192,10 @@ impl StreamInfo {
             codec_id: codecpar.codec_id as u32,
             codec_tag: codecpar.codec_tag,
             format: codecpar.format,
-            bits_per_pixel,
             bits_per_sample,
+            exact_bits_per_sample,
+            bits_per_pixel,
+            padded_bits_per_pixel,
             time_base: stream.time_base,
             duration: stream.duration,
             start_time: stream.start_time,
@@ -447,21 +464,16 @@ impl std::fmt::Display for StreamInfo {
             let codec_id = self.codec_id as ffi::AVCodecID;
             utils::from_c_char(ffi::avcodec_get_name(codec_id))
         };
-        let format = unsafe {
+        let format = {
             if self.media_type == MediaType::VIDEO {
-                utils::from_c_char(ffi::av_get_pix_fmt_name(self.format))
+                PixelFormat::from(self.format).get_pix_fmt_name()
             } else if self.media_type == MediaType::AUDIO {
-                utils::from_c_char(ffi::av_get_sample_fmt_name(self.format))
+                SampleFormat::from(self.format).get_sample_fmt_name()
             } else {
-                "unknown".to_string()
+                format!("Unknown:{}", self.format).to_string()
             }
         };
-        let stream_type = {
-            let unknown = utils::from_str("unknown");
-            let media_type_str =
-                rsmpeg::avutil::get_media_type_string(self.media_type as _).unwrap_or(&unknown);
-            utils::to_string(media_type_str).unwrap()
-        };
+        let stream_type = self.media_type.get_media_type_string();
         write!(
             f,
             "{} #{}: codec={}, format={}, size={}x{}, fps={:?}, bit_rate={}, sample_rate={}, video_delay={}",

@@ -1,3 +1,6 @@
+use crate::utils;
+
+use rsmpeg::avutil;
 use rsmpeg::ffi;
 
 #[repr(u32)]
@@ -143,6 +146,13 @@ pub enum MediaType {
     ATTACHMENT = ffi::AVMEDIA_TYPE_ATTACHMENT,
 }
 
+impl MediaType {
+    pub fn get_media_type_string(&self) -> String {
+        avutil::get_media_type_string(*self as _)
+            .map_or("Unknown".to_string(), |s| utils::to_string(s).unwrap())
+    }
+}
+
 impl From<ffi::AVMediaType> for MediaType {
     fn from(item: ffi::AVMediaType) -> Self {
         match item {
@@ -186,6 +196,29 @@ pub enum SampleFormat {
     S64 = ffi::AV_SAMPLE_FMT_S64,
     /// < signed 64 bits, planar
     S64P = ffi::AV_SAMPLE_FMT_S64P,
+}
+
+impl SampleFormat {
+    pub fn is_planar(&self) -> bool {
+        avutil::sample_fmt_is_planar(*self as _)
+    }
+
+    pub fn get_bytes_per_sample(&self) -> Option<usize> {
+        avutil::get_bytes_per_sample(*self as _)
+    }
+
+    pub fn get_sample_fmt_name(&self) -> String {
+        avutil::get_sample_fmt_name(*self as _)
+            .map_or("Unknown".to_string(), |s| utils::to_string(s).unwrap())
+    }
+
+    pub fn get_packed_sample_fmt(&self) -> Option<SampleFormat> {
+        avutil::get_packed_sample_fmt(*self as _).map(SampleFormat::from)
+    }
+
+    pub fn get_planar_sample_fmt(&self) -> Option<SampleFormat> {
+        avutil::get_planar_sample_fmt(*self as _).map(SampleFormat::from)
+    }
 }
 
 impl From<ffi::AVSampleFormat> for SampleFormat {

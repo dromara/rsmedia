@@ -1,477 +1,376 @@
-use crate::{swctx, MediaType, PixelFormat, SampleFormat};
-
-use rsmpeg::avfilter::{AVFilter, AVFilterContext, AVFilterGraph, AVFilterInOut};
-use rsmpeg::avutil::AVFrame;
-
-use anyhow::{Context, Error, Result};
-use std::cmp;
-use std::collections::VecDeque;
-
-/// 过滤器抽象设计
-pub trait Filter: Send + Sync {
-    /// 处理一个原始帧
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()>;
-
-    /// 获取过滤器的媒体类型
-    fn media_type(&self) -> MediaType;
-
-    /// 过滤器名称
-    fn name(&self) -> &str;
-
-    /// 重置过滤器状态
-    fn reset(&mut self) {}
-
-    /// 刷新过滤器，返回可能缓存的帧
-    fn flush(&mut self) -> Vec<AVFrame> {
-        Vec::new()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn Filter> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Filter: {}({:?})", self.name(), self.media_type())
-    }
-}
-
-/// 过滤器链，用于组合多个过滤器
-#[derive(Debug)]
-pub struct FilterChain {
-    filters: Vec<Box<dyn Filter>>,
-    media_type: MediaType,
-}
-
-impl FilterChain {
-    /// 创建一个新的过滤器链
-    pub fn new(media_type: MediaType) -> Self {
-        Self {
-            filters: Vec::new(),
-            media_type,
-        }
-    }
-
-    /// 添加一个过滤器到链中
-    pub fn add_filter(&mut self, filter: Box<dyn Filter>) -> Result<&mut Self> {
-        // 确保过滤器的媒体类型与链的媒体类型匹配
-        if filter.media_type() != self.media_type {
-            return Err(Error::msg(format!(
-                "Filter media type mismatch: expected {:?}, got {:?}",
-                self.media_type,
-                filter.media_type()
-            )));
-        }
-
-        self.filters.push(filter);
-        Ok(self)
-    }
-
-    /// 处理一个帧通过整个过滤器链
-    pub fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        for filter in &mut self.filters {
-            filter.process_frame(frame)?;
-        }
-        Ok(())
-    }
-
-    /// 重置所有过滤器
-    pub fn reset(&mut self) {
-        for filter in &mut self.filters {
-            filter.reset();
-        }
-    }
-
-    /// 刷新所有过滤器
-    pub fn flush(&mut self) -> Vec<AVFrame> {
-        let mut frames = Vec::new();
-        for filter in &mut self.filters {
-            frames.extend(filter.flush());
-        }
-        frames
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////// Video Filter Implementations ////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// 视频裁剪过滤器
-pub struct CropFilter {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-}
-
-impl CropFilter {
-    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-}
-
-impl Filter for CropFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.width <= 0 || frame.height <= 0 {
-            return Err(Error::msg("Invalid frame size"));
-        }
-
-        // TODO: 裁剪算法
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::VIDEO
-    }
-
-    fn name(&self) -> &str {
-        "CropFilter"
-    }
-}
-
-/// 视频缩放过滤器
-pub struct ScaleFilter {
-    width: u32,
-    height: u32,
-    pix_fmt: PixelFormat,
-}
-
-impl ScaleFilter {
-    pub fn new(width: u32, height: u32, pix_fmt: PixelFormat) -> Self {
-        Self {
-            width,
-            height,
-            pix_fmt,
-        }
-    }
-}
-
-impl Filter for ScaleFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.width <= 0 || frame.height <= 0 {
-            return Err(Error::msg("Invalid frame size"));
-        }
-
-        if frame.width as u32 == self.width
-            && frame.height as u32 == self.height
-            && frame.format == self.pix_fmt as i32
-        {
-            return Ok(());
-        }
-
-        log::debug!(
-            "{}: scaled [size: {}x{}, pix:{:?}] -> [size: {}x{}, pix:{:?}]",
-            self.name(),
-            frame.width,
-            frame.height,
-            frame.format,
-            self.width,
-            self.height,
-            self.pix_fmt
-        );
-
-        let scaled_frame =
-            swctx::scale(frame, self.width as i32, self.height as i32, self.pix_fmt)?;
-        *frame = scaled_frame;
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::VIDEO
-    }
-
-    fn name(&self) -> &str {
-        "ScaleFilter"
-    }
-
-    fn reset(&mut self) {}
-}
-
-/// 视频旋转过滤器
-pub struct RotateFilter {
-    angle: i32, // 旋转角度，支持90/180/270度
-}
-
-impl RotateFilter {
-    pub fn new(angle: i32) -> Self {
-        // 规范化角度为90/180/270
-        let normalized_angle = match angle % 360 {
-            a if a < 0 => a + 360,
-            a => a,
-        };
-
-        Self {
-            angle: normalized_angle,
-        }
-    }
-}
-
-impl Filter for RotateFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.width <= 0 || frame.height <= 0 {
-            return Ok(());
-        }
-
-        // 根据旋转角度处理
-        match self.angle {
-            0 => Ok(()), // 不需要旋转
-            90 | 270 => {
-                // 90或270度旋转需要交换宽高
-                let temp = frame.width;
-                frame.set_width(frame.height);
-                frame.set_height(temp);
-
-                // 实际旋转操作需要重新排列像素
-                // 这里需要创建一个新的帧并复制旋转后的数据
-                // 实际实现会更复杂，这里简化处理
-
-                Ok(())
-            }
-            180 => {
-                // 180度旋转不需要交换宽高
-                // 实际旋转操作需要重新排列像素
-                // 这里需要创建一个新的帧并复制旋转后的数据
-                // 实际实现会更复杂，这里简化处理
-
-                Ok(())
-            }
-            _ => Err(Error::msg(format!(
-                "Unsupported rotation angle: {}",
-                self.angle
-            ))),
-        }
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::VIDEO
-    }
-
-    fn name(&self) -> &str {
-        "RotateFilter"
-    }
-}
-
-/// 视频水印过滤器
-pub struct WatermarkFilter {
-    x: u32,
-    y: u32,
-    alpha: f32, // 透明度，0.0-1.0
-}
-
-impl WatermarkFilter {
-    pub fn new(x: u32, y: u32, alpha: f32) -> Self {
-        Self {
-            x,
-            y,
-            alpha: alpha.clamp(0.0, 1.0),
-        }
-    }
-}
-
-impl Filter for WatermarkFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.width <= 0 || frame.height <= 0 {
-            return Ok(());
-        }
-
-        // 确保水印位置在帧内
-        let x = cmp::min(self.x, frame.width as u32 - 1);
-        let y = cmp::min(self.y, frame.height as u32 - 1);
-
-        // TODO: 水印处理
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::VIDEO
-    }
-
-    fn name(&self) -> &str {
-        "WatermarkFilter"
-    }
-}
-
-/// 视频降噪过滤器
-pub struct VideoDenoiseFilter {
-    strength: f32, // 降噪强度，0.0-1.0
-}
-
-impl VideoDenoiseFilter {
-    pub fn new(strength: f32) -> Self {
-        Self {
-            strength: strength.clamp(0.0, 1.0),
-        }
-    }
-}
-
-impl Filter for VideoDenoiseFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.width <= 0 || frame.height <= 0 {
-            return Ok(());
-        }
-
-        // TODO: 降噪算法
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::VIDEO
-    }
-
-    fn name(&self) -> &str {
-        "DenoiseFilter"
-    }
-
-    fn reset(&mut self) {}
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////// Audio Filter Implementations ////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// 音频混音过滤器
-pub struct MixerFilter {
-    mix_ratio: f32, // 混音比例，0.0-1.0
-}
-
-impl MixerFilter {
-    pub fn new(mix_ratio: f32) -> Self {
-        Self {
-            mix_ratio: mix_ratio.clamp(0.0, 1.0),
-        }
-    }
-}
-
-impl Filter for MixerFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.nb_samples <= 0 {
-            return Ok(());
-        }
-
-        // TODO: 混音算法
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::AUDIO
-    }
-
-    fn name(&self) -> &str {
-        "MixerFilter"
-    }
-}
-
-/// 音频变速过滤器（不改变音调）
-pub struct TimeStretchFilter {
-    speed_factor: f32,     // 速度因子，>1.0加速，<1.0减速
-    buffer: VecDeque<f32>, // 用于存储处理中的样本
-}
-
-impl TimeStretchFilter {
-    pub fn new(speed_factor: f32) -> Self {
-        Self {
-            speed_factor: speed_factor.clamp(0.5, 2.0), // 限制在0.5-2.0之间
-            buffer: VecDeque::new(),
-        }
-    }
-}
-
-impl Filter for TimeStretchFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.nb_samples <= 0 {
-            return Ok(());
-        }
-
-        // TODO: 变速算法
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::AUDIO
-    }
-
-    fn name(&self) -> &str {
-        "TimeStretchFilter"
-    }
-
-    fn reset(&mut self) {
-        self.buffer.clear();
-    }
-}
-
-/// 音频降噪过滤器
-pub struct AudioDenoiseFilter {
-    threshold: f32, // 噪声阈值
-}
-
-impl AudioDenoiseFilter {
-    pub fn new(threshold: f32) -> Self {
-        Self {
-            threshold: threshold.clamp(0.0, 1.0),
-        }
-    }
-}
-
-impl Filter for AudioDenoiseFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.nb_samples <= 0 {
-            return Ok(());
-        }
-
-        // TODO: 降噪算法
-
-        Ok(())
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::AUDIO
-    }
-
-    fn name(&self) -> &str {
-        "AudioDenoiseFilter"
-    }
-}
-
-/// 音频均衡过滤器
-pub struct EqualizerFilter {
-    bands: Vec<(f32, f32)>, // (频率, 增益)
-}
-
-impl EqualizerFilter {
-    pub fn new(bands: Vec<(f32, f32)>) -> Self {
-        Self { bands }
-    }
-}
-
-impl Filter for EqualizerFilter {
-    fn process_frame(&mut self, frame: &mut AVFrame) -> Result<()> {
-        if frame.nb_samples <= 0 {
-            return Ok(());
-        }
-
-        // TODO: 均衡器算法
-        // 实现均衡器需要进行频域变换（FFT）
-        // 1. 对音频进行FFT
-        // 2. 在频域中应用增益
-        // 3. 进行IFFT转回时域
-
-        // 由于FFT实现比较复杂，这里只是占位
-        Err(Error::msg("Equalizer filter not fully implemented"))
-    }
-
-    fn media_type(&self) -> MediaType {
-        MediaType::AUDIO
-    }
-
-    fn name(&self) -> &str {
-        "EqualizerFilter"
-    }
-}
+// #![allow(dead_code)]
+//
+// use crate::{MediaType, PixelFormat, SampleFormat};
+// use std::collections::HashMap;
+//
+// use rsmpeg::avfilter::{AVFilter, AVFilterContextMut, AVFilterGraph, AVFilterInOut};
+// use rsmpeg::avutil::{AVChannelLayout, AVFrame};
+// use rsmpeg::error::RsmpegError;
+// use rsmpeg::ffi;
+//
+// use anyhow::{Context, Error, Result};
+// use std::ffi::CString;
+// use std::fmt::Formatter;
+// use std::sync::Arc;
+//
+// #[derive(Debug)]
+// pub struct Filter {
+//     name: &'static str,
+//     spec: String,
+//     media_type: MediaType,
+// }
+//
+// impl Filter {
+//     pub fn new(name: &'static str, media_type: MediaType, spec: String) -> Self {
+//         Self {
+//             name,
+//             media_type,
+//             spec,
+//         }
+//     }
+//
+//     pub fn name(&self) -> &'static str {
+//         self.name
+//     }
+//
+//     pub fn media_type(&self) -> MediaType {
+//         self.media_type
+//     }
+//
+//     pub fn spec(&self) -> String {
+//         self.spec.clone()
+//     }
+// }
+//
+// /// 过滤器工厂 - 用于创建具体的过滤器描述
+// pub struct FilterFactory;
+//
+// impl FilterFactory {
+//     /// 创建缩放过滤器
+//     pub fn new_scale_filter(width: i32, height: i32, pix_fmt: PixelFormat) -> Filter {
+//         Filter::new(
+//             "scale",
+//             MediaType::VIDEO,
+//             format!(
+//                 "scale={}:{},format={}",
+//                 width,
+//                 height,
+//                 pix_fmt.get_pix_fmt_name()
+//             ),
+//         )
+//     }
+//
+//     /// 创建旋转过滤器
+//     pub fn new_rotate_filter(angle: i32) -> Filter {
+//         Filter::new("rotate", MediaType::VIDEO, format!("rotate={}", angle))
+//     }
+//
+//     /// 创建音频重采样过滤器
+//     pub fn new_resample_filter(sample_rate: i32) -> Filter {
+//         Filter::new(
+//             "resample",
+//             MediaType::AUDIO,
+//             format!("aresample={}:async=0", sample_rate),
+//         )
+//     }
+//
+//     /// 创建音量调整过滤器
+//     pub fn new_volume_filter(volume: f32) -> Filter {
+//         Filter::new("volume", MediaType::AUDIO, format!("volume={}", volume))
+//     }
+// }
+//
+// /// 过滤器参数配置
+// #[derive(Debug, Clone)]
+// pub enum FilterParams {
+//     Video(VideoParams),
+//     Audio(AudioParams),
+// }
+//
+// impl FilterParams {
+//     pub fn media_type(&self) -> MediaType {
+//         match self {
+//             FilterParams::Video(_) => MediaType::VIDEO,
+//             FilterParams::Audio(_) => MediaType::AUDIO,
+//         }
+//     }
+// }
+//
+// /// 视频过滤器参数
+// #[derive(Debug, Clone)]
+// pub struct VideoParams {
+//     pub width: i32,
+//     pub height: i32,
+//     pub format: PixelFormat,
+//     pub time_base: ffi::AVRational,
+//     pub frame_rate: ffi::AVRational,
+//     pub pixel_aspect: ffi::AVRational,
+// }
+//
+// /// 音频过滤器参数
+// #[derive(Debug, Clone)]
+// pub struct AudioParams {
+//     pub nb_channels: u32,
+//     pub sample_rate: i32,
+//     pub format: SampleFormat,
+//     pub time_base: ffi::AVRational,
+// }
+//
+// /// 流过滤器上下文
+// pub struct FilterContext<'graph> {
+//     src_ctx: AVFilterContextMut<'graph>,
+//     sink_ctx: AVFilterContextMut<'graph>,
+// }
+//
+// impl FilterContext<'_> {
+//     fn process_frame(&mut self, frame: Option<AVFrame>) -> Result<Option<AVFrame>> {
+//         self.src_ctx.buffersrc_add_frame(frame, None)?;
+//
+//         match self.sink_ctx.buffersink_get_frame(None) {
+//             Ok(frame) => Ok(Some(frame)),
+//             Err(RsmpegError::BufferSinkDrainError) | Err(RsmpegError::BufferSinkEofError) => {
+//                 Ok(None)
+//             }
+//             Err(e) => Err(Error::new(e).context("Get frame from buffer sink failed.")),
+//         }
+//     }
+//
+//     fn flush(&mut self) -> Result<Vec<AVFrame>> {
+//         let mut frames = Vec::new();
+//         loop {
+//             match self.process_frame(None) {
+//                 Ok(Some(frame)) => frames.push(frame),
+//                 Ok(None) => break,
+//                 Err(e) => return Err(e),
+//             }
+//         }
+//         Ok(frames)
+//     }
+// }
+//
+// impl std::fmt::Debug for FilterContext<'_> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(
+//             f,
+//             "FilterContext buffersrc_ctx:[type:{}, format:{}], buffersink_ctx:[type:{}, format:{}]",
+//             self.src_ctx.get_type(),
+//             self.src_ctx.get_format(),
+//             self.sink_ctx.get_type(),
+//             self.sink_ctx.get_format()
+//         )
+//     }
+// }
+//
+// /// 过滤器图表上下文
+// pub struct FilterGraphContext {
+//     graph: Arc<AVFilterGraph>, // 使用 Arc 来共享所有权
+// }
+//
+// impl FilterGraphContext {
+//     pub fn new() -> Self {
+//         Self {
+//             graph: Arc::new(AVFilterGraph::new()),
+//         }
+//     }
+// }
+//
+// impl<'graph> FilterGraphContext {
+//     fn create_filter_context(
+//         &'graph self,
+//         stream_params: &FilterParams,
+//         filters: &[Filter],
+//     ) -> Result<FilterContext<'graph>> {
+//         filters.iter().try_for_each(|f| {
+//             if f.media_type() != stream_params.media_type() {
+//                 return Err(anyhow::anyhow!(
+//                     "Filter media type mismatch: expected {:?}, got {:?}",
+//                     stream_params.media_type(),
+//                     f.media_type()
+//                 ));
+//             }
+//             Ok(())
+//         })?;
+//
+//         let (mut src_ctx, mut sink_ctx) = match stream_params {
+//             FilterParams::Video(p) => Self::create_video_filters(&self.graph, p)?,
+//             FilterParams::Audio(p) => Self::create_audio_filters(&self.graph, p)?,
+//         };
+//
+//         // Endpoints for the filter graph
+//         //
+//         // Yes the outputs' name is `in` -_-b
+//         let outputs = AVFilterInOut::new(c"in", &mut src_ctx, 0);
+//         let inputs = AVFilterInOut::new(c"out", &mut sink_ctx, 0);
+//
+//         let filter_spec = filters
+//             .iter()
+//             .map(|f| f.spec())
+//             .collect::<Vec<_>>()
+//             .join(",");
+//
+//         let spec_cstr = CString::new(filter_spec)?;
+//
+//         let (_in, _out) = self
+//             .graph
+//             .parse_ptr(&spec_cstr, Some(inputs), Some(outputs))?;
+//         self.graph.config()?;
+//
+//         Ok(FilterContext { src_ctx, sink_ctx })
+//     }
+//
+//     fn create_video_filters(
+//         graph: &'graph AVFilterGraph,
+//         params: &VideoParams,
+//     ) -> Result<(AVFilterContextMut<'graph>, AVFilterContextMut<'graph>)> {
+//         let args = {
+//             let args = format!(
+//                 "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}:frame_rate={}/{}",
+//                 params.width,
+//                 params.height,
+//                 params.format as i32,
+//                 params.time_base.num,
+//                 params.time_base.den,
+//                 params.pixel_aspect.num,
+//                 params.pixel_aspect.den,
+//                 params.frame_rate.num,
+//                 params.frame_rate.den,
+//             );
+//             CString::new(args)?
+//         };
+//
+//         let buffersrc = AVFilter::get_by_name(c"video_buffer_src")
+//             .ok_or_else(|| anyhow::anyhow!("Failed to get video buffer source filter"))?;
+//         let buffersink = AVFilter::get_by_name(c"video_buffer_sink")
+//             .ok_or_else(|| anyhow::anyhow!("Failed to get video buffer sink filter"))?;
+//
+//         let src_ctx = graph
+//             .create_filter_context(&buffersrc, c"in", Some(&args))
+//             .context("Failed to create video buffer source")?;
+//
+//         let mut sink_ctx = graph
+//             .create_filter_context(&buffersink, c"out", None)
+//             .context("Failed to create video buffer sink")?;
+//
+//         sink_ctx
+//             .opt_set_bin(c"pix_fmts", &(params.format as i32))
+//             .context("Failed to set video sink filter context pixel format")?;
+//
+//         Ok((src_ctx, sink_ctx))
+//     }
+//
+//     fn create_audio_filters(
+//         graph: &'graph AVFilterGraph,
+//         params: &AudioParams,
+//     ) -> Result<(AVFilterContextMut<'graph>, AVFilterContextMut<'graph>)> {
+//         let channel_desc =
+//             AVChannelLayout::from_nb_channels(params.nb_channels as i32).describe()?;
+//
+//         let args = {
+//             let args = format!(
+//                 "time_base={}/{}:sample_rate={}:sample_fmt={}:channel_layout={}",
+//                 params.time_base.num,
+//                 params.time_base.den,
+//                 params.sample_rate,
+//                 params.format.get_sample_fmt_name(),
+//                 channel_desc.to_string_lossy(),
+//             );
+//             CString::new(args)?
+//         };
+//
+//         let buffersrc = AVFilter::get_by_name(c"audio_buffer_src")
+//             .ok_or_else(|| anyhow::anyhow!("Failed to get audio buffer source filter"))?;
+//         let buffersink = AVFilter::get_by_name(c"audio_buffer_sink")
+//             .ok_or_else(|| anyhow::anyhow!("Failed to get audio buffer sink filter"))?;
+//
+//         let src_ctx = graph
+//             .create_filter_context(&buffersrc, c"in", Some(&args))
+//             .context("Failed to create audio buffer source")?;
+//
+//         let mut sink_ctx = graph
+//             .create_filter_context(&buffersink, c"out", None)
+//             .context("Failed to create audio buffer sink")?;
+//
+//         sink_ctx.opt_set_bin(c"sample_fmts", &(params.format as i32))?;
+//         sink_ctx.opt_set_bin(c"channel_layouts", &channel_desc)?;
+//         sink_ctx.opt_set_bin(c"sample_rates", &params.sample_rate)?;
+//
+//         Ok((src_ctx, sink_ctx))
+//     }
+// }
+//
+// impl std::fmt::Debug for FilterGraphContext {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "FilterGraphContext nb_filters:{}", self.graph.nb_filters)
+//     }
+// }
+//
+// #[derive(Debug)]
+// pub struct StreamFilterWrapper<'graph> {
+//     pub graph: Arc<FilterGraphContext>, // 使用 Arc 来共享所有权
+//     pub filter: FilterContext<'graph>,
+// }
+//
+// #[derive(Debug)]
+// pub struct StreamFilterContext<'graph> {
+//     pub filters: HashMap<usize, StreamFilterWrapper<'graph>>,
+// }
+//
+// impl<'graph> StreamFilterContext<'graph> {
+//     #[allow(clippy::new_without_default)]
+//     pub fn new() -> Self {
+//         Self {
+//             filters: HashMap::new(),
+//         }
+//     }
+//
+//     pub fn add_filter(
+//         &mut self,
+//         stream_index: usize,
+//         filter_params: &FilterParams,
+//         filters: &[Filter],
+//     ) -> Result<()> {
+//         if self.filters.contains_key(&stream_index) {
+//             return Err(anyhow::anyhow!(
+//                 "Filter already exists for stream index {}",
+//                 stream_index
+//             ));
+//         };
+//
+//         let graph = FilterGraphContext::new();
+//
+//         // 通过引用创建 filter context，确保生命周期正确
+//         let filter_ctx = {
+//             let graph_ref: &'graph FilterGraphContext = unsafe { std::mem::transmute(&graph) };
+//             graph_ref.create_filter_context(filter_params, filters)?
+//         };
+//
+//         self.filters.insert(
+//             stream_index,
+//             StreamFilterWrapper {
+//                 graph: Arc::new(graph),
+//                 filter: filter_ctx,
+//             },
+//         );
+//         Ok(())
+//     }
+//
+//     pub fn process_frame(
+//         &mut self,
+//         stream_index: usize,
+//         frame: Option<AVFrame>,
+//     ) -> Result<Option<AVFrame>> {
+//         if let Some(wrapper) = self.filters.get_mut(&stream_index) {
+//             let filter_ctx = &mut wrapper.filter;
+//             return filter_ctx.process_frame(frame);
+//         }
+//         Ok(None)
+//     }
+//
+//     pub fn flush(&mut self, stream_index: usize) -> Result<Vec<AVFrame>> {
+//         if let Some(wrapper) = self.filters.get_mut(&stream_index) {
+//             let filter_ctx = &mut wrapper.filter;
+//             return filter_ctx.flush();
+//         }
+//         Ok(vec![])
+//     }
+// }

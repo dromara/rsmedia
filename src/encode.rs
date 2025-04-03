@@ -1,11 +1,10 @@
-use crate::filter::{FilterChain, ScaleFilter};
 use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::MediaFrame;
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::time;
+use crate::{swctx, time};
 use crate::{utils, MediaType, RawFrame, SampleFormat, Writer};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
@@ -39,7 +38,6 @@ pub struct EncoderBuilder {
     media_type: MediaType,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
-    filter_chain: Option<FilterChain>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -233,12 +231,6 @@ impl EncoderBuilder {
         self
     }
 
-    /// Add a filter chain to the encoder
-    pub fn with_filter_chain(mut self, filter_chain: Option<FilterChain>) -> Self {
-        self.filter_chain = filter_chain;
-        self
-    }
-
     /// Apply the settings to an encoder.
     ///
     /// # Arguments
@@ -353,33 +345,26 @@ impl EncoderBuilder {
             .open(dict)
             .context("Failed to open encode context")?;
 
-        let filter_chain = {
-            // get encoder target pixel format for codec context,
-            // if hardware acceleration is enabled, use the format of the hardware context
-            // otherwise, YUV420P is used as the default format
-            let target_format = hw_context
-                .as_ref()
-                .and_then(|_| encode_ctx.hw_frames_ctx_mut())
-                .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
-                .unwrap_or(PixelFormat::YUV420P);
+        // get encoder target pixel format for codec context,
+        // if hardware acceleration is enabled, use the format of the hardware context
+        // otherwise, YUV420P is used as the default format
+        let target_format = hw_context
+            .as_ref()
+            .and_then(|_| encode_ctx.hw_frames_ctx_mut())
+            .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
+            .unwrap_or(PixelFormat::YUV420P);
 
-            let mut chain = self
-                .filter_chain
-                .unwrap_or_else(|| FilterChain::new(media_type));
-            let scale_filter = ScaleFilter::new(
-                encode_ctx.width as u32,
-                encode_ctx.height as u32,
-                target_format,
-            );
-            chain.add_filter(Box::new(scale_filter))?;
-            Some(chain)
-        };
+        let rescale = (
+            encode_ctx.width as usize,
+            encode_ctx.height as usize,
+            target_format,
+        );
 
         Ok(Encoder {
+            rescale,
             encode_ctx,
             hw_context,
             media_type,
-            filter_chain,
             frame_count: 0,
             keyframe_interval: self.keyframe_interval,
         })
@@ -410,7 +395,6 @@ impl Default for EncoderBuilder {
             thread_count: 0,
             codec_name: None,
             codec_opts: None,
-            filter_chain: None,
             hw_device_config: None,
         }
     }
@@ -438,8 +422,8 @@ impl Default for EncoderBuilder {
 /// ```
 pub struct Encoder {
     encode_ctx: AVCodecContext,
-    filter_chain: Option<FilterChain>,
     hw_context: Option<Arc<HWContext>>,
+    rescale: (usize, usize, PixelFormat),
     media_type: MediaType,
     frame_count: u64,
     keyframe_interval: u64,
@@ -528,23 +512,36 @@ impl Encoder {
     }
 
     fn filter_send_frame(&mut self, frame_opt: Option<RawFrame>) -> Result<()> {
-        let mut hw_frame = if let Some(mut filter_frame) = frame_opt {
-            if let Some(ref mut filter_chain) = self.filter_chain {
-                filter_chain.process_frame(&mut filter_frame)?;
-            }
+        let mut hw_frame = if let Some(frame) = frame_opt {
+            if self.media_type == MediaType::VIDEO {
+                let (dst_w, dst_h, dst_pix_fmt) = self.rescale;
 
-            let hw_frame = match self.hw_context.as_ref() {
-                Some(hw_ctx) if hw_ctx.is_sw_frame(&filter_frame) => {
-                    // sw_frame -> hw_frame
-                    hw_ctx
-                        .hw_upload(&mut self.encode_ctx, &filter_frame)
-                        .map_err(|e| {
-                            Error::msg(format!("HWContext failed to upload frame: {}", e))
-                        })?
-                }
-                _ => filter_frame.clone(),
-            };
-            Some(hw_frame)
+                // rescale frame if necessary
+                let is_scale_needed = !(frame.width == dst_w as i32
+                    && frame.height == dst_h as i32
+                    && frame.format == dst_pix_fmt.into());
+                let scaled_frame = if is_scale_needed {
+                    swctx::scale(&frame, dst_w as i32, dst_h as i32, dst_pix_fmt)?
+                } else {
+                    frame
+                };
+
+                let hw_frame = match self.hw_context.as_ref() {
+                    Some(hw_ctx) if hw_ctx.is_sw_frame(&scaled_frame) => {
+                        // sw_frame -> hw_frame
+                        hw_ctx
+                            .hw_upload(&mut self.encode_ctx, &scaled_frame)
+                            .map_err(|e| {
+                                Error::msg(format!("HWContext failed to upload frame: {}", e))
+                            })?
+                    }
+                    _ => scaled_frame.clone(),
+                };
+                Some(hw_frame)
+            } else {
+                // audio frame
+                Some(frame)
+            }
         } else {
             None
         };

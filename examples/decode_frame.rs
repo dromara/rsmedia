@@ -1,8 +1,7 @@
 use image::{ImageBuffer, Rgb};
 
 use rsmedia::{
-    decode::DecodeResult, frame, DecoderBuilder, MediaFrame, MediaType, Reader, Resize,
-    StreamReader,
+    decode::DecodeResult, DecoderBuilder, MediaFrame, MediaType, Reader, Resize, StreamReader,
 };
 
 use anyhow::{Context, Result};

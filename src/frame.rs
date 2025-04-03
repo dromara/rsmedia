@@ -657,25 +657,42 @@ where
     };
     validate_format_type_size::<T>(frame.format, sample_size)?;
 
+    // check
+    if frame.data[0].is_null() {
+        return Err(Error::msg("Frame data is null"));
+    }
+
     let channels = frame.ch_layout.nb_channels as usize;
     let samples = frame.nb_samples as usize;
     let mut buffer = Vec::with_capacity(samples * channels);
 
     if is_sample_format_planar(frame.format) {
-        // 平面布局：按样本交错方式重组数据
+        // 平面格式 (FLTP)：
+        // frame.data[0] -> [L0][L1][L2]...  // 左声道所有样本
+        // frame.data[1] -> [R0][R1][R2]...  // 右声道所有样本
+        // 检查所有通道
+        for ch in 0..channels {
+            if frame.data[ch].is_null() {
+                return Err(Error::msg(format!("Channel {} data pointer is null", ch)));
+            }
+        }
+
+        // linesize 在音频中的含义：
+        // - 平面格式：每个通道的字节数（samples * sizeof(format)）
+        // - 交错格式：所有通道的字节数（samples * channels * sizeof(format)）
+        // 但在访问单个样本时，我们不需要使用 linesize，因为音频数据是连续存储的
         for s in 0..samples {
             for ch in 0..channels {
                 unsafe {
                     // 获取当前通道的数据指针
                     let plane_ptr = frame.data[ch] as *const T;
-                    // 计算当前样本的偏移量，考虑通道步长
-                    let sample_offset = s * frame.linesize[ch] as usize / std::mem::size_of::<T>();
-                    buffer.push(*plane_ptr.add(sample_offset));
+                    buffer.push(*plane_ptr.add(s));
                 }
             }
         }
     } else {
-        // 交错布局：直接复制
+        // 交错格式布局 (FLT)：所有声道交错,直接复制
+        // frame.data[0] -> [L0][R0][L1][R1]...
         unsafe {
             let data = std::slice::from_raw_parts(frame.data[0] as *const T, samples * channels);
             buffer.extend_from_slice(data);
@@ -1329,7 +1346,8 @@ mod tests {
                     std::slice::from_raw_parts_mut(frame.data[ch] as *mut f32, nb_samples as usize);
                 for (i, sample) in data.iter_mut().enumerate() {
                     // 样本值 = 音频通道数 × 样本序号 / (总样本数 × 通道数)
-                    *sample = (i * nb_channels + ch) as f32 / (nb_samples * nb_channels as i32) as f32;
+                    *sample =
+                        (i * nb_channels + ch) as f32 / (nb_samples * nb_channels as i32) as f32;
                 }
             }
         }
@@ -1346,7 +1364,10 @@ mod tests {
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
         println!("{:#?}", first_sample);
-        assert_eq!(first_sample.to_vec(), vec![0.0, 1.0 / (nb_samples * nb_channels as i32) as f32]);
+        assert_eq!(
+            first_sample.to_vec(),
+            vec![0.0, 1.0 / (nb_samples * nb_channels as i32) as f32]
+        );
 
         Ok(())
     }

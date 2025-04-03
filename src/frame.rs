@@ -2,7 +2,7 @@ use crate::pixel::PixelFormat;
 use crate::{MediaType, SampleFormat};
 
 use rsmpeg::avutil::{AVChannelLayout, AVFrame};
-use rsmpeg::ffi;
+use rsmpeg::{avutil, ffi};
 
 use anyhow::{Context, Error, Result};
 use yuvutils_rs::{
@@ -227,6 +227,7 @@ where
     /// 转换为新AVFrame
     pub fn to_avframe(&self) -> Result<AVFrame> {
         let mut frame = AVFrame::new();
+        let mut time_base = self.time_base;
         if self.media_type == MediaType::VIDEO {
             // video frame
             frame.set_width(self.width as i32);
@@ -237,8 +238,9 @@ where
         } else {
             // audio frame
             frame.set_format(self.format);
-            frame.set_sample_rate(self.sample_rate as i32);
             frame.set_nb_samples(self.nb_samples as i32);
+            frame.set_sample_rate(self.sample_rate as i32);
+            time_base = avutil::ra(1, self.sample_rate as i32);
             frame.set_ch_layout(
                 AVChannelLayout::from_nb_channels(self.nb_channels as i32).into_inner(),
             );
@@ -246,7 +248,7 @@ where
         };
 
         frame.set_pts(self.pts);
-        frame.set_time_base(self.time_base);
+        frame.set_time_base(time_base);
         Ok(frame)
     }
 
@@ -688,6 +690,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rsmpeg::avutil;
     use std::time::Duration;
 
     fn create_test_pattern(width: usize, height: usize) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
@@ -1310,11 +1313,14 @@ mod tests {
 
         // 创建测试音频帧
         let mut frame = AVFrame::new();
-        frame.set_format(ffi::AV_SAMPLE_FMT_FLTP);
+        frame.set_format(ffi::AV_SAMPLE_FMT_S32P);
         frame.set_nb_samples(nb_samples);
         frame.set_sample_rate(sample_rate);
+        frame.set_time_base(avutil::ra(1, sample_rate));
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner());
-        frame.alloc_buffer()?;
+        frame
+            .alloc_buffer()
+            .context("Failed to allocate buffer for AVFrame")?;
 
         // 填充测试数据
         unsafe {
@@ -1351,11 +1357,14 @@ mod tests {
         let sample_rate = 44100;
 
         let mut frame = AVFrame::new();
-        frame.set_format(ffi::AV_SAMPLE_FMT_FLT);
+        frame.set_format(ffi::AV_SAMPLE_FMT_S32);
         frame.set_nb_samples(nb_samples as i32);
         frame.set_sample_rate(sample_rate);
+        frame.set_time_base(avutil::ra(1, sample_rate));
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner());
-        frame.alloc_buffer()?;
+        frame
+            .alloc_buffer()
+            .context("Failed to allocate buffer for AVFrame")?;
 
         // 填充测试数据
         unsafe {

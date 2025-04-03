@@ -1313,11 +1313,11 @@ mod tests {
 
         // 创建测试音频帧
         let mut frame = AVFrame::new();
-        frame.set_format(ffi::AV_SAMPLE_FMT_S32P);
+        frame.set_format(ffi::AV_SAMPLE_FMT_FLTP);
+        frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner());
         frame.set_nb_samples(nb_samples);
         frame.set_sample_rate(sample_rate);
         frame.set_time_base(avutil::ra(1, sample_rate));
-        frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner());
         frame
             .alloc_buffer()
             .context("Failed to allocate buffer for AVFrame")?;
@@ -1328,7 +1328,8 @@ mod tests {
                 let data =
                     std::slice::from_raw_parts_mut(frame.data[ch] as *mut f32, nb_samples as usize);
                 for (i, sample) in data.iter_mut().enumerate() {
-                    *sample = (i as f32) / nb_channels as f32;
+                    // 样本值 = 音频通道数 × 样本序号 / (总样本数 × 通道数)
+                    *sample = (i * nb_channels + ch) as f32 / (nb_samples * nb_channels as i32) as f32;
                 }
             }
         }
@@ -1345,7 +1346,7 @@ mod tests {
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
         println!("{:#?}", first_sample);
-        assert_eq!(first_sample.to_vec(), vec![0.0, 0.0]);
+        assert_eq!(first_sample.to_vec(), vec![0.0, 1.0 / (nb_samples * nb_channels as i32) as f32]);
 
         Ok(())
     }
@@ -1357,11 +1358,11 @@ mod tests {
         let sample_rate = 44100;
 
         let mut frame = AVFrame::new();
-        frame.set_format(ffi::AV_SAMPLE_FMT_S32);
+        frame.set_format(ffi::AV_SAMPLE_FMT_FLT);
+        frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner());
         frame.set_nb_samples(nb_samples as i32);
         frame.set_sample_rate(sample_rate);
         frame.set_time_base(avutil::ra(1, sample_rate));
-        frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner());
         frame
             .alloc_buffer()
             .context("Failed to allocate buffer for AVFrame")?;
@@ -1371,6 +1372,7 @@ mod tests {
             let data =
                 std::slice::from_raw_parts_mut(frame.data[0] as *mut f32, nb_samples * nb_channels);
             for i in 0..nb_samples * nb_channels {
+                // 交错格式本身就是按照样本点交错排列的
                 data[i] = i as f32 / (nb_samples * nb_channels) as f32;
             }
         }

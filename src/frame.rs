@@ -441,18 +441,6 @@ where
     }
 }
 
-/// 音频采样格式是否为平面布局
-pub fn is_sample_format_planar(sample_fmt: ffi::AVSampleFormat) -> bool {
-    matches!(
-            sample_fmt,
-            fmt if fmt == ffi::AV_SAMPLE_FMT_U8P
-                || fmt == ffi::AV_SAMPLE_FMT_S16P
-                || fmt == ffi::AV_SAMPLE_FMT_S32P
-                || fmt == ffi::AV_SAMPLE_FMT_FLTP
-                || fmt == ffi::AV_SAMPLE_FMT_DBLP
-                || fmt == ffi::AV_SAMPLE_FMT_S64P)
-}
-
 /// 验证帧格式和类型大小的匹配关系
 fn validate_format_type_size<T>(format: i32, expected_size: usize) -> Result<()> {
     let type_size = std::mem::size_of::<T>();
@@ -550,7 +538,7 @@ where
 
     if let Some(buffer) = data.as_standard_layout().as_slice() {
         unsafe {
-            if is_sample_format_planar(frame.format) {
+            if SampleFormat::from(frame.format).is_planar() {
                 // 平面布局：每个声道单独存储
                 for ch in 0..channels {
                     let dst = std::slice::from_raw_parts_mut(frame.data[ch] as *mut T, samples);
@@ -666,7 +654,7 @@ where
     let samples = frame.nb_samples as usize;
     let mut buffer = Vec::with_capacity(samples * channels);
 
-    if is_sample_format_planar(frame.format) {
+    if SampleFormat::from(frame.format).is_planar() {
         // 平面格式 (FLTP)：
         // frame.data[0] -> [L0][L1][L2]...  // 左声道所有样本
         // frame.data[1] -> [R0][R1][R2]...  // 右声道所有样本

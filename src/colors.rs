@@ -820,6 +820,6 @@ mod tests {
         });
 
         let duration = start.elapsed();
-        println!("处理时间: {:?}", duration);
+        println!("large_image_processing time cost: {:?}", duration);
     }
 }

@@ -1355,7 +1355,10 @@ mod tests {
         let media_frame = MediaFrame::<f32>::from_avframe(&frame)?;
 
         // 验证维度
-        assert_eq!(media_frame.data.dim(), (1, nb_samples as usize, nb_channels as usize));
+        assert_eq!(
+            media_frame.data.dim(),
+            (1, nb_samples as usize, nb_channels as usize)
+        );
         assert_eq!(media_frame.nb_samples, nb_samples as u32);
         assert_eq!(media_frame.nb_channels, nb_channels as u32);
 
@@ -1403,7 +1406,10 @@ mod tests {
         let media_frame = MediaFrame::<f32>::from_avframe(&frame)?;
 
         // 验证维度
-        assert_eq!(media_frame.data.dim(), (1, nb_samples as usize, nb_channels as usize));
+        assert_eq!(
+            media_frame.data.dim(),
+            (1, nb_samples as usize, nb_channels as usize)
+        );
         assert_eq!(media_frame.nb_samples, nb_samples as u32);
         assert_eq!(media_frame.nb_channels, nb_channels as u32);
 

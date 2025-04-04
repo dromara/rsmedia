@@ -1340,14 +1340,16 @@ mod tests {
             .context("Failed to allocate buffer for AVFrame")?;
 
         // 填充测试数据
+        // 平面格式 (AV_SAMPLE_FMT_FLTP) 的数据布局：
+        // data[0]: [L1 L2 L3 ...] (左声道所有样本)
+        // data[1]: [R1 R2 R3 ...] (右声道所有样本)
+        let total_samples = (nb_samples * nb_channels) as usize;
         unsafe {
             for ch in 0..nb_channels as usize {
                 let data =
                     std::slice::from_raw_parts_mut(frame.data[ch] as *mut f32, nb_samples as usize);
-                for (i, sample) in data.iter_mut().enumerate() {
-                    // 样本值 = 音频通道数 × 样本序号 / (总样本数 × 通道数)
-                    *sample =
-                        (i * nb_channels as usize + ch) as f32 / (nb_samples * nb_channels) as f32;
+                for i in 0..data.len() {
+                    data[i] = (i * nb_channels as usize + ch) as f32 / total_samples as f32;
                 }
             }
         }
@@ -1366,10 +1368,42 @@ mod tests {
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
         println!("{:#?}", first_sample);
-        assert_eq!(
-            first_sample.to_vec(),
-            vec![0.0, 1.0 / (nb_samples * nb_channels) as f32]
-        );
+        assert_eq!(first_sample.to_vec(), vec![0.0, 1.0 / total_samples as f32]);
+
+        let converted_frame = media_frame.to_avframe().unwrap();
+        assert_eq!(converted_frame.format, ffi::AV_SAMPLE_FMT_FLTP);
+        assert_eq!(converted_frame.nb_samples, nb_samples);
+        assert_eq!(converted_frame.sample_rate, sample_rate);
+        assert_eq!(converted_frame.linesize, frame.linesize);
+        assert_eq!(converted_frame.data.len(), frame.data.len());
+
+        // 验证转换后的数据
+        unsafe {
+            for ch in 0..nb_channels as usize {
+                let original_data =
+                    std::slice::from_raw_parts(frame.data[ch] as *const f32, nb_samples as usize);
+                let converted_data = std::slice::from_raw_parts(
+                    converted_frame.data[ch] as *const f32,
+                    nb_samples as usize,
+                );
+
+                // 验证每个样本
+                for i in 0..nb_samples as usize {
+                    let orig = original_data[i];
+                    let conv = converted_data[i];
+                    let diff = (orig - conv).abs();
+                    assert!(
+                        diff < 1.0,
+                        "Mismatch at channel {} sample {}: expected {}, got {}, diff {}",
+                        ch,
+                        i,
+                        orig,
+                        conv,
+                        diff
+                    );
+                }
+            }
+        }
 
         Ok(())
     }
@@ -1391,13 +1425,12 @@ mod tests {
             .context("Failed to allocate buffer for AVFrame")?;
 
         // 填充测试数据
+        // 交错格式 (AV_SAMPLE_FMT_FLT) 的数据布局：
+        // data[0]: [L1 R1 L2 R2 L3 R3 ...] (左右声道交错)
+        let total_samples = (nb_samples * nb_channels) as usize;
         unsafe {
-            let data = std::slice::from_raw_parts_mut(
-                frame.data[0] as *mut f32,
-                (nb_samples * nb_channels) as usize,
-            );
-            let total_samples = (nb_samples * nb_channels) as usize;
-            for i in 0..total_samples {
+            let data = std::slice::from_raw_parts_mut(frame.data[0] as *mut f32, total_samples);
+            for i in 0..data.len() {
                 // 交错格式本身就是按照样本点交错排列的
                 data[i] = (i / total_samples) as f32;
             }
@@ -1418,6 +1451,30 @@ mod tests {
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
         println!("{:#?}", first_sample);
         assert_eq!(first_sample.to_vec(), vec![0.0, 0.0]);
+
+        let converted_frame = media_frame.to_avframe().unwrap();
+        assert_eq!(converted_frame.format, ffi::AV_SAMPLE_FMT_FLT);
+        assert_eq!(converted_frame.nb_samples, nb_samples);
+        assert_eq!(converted_frame.sample_rate, sample_rate);
+        assert_eq!(converted_frame.linesize, frame.linesize);
+        assert_eq!(converted_frame.data.len(), frame.data.len());
+
+        // 验证转换后的数据
+        unsafe {
+            let original_data =
+                std::slice::from_raw_parts(frame.data[0] as *const f32, total_samples);
+            let converted_data =
+                std::slice::from_raw_parts(converted_frame.data[0] as *const f32, total_samples);
+
+            // 直接比较所有数据
+            for i in 0..original_data.len() {
+                assert_eq!(
+                    original_data[i], converted_data[i],
+                    "Mismatch at index {}",
+                    i
+                );
+            }
+        }
 
         Ok(())
     }

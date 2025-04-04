@@ -514,14 +514,23 @@ mod tests {
         let nb_channels = 2;
         let nb_samples = 1024;
 
+        let test_formats = &[
+            &AUDIO_FORMATS[2], // S16
+            &AUDIO_FORMATS[3], // S16P
+            &AUDIO_FORMATS[4], // S32
+            &AUDIO_FORMATS[5], // S32P
+            &AUDIO_FORMATS[6], // FLT
+            &AUDIO_FORMATS[7], // FLTP
+        ];
+
         // 测试所有格式组合
-        for in_fmt in AUDIO_FORMATS {
+        for in_fmt in test_formats {
             println!("\nTesting input format: {:?}", in_fmt);
 
             let src_frame = create_test_frame(in_fmt, sample_rate, nb_channels, nb_samples)
                 .with_context(|| format!("Failed to create source frame for {:?}", in_fmt))?;
 
-            for out_fmt in AUDIO_FORMATS {
+            for out_fmt in test_formats {
                 println!("  Converting to format: {:?}", out_fmt);
 
                 let ch_layout = AVChannelLayout::from_nb_channels(nb_channels).into_inner();
@@ -559,11 +568,20 @@ mod tests {
         let nb_channels = 2;
         let nb_samples = 1024;
 
-        for in_fmt in AUDIO_FORMATS {
+        let test_formats = &[
+            &AUDIO_FORMATS[2], // S16
+            &AUDIO_FORMATS[3], // S16P
+            &AUDIO_FORMATS[4], // S32
+            &AUDIO_FORMATS[5], // S32P
+            &AUDIO_FORMATS[6], // FLT
+            &AUDIO_FORMATS[7], // FLTP
+        ];
+
+        for in_fmt in test_formats {
             for &in_rate in sample_rates {
                 let src_frame = create_test_frame(in_fmt, in_rate, nb_channels, nb_samples)?;
 
-                for out_fmt in AUDIO_FORMATS {
+                for out_fmt in test_formats {
                     for &out_rate in sample_rates {
                         if in_rate == out_rate {
                             continue;

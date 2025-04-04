@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: linuxserver/ffmpeg:${{ matrix.ffmpeg_version }}
-      platform: ${{ matrix.platform }}
+      options: --platform=${{ matrix.platform }}
 
     strategy:
       fail-fast: false
@@ -238,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: linuxserver/ffmpeg:${{ matrix.ffmpeg_version }}
-      platform: ${{ matrix.platform }}
+      options: --platform=${{ matrix.platform }}
 
     strategy:
       fail-fast: false

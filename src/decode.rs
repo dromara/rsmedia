@@ -403,7 +403,8 @@ impl Decoder {
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
     fn _decode_raw(&mut self, packet: &AVPacket) -> DecodeRawResult {
-        assert!(!self.draining());
+        debug_assert!(!self.draining());
+
         self.send_packet_to_decoder(Some(packet)).unwrap();
         self.receive_frame_from_decoder()
     }
@@ -480,12 +481,12 @@ impl Decoder {
 
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
     fn receive_frame_from_decoder(&mut self) -> DecodeRawResult {
-        let decode_result = self.decoder_receive_frame();
-        let frame = match decode_result {
-            DecodeRawResult::Frame(frame) => frame,
-            _ => return decode_result,
+        let frame = match self.decoder_receive_frame() {
+            DecodeRawResult::Frame(f) => f,
+            other => return other,
         };
 
+        // hardware acceleration decoding
         let sw_frame = self
             .hw_context
             .as_ref()

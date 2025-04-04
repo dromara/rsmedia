@@ -240,7 +240,7 @@ impl EncoderBuilder {
     /// # Return value
     ///
     /// New encoder with settings applied.
-    fn apply_to(&self, encoder: &mut AVCodecContext, media_type: MediaType) {
+    fn setup_codec_context(&self, encoder: &mut AVCodecContext, media_type: MediaType) {
         if media_type == MediaType::VIDEO {
             encoder.set_width(self.width as i32);
             encoder.set_height(self.height as i32);
@@ -302,7 +302,7 @@ impl EncoderBuilder {
             encode_ctx.set_flags(encode_ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
         }
 
-        self.apply_to(&mut encode_ctx, media_type);
+        self.setup_codec_context(&mut encode_ctx, media_type);
 
         let hw_context = self
             .hw_device_config
@@ -503,7 +503,7 @@ impl Encoder {
         );
 
         // send frame to encoder
-        self.filter_send_frame(Some(raw_frame)).unwrap();
+        self.send_frame_to_encoder(Some(raw_frame)).unwrap();
 
         // Increment frame count regardless of whether frame is written,
         self.frame_count += 1;
@@ -511,50 +511,50 @@ impl Encoder {
         self.receive_packet()
     }
 
-    fn filter_send_frame(&mut self, frame_opt: Option<RawFrame>) -> Result<()> {
-        let mut hw_frame = if let Some(frame) = frame_opt {
-            if self.media_type == MediaType::VIDEO {
-                let (dst_w, dst_h, dst_pix_fmt) = self.rescale;
-
-                // rescale frame if necessary
-                let is_scale_needed = !(frame.width == dst_w as i32
-                    && frame.height == dst_h as i32
-                    && frame.format == dst_pix_fmt.into());
-                let scaled_frame = if is_scale_needed {
-                    swctx::scale(&frame, dst_w as i32, dst_h as i32, dst_pix_fmt)?
-                } else {
-                    frame
-                };
-
-                let hw_frame = match self.hw_context.as_ref() {
-                    Some(hw_ctx) if hw_ctx.is_sw_frame(&scaled_frame) => {
-                        // sw_frame -> hw_frame
-                        hw_ctx
-                            .hw_upload(&mut self.encode_ctx, &scaled_frame)
-                            .map_err(|e| {
-                                Error::msg(format!("HWContext failed to upload frame: {}", e))
-                            })?
-                    }
-                    _ => scaled_frame.clone(),
-                };
-                Some(hw_frame)
-            } else {
-                // audio frame
-                Some(frame)
-            }
-        } else {
-            None
+    fn send_frame_to_encoder(&mut self, frame_opt: Option<RawFrame>) -> Result<()> {
+        let frame = match (self.media_type, frame_opt) {
+            (MediaType::VIDEO, Some(f)) => Some(self.process_video_frame(f)?),
+            (MediaType::AUDIO, Some(f)) => Some(f),
+            (_, None) => None,
+            _ => return Err(Error::msg("Invalid frame type")),
         };
 
-        if let Some(f) = hw_frame.as_mut() {
-            // Video Producer key frame every once in a while
-            if self.media_type == MediaType::VIDEO && self.frame_count % self.keyframe_interval == 0
-            {
-                f.set_pict_type(ffi::AV_PICTURE_TYPE_I);
-            }
+        Ok(self.encode_ctx.send_frame(frame.as_ref())?)
+    }
+
+    fn process_video_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
+        let (dst_w, dst_h, dst_pix_fmt) = self.rescale;
+
+        // scale frame if necessary
+        let is_scale_needed = !(frame.width == dst_w as i32
+            && frame.height == dst_h as i32
+            && frame.format == dst_pix_fmt.into());
+
+        let mut scaled = if is_scale_needed {
+            swctx::scale(&frame, dst_w as i32, dst_h as i32, dst_pix_fmt)?
+        } else {
+            frame
+        };
+
+        // Video Producer key frame every once in a while
+        if self.frame_count % self.keyframe_interval == 0 {
+            scaled.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
 
-        Ok(self.encode_ctx.send_frame(hw_frame.as_ref())?)
+        // hw acceleration
+        let hw_frame = match self.hw_context.as_ref() {
+            Some(hw_ctx) if hw_ctx.is_sw_frame(&scaled) => {
+                // sw_frame -> hw_frame
+                hw_ctx
+                    .hw_upload(&mut self.encode_ctx, &scaled)
+                    .map_err(|e| {
+                        Error::msg(format!("HWContext failed to upload frame: {}", e))
+                    })?
+            }
+            _ => scaled.clone(),
+        };
+
+        Ok(hw_frame)
     }
 
     /// Get encoder time base.
@@ -637,7 +637,7 @@ impl Encoder {
         }
 
         // EOF: Notify the encoder that the last frame has been sent.
-        self.filter_send_frame(None)?;
+        self.send_frame_to_encoder(None)?;
 
         // drain the items still on the queue before giving up.
         loop {

@@ -695,8 +695,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use rsmpeg::avcodec::AVCodec;
+    use std::time::Duration;
 
     fn create_test_pattern(width: usize, height: usize) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         let mut r = vec![0u8; width * height];

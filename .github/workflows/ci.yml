@@ -32,6 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
+        ffmpeg_version: ["6.1", "7.1"]
         include:
           - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
@@ -246,6 +247,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
+        ffmpeg_version: ["6.1", "7.1"]
         include:
           - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"

@@ -121,8 +121,9 @@ impl DecoderBuilder {
 
         let time_base = input_stream.time_base;
         let mut decode_ctx = AVCodecContext::new(&codec);
-        decode_ctx.set_flags(self.flags as i32);
         decode_ctx.apply_codecpar(&input_stream.codecpar())?;
+        decode_ctx.set_flags(self.flags as i32);
+        decode_ctx.set_time_base(time_base);
         if let Some(framerate) = input_stream.guess_framerate() {
             decode_ctx.set_framerate(framerate);
         }
@@ -569,9 +570,9 @@ impl Decoder {
 
     fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
         if let Some((nb_channels, sample_rate, sample_fmt)) = self.resample {
-            let is_resample_needed = !(frame.format == sample_fmt as i32
+            let is_resample_needed = !(frame.ch_layout.nb_channels == nb_channels as i32
                 && frame.sample_rate == sample_rate as i32
-                && frame.ch_layout.nb_channels == nb_channels as i32);
+                && frame.format == sample_fmt as i32);
             if is_resample_needed {
                 swctx::convert_frame(
                     &frame,

@@ -219,15 +219,14 @@ pub fn clip_video(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cstr::cstr;
 
     #[test]
     #[ignore = "avio_writing_test0 测试运行依赖测试文件，暂时忽略"]
     fn avio_writing_test0() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
-            cstr!("tests/assets/vids/mov_sample.mov"),
-            cstr!("tests/output/avio_writing/mov_sample.mp4"),
+            c"tests/assets/vids/mov_sample.mov",
+            c"tests/output/avio_writing/mov_sample.mp4",
         )
         .unwrap();
     }
@@ -237,8 +236,8 @@ mod tests {
     fn avio_writing_test1() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
-            cstr!("tests/assets/vids/centaur.mpg"),
-            cstr!("tests/output/avio_writing/centaur.mp4"),
+            c"tests/assets/vids/centaur.mpg",
+            c"tests/output/avio_writing/centaur.mp4",
         )
         .unwrap();
     }
@@ -248,8 +247,8 @@ mod tests {
     fn avio_writing_test2() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
-            cstr!("tests/assets/vids/bear.mp4"),
-            cstr!("tests/output/avio_writing/bear.mp4"),
+            c"tests/assets/vids/bear.mp4",
+            c"tests/output/avio_writing/bear.mp4",
         )
         .unwrap();
     }
@@ -259,8 +258,8 @@ mod tests {
     fn avio_writing_test3() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
-            cstr!("tests/assets/vids/vp8.mp4"),
-            cstr!("tests/output/avio_writing/vp8.mp4"),
+            c"tests/assets/vids/vp8.mp4",
+            c"tests/output/avio_writing/vp8.mp4",
         )
         .unwrap();
     }
@@ -270,8 +269,8 @@ mod tests {
     fn avio_writing_test4() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
-            cstr!("tests/assets/vids/big_buck_bunny.mp4"),
-            cstr!("tests/output/avio_writing/big_buck_bunny.mp4"),
+            c"tests/assets/vids/big_buck_bunny.mp4",
+            c"tests/output/avio_writing/big_buck_bunny.mp4",
         )
         .unwrap();
     }
@@ -281,8 +280,8 @@ mod tests {
     fn avio_writing_test5() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         transcoding(
-            cstr!("tests/assets/vids/with_pic.mp4"),
-            cstr!("tests/output/avio_writing/with_pic.mp4"),
+            c"tests/assets/vids/with_pic.mp4",
+            c"tests/output/avio_writing/with_pic.mp4",
         )
         .unwrap();
     }
@@ -292,8 +291,8 @@ mod tests {
     fn avio_writing_test6() {
         std::fs::create_dir_all("tests/output/avio_writing/").unwrap();
         clip_video(
-            cstr!("http://172.24.82.2/video/final_134_raw_2024-09-12-05-04_3980.mp4"),
-            cstr!("tests/output/avio_writing/clip_video.mp4"),
+            c"http://172.24.82.2/video/final_134_raw.mp4",
+            c"tests/output/avio_writing/clip_video.mp4",
             0.0,
             1.0,
         )

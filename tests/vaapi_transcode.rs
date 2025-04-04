@@ -1,7 +1,6 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/vaapi_transcode.c
 
 use anyhow::{anyhow, bail, Context, Error, Result};
-use cstr::cstr;
 use std::ffi::CStr;
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
@@ -366,10 +365,10 @@ fn vaapi_transcode_test_vaapi() {
     std::fs::create_dir_all("tests/output/vaapi_transcode/").unwrap();
 
     hw_transcode(
-        cstr!("tests/assets/vids/bear.mp4"),
-        cstr!("tests/output/vaapi_transcode/vaapi_transcode_h264_vaapi.mp4"),
-        cstr!("h264_vaapi"),
-        cstr!("h264_vaapi"),
+        c"tests/assets/vids/bear.mp4",
+        c"tests/output/vaapi_transcode/vaapi_transcode_h264_vaapi.mp4",
+        c"h264_vaapi",
+        c"h264_vaapi",
         AV_HWDEVICE_TYPE_VAAPI,
         AV_PIX_FMT_VAAPI,
         AV_PIX_FMT_NV12,
@@ -382,10 +381,10 @@ fn vaapi_transcode_test_vaapi() {
 fn nvenc_transcode_test_nvenc() {
     std::fs::create_dir_all("tests/output/nvenc_transcode/").unwrap();
     hw_transcode(
-        cstr!("tests/assets/vids/bear.mp4"),
-        cstr!("tests/output/nvenc_transcode/nvenc_transcode_h264_nvenc.mp4"),
-        cstr!("h264_cuvid"),
-        cstr!("h264_nvenc"),
+        c"tests/assets/vids/bear.mp4",
+        c"tests/output/nvenc_transcode/nvenc_transcode_h264_nvenc.mp4",
+        c"h264_cuvid",
+        c"h264_nvenc",
         AV_HWDEVICE_TYPE_CUDA,
         AV_PIX_FMT_CUDA,
         AV_PIX_FMT_NV12,

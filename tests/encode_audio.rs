@@ -7,7 +7,6 @@ use rsmpeg::{
     ffi,
 };
 
-use cstr::cstr;
 use rsmpeg::avformat::AVFormatContextOutput;
 use rsmpeg::error::RsmpegError;
 use std::ffi::CStr;
@@ -359,7 +358,7 @@ fn encode_audio(
 fn test_encode_audio_aac() {
     // aac 有损格式 (192kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.aac"),
+        c"/tmp/encode_audio_output.aac",
         ffi::AV_CODEC_ID_AAC,
         ffi::AV_SAMPLE_FMT_FLTP,
         192_000,
@@ -373,7 +372,7 @@ fn test_encode_audio_aac() {
 fn test_encode_audio_m4a() {
     // m4a AAC容器 (256kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.m4a"),
+        c"/tmp/encode_audio_output.m4a",
         ffi::AV_CODEC_ID_AAC,
         ffi::AV_SAMPLE_FMT_FLTP,
         256_000,
@@ -387,7 +386,7 @@ fn test_encode_audio_m4a() {
 fn test_encode_audio_caf() {
     // caf ALAC无损格式
     encode_audio(
-        cstr!("/tmp/encode_audio_output.caf"),
+        c"/tmp/encode_audio_output.caf",
         ffi::AV_CODEC_ID_ALAC,
         ffi::AV_SAMPLE_FMT_S32P,
         0,
@@ -401,7 +400,7 @@ fn test_encode_audio_caf() {
 fn test_encode_audio_mp3() {
     // mp3 有损格式 (128kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.mp3"),
+        c"/tmp/encode_audio_output.mp3",
         ffi::AV_CODEC_ID_MP3,
         ffi::AV_SAMPLE_FMT_S16P,
         128_000,
@@ -415,7 +414,7 @@ fn test_encode_audio_mp3() {
 fn test_encode_audio_flac() {
     // flac 无损格式 (24-bit)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.flac"),
+        c"/tmp/encode_audio_output.flac",
         ffi::AV_CODEC_ID_FLAC,
         ffi::AV_SAMPLE_FMT_S16,
         0,
@@ -429,7 +428,7 @@ fn test_encode_audio_flac() {
 fn test_encode_audio_wav() {
     // wav - EBU R128标准 (24-bit/48kHz)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.wav"),
+        c"/tmp/encode_audio_output.wav",
         ffi::AV_CODEC_ID_PCM_S24LE,
         ffi::AV_SAMPLE_FMT_S32,
         2304_000,
@@ -443,7 +442,7 @@ fn test_encode_audio_wav() {
 fn test_encode_audio_wav_16bit() {
     // WAV - 16-bit PCM
     encode_audio(
-        cstr!("/tmp/encode_audio_output_16bit.wav"),
+        c"/tmp/encode_audio_output_16bit.wav",
         ffi::AV_CODEC_ID_PCM_S16LE,
         ffi::AV_SAMPLE_FMT_S16,
         1536_000, // 48kHz * 16bit * 2ch
@@ -457,7 +456,7 @@ fn test_encode_audio_wav_16bit() {
 fn test_encode_audio_ac3() {
     // AC3 - 5.1声道 (640kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.ac3"),
+        c"/tmp/encode_audio_output.ac3",
         ffi::AV_CODEC_ID_AC3,
         ffi::AV_SAMPLE_FMT_FLTP,
         640_000,
@@ -471,7 +470,7 @@ fn test_encode_audio_ac3() {
 fn test_encode_audio_opus() {
     // Opus - 低延迟语音编码 (64kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.opus"),
+        c"/tmp/encode_audio_output.opus",
         ffi::AV_CODEC_ID_OPUS,
         ffi::AV_SAMPLE_FMT_FLT,
         64_000,
@@ -485,7 +484,7 @@ fn test_encode_audio_opus() {
 fn test_encode_audio_ogg_vorbis() {
     // Vorbis - OGG容器 (128kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.ogg"),
+        c"/tmp/encode_audio_output.ogg",
         ffi::AV_CODEC_ID_VORBIS,
         ffi::AV_SAMPLE_FMT_FLTP,
         128_000,
@@ -499,7 +498,7 @@ fn test_encode_audio_ogg_vorbis() {
 fn test_encode_audio_wmav2() {
     // WMA - Windows Media Audio (128kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.wma"),
+        c"/tmp/encode_audio_output.wma",
         ffi::AV_CODEC_ID_WMAV2,
         ffi::AV_SAMPLE_FMT_FLTP,
         128_000,
@@ -513,7 +512,7 @@ fn test_encode_audio_wmav2() {
 fn test_encode_audio_aiff() {
     // AIFF - Apple无压缩格式 (24-bit)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.aiff"),
+        c"/tmp/encode_audio_output.aiff",
         ffi::AV_CODEC_ID_PCM_S24BE,
         ffi::AV_SAMPLE_FMT_S32,
         0,
@@ -527,7 +526,7 @@ fn test_encode_audio_aiff() {
 fn test_encode_audio_amr() {
     // AMR-NB - 移动语音编码 (12.2kbps)
     encode_audio(
-        cstr!("/tmp/encode_audio_output.amr"),
+        c"/tmp/encode_audio_output.amr",
         ffi::AV_CODEC_ID_AMR_NB,
         ffi::AV_SAMPLE_FMT_S16,
         12200,

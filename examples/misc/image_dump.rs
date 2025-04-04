@@ -11,17 +11,16 @@ fn image_dump(image_path: &CStr) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cstr::cstr;
 
     #[test]
     #[ignore = "image_dump_test 测试运行依赖测试文件，暂时忽略"]
     fn image_dump_test() {
-        image_dump(cstr!("tests/assets/pics/bear.jpg")).unwrap();
-        image_dump(cstr!("tests/assets/pics/gif.webp")).unwrap();
-        image_dump(cstr!("tests/assets/pics/mail.jpg")).unwrap();
-        image_dump(cstr!("tests/assets/pics/mountain.jpg")).unwrap();
-        image_dump(cstr!("tests/assets/pics/pink.jpg")).unwrap();
-        image_dump(cstr!("tests/assets/pics/redwine.jpg")).unwrap();
-        image_dump(cstr!("tests/assets/pics/sea.jpg")).unwrap();
+        image_dump(c"tests/assets/pics/bear.jpg").unwrap();
+        image_dump(c"tests/assets/pics/gif.webp").unwrap();
+        image_dump(c"tests/assets/pics/mail.jpg").unwrap();
+        image_dump(c"tests/assets/pics/mountain.jpg").unwrap();
+        image_dump(c"tests/assets/pics/pink.jpg").unwrap();
+        image_dump(c"tests/assets/pics/redwine.jpg").unwrap();
+        image_dump(c"tests/assets/pics/sea.jpg").unwrap();
     }
 }

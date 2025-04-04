@@ -122,7 +122,6 @@ fn thumbnail(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cstr::cstr;
 
     #[test]
     #[ignore = "thumbnail_test0 测试运行依赖测试文件，暂时忽略"]
@@ -130,8 +129,8 @@ mod tests {
         std::fs::create_dir_all("tests/output/thumbnail").unwrap();
 
         thumbnail(
-            cstr!("tests/assets/vids/bear.mp4"),
-            cstr!("tests/output/thumbnail/bear.jpg"),
+            c"tests/assets/vids/bear.mp4",
+            c"tests/output/thumbnail/bear.jpg",
             Some(192),
             Some(108),
         )
@@ -144,8 +143,8 @@ mod tests {
         std::fs::create_dir_all("tests/output/thumbnail").unwrap();
 
         thumbnail(
-            cstr!("tests/assets/vids/video.mp4"),
-            cstr!("tests/output/thumbnail/test1_video.jpg"),
+            c"tests/assets/vids/video.mp4",
+            c"tests/output/thumbnail/test1_video.jpg",
             Some(280),
             Some(240),
         )
@@ -158,8 +157,8 @@ mod tests {
         std::fs::create_dir_all("tests/output/thumbnail").unwrap();
 
         thumbnail(
-            cstr!("http://172.24.82.2/video/final_134_raw_2024-09-12-05-04_3980.mp4"),
-            cstr!("tests/output/thumbnail/test2_video.jpg"),
+            c"http://172.24.82.2/video/final_134_raw.mp4",
+            c"tests/output/thumbnail/test2_video.jpg",
             Some(900),
             Some(600),
         )

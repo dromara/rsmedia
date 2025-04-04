@@ -39,7 +39,6 @@ rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-f
 
 [dev-dependencies]
 libc = "0.2"
-cstr = "0.2"
 camino = "1.1"
 chrono = "0.4"
 ringbuf = "0.4"

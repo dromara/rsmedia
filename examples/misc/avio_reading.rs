@@ -93,12 +93,12 @@ mod tests {
     #[test]
     #[ignore = "test_avio_reading0 测试运行依赖测试文件，暂时忽略"]
     fn test_avio_reading0() {
-        avio_file_reading(cstr::cstr!("tests/assets/vids/bear.mp4")).unwrap();
+        avio_file_reading(c"tests/assets/vids/bear.mp4").unwrap();
     }
 
     #[test]
     #[ignore = "test_avio_reading1 测试运行依赖测试文件，暂时忽略"]
     fn test_avio_reading1() {
-        avio_file_reading(cstr::cstr!("tests/assets/vids/centaur.mpg")).unwrap();
+        avio_file_reading(c"tests/assets/vids/centaur.mpg").unwrap();
     }
 }

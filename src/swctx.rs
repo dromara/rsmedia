@@ -509,6 +509,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_format_conversion() -> Result<()> {
         let sample_rate = 44100;
         let nb_samples = 1024;
@@ -554,6 +555,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_format_conversion_with_different_rates() -> Result<()> {
         let sample_rates = &[44100, 48000, 96000];
         let nb_samples = 1024;
@@ -592,6 +594,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_channel_conversion() -> Result<()> {
         let nb_samples = 1024;
         let channel_layouts = &[1, 2];

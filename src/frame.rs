@@ -696,6 +696,7 @@ where
 mod tests {
     use super::*;
     use std::time::Duration;
+    use rsmpeg::avcodec::AVCodec;
 
     fn create_test_pattern(width: usize, height: usize) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         let mut r = vec![0u8; width * height];
@@ -1419,5 +1420,16 @@ mod tests {
         assert_eq!(first_sample.to_vec(), vec![0.0, 0.0]);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_get_audio_buffer() {
+        let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).unwrap();
+        println!("aac sample_fmts:{:#?}", encoder.sample_fmts());
+        let mut frame = AVFrame::new();
+        frame.set_nb_samples(2);
+        frame.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
+        frame.set_format(encoder.sample_fmts().unwrap()[0]);
+        assert!(frame.alloc_buffer().is_ok());
     }
 }

@@ -96,7 +96,7 @@ jobs:
         run: cargo build --no-default-features --features ${{ matrix.feature }} --verbose
 
       - name: Run Test
-        run: cargo test --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
+        run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-macos:
     name: build / macos / latest ffmpeg
@@ -302,7 +302,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Test
-        run: cargo test --all --all-features --verbose -- --nocapture
+        run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   lints:
     name: Rust fmt & Clippy check

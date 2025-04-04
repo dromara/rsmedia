@@ -1324,7 +1324,7 @@ mod tests {
     #[test]
     fn test_audio_planar_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 2;
+        let nb_samples = 1024;
         let sample_rate = 44100;
 
         // 创建测试音频帧
@@ -1376,7 +1376,7 @@ mod tests {
     #[test]
     fn test_audio_interleaved_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 2;
+        let nb_samples = 1024;
         let sample_rate = 44100;
 
         let mut frame = AVFrame::new();

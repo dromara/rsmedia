@@ -551,7 +551,7 @@ mod tests {
     fn test_mux_demux_audio_aac() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_audio_aac.aac");
         let sample_rate = 44_100;
-        let nb_samples = 2;
+        let nb_samples = 1024;
         let channels = 2;
 
         // 添加音频流
@@ -624,7 +624,7 @@ mod tests {
         let output_path = Path::new("/tmp/test_mux_demux_audio_mp3.mp3");
         let sample_rate = 44_100;
         let bit_rate = 128_000;
-        let nb_samples = 2;
+        let nb_samples = 1024;
         let channels = 2;
 
         // 修改音频编码器为MP3

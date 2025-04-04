@@ -23,8 +23,7 @@ jobs:
     name: build / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
     container:
-      image: linuxserver/ffmpeg:${{ matrix.ffmpeg_version }}
-      options: --platform=${{ matrix.platform }}
+      image: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
 
     env:
       DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
@@ -34,11 +33,9 @@ jobs:
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
         include:
-          # FFmpeg 6.x
-          - ffmpeg_version: "6.1.1"
+          - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
-          # FFmpeg 7.x
-          - ffmpeg_version: "7.1.1"
+          - ffmpeg_version: "7.1"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
 
     steps:
@@ -240,8 +237,7 @@ jobs:
     name: test / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
     container:
-      image: linuxserver/ffmpeg:${{ matrix.ffmpeg_version }}
-      options: --platform=${{ matrix.platform }}
+      image: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
 
     env:
       DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
@@ -251,11 +247,9 @@ jobs:
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
         include:
-          # FFmpeg 6.x
-          - ffmpeg_version: "6.1.1"
+          - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
-          # FFmpeg 7.x
-          - ffmpeg_version: "7.1.1"
+          - ffmpeg_version: "7.1"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
 
     steps:

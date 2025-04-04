@@ -100,7 +100,7 @@ impl Time {
         }
     }
 
-    /// Whether or not the [`Time`] has a time at all.
+    /// Whether the [`Time`] has a time at all.
     pub fn has_value(&self) -> bool {
         self.time.is_some()
     }

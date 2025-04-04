@@ -556,6 +556,14 @@ impl Encoder {
             frame
         };
 
+        // ensure timebase matches encoder timebase
+        // let dst_time_base = self.encode_ctx.time_base;
+        // if scaled.pts != ffi::AV_NOPTS_VALUE {
+        //     let new_pts = avutil::av_rescale_q(scaled.pts, scaled.time_base, dst_time_base);
+        //     scaled.set_pts(new_pts);
+        //     scaled.set_time_base(dst_time_base);
+        // }
+
         // Video Producer key frame every once in a while
         if self.frame_count % self.keyframe_interval == 0 {
             scaled.set_pict_type(ffi::AV_PICTURE_TYPE_I);
@@ -578,19 +586,32 @@ impl Encoder {
     fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
         // resample frame if necessary
         if let Some((nb_channels, sample_rate, dst_sample_fmt)) = self.resample {
-            let is_resample_needed = !(frame.ch_layout.nb_channels == nb_channels as i32
-                && frame.sample_rate == sample_rate as i32
+            let src_sample_rate = frame.sample_rate;
+            let src_nb_channels = frame.ch_layout.nb_channels;
+
+            let is_resample_needed = !(src_nb_channels == nb_channels as i32
+                && src_sample_rate == sample_rate as i32
                 && frame.format == dst_sample_fmt as i32);
-            if is_resample_needed {
+
+            let out_frame = if is_resample_needed {
                 swctx::convert_frame(
                     &frame,
                     AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner(),
                     sample_rate as i32,
                     dst_sample_fmt as i32,
-                )
+                )?
             } else {
-                Ok(frame)
-            }
+                frame
+            };
+
+            // ensure timebase matches encoder timebase
+            // let dst_time_base = self.encode_ctx.time_base;
+            // if src_pts != ffi::AV_NOPTS_VALUE {
+            //     let new_pts = avutil::av_rescale_q(src_pts, src_time_base, dst_time_base);
+            //     out_frame.set_pts(new_pts);
+            // }
+
+            Ok(out_frame)
         } else {
             Ok(frame)
         }

@@ -570,19 +570,33 @@ impl Decoder {
 
     fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
         if let Some((nb_channels, sample_rate, sample_fmt)) = self.resample {
-            let is_resample_needed = !(frame.ch_layout.nb_channels == nb_channels as i32
-                && frame.sample_rate == sample_rate as i32
+            let src_sample_rate = frame.sample_rate;
+            let src_nb_channels = frame.ch_layout.nb_channels;
+
+            let is_resample_needed = !(src_nb_channels == nb_channels as i32
+                && src_sample_rate == sample_rate as i32
                 && frame.format == sample_fmt as i32);
-            if is_resample_needed {
+
+            let out_frame = if is_resample_needed {
                 swctx::convert_frame(
                     &frame,
                     AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner(),
                     sample_rate as i32,
                     sample_fmt as i32,
-                )
+                )?
             } else {
-                Ok(frame)
-            }
+                frame
+            };
+
+            // ensure timebase are correct
+            // let dst_time_base = self.decode_ctx.time_base;
+            // if src_pts != ffi::AV_NOPTS_VALUE {
+            //     let new_pts = avutil::av_rescale_q(src_pts, src_time_base, dst_time_base);
+            //     out_frame.set_pts(new_pts);
+            //     out_frame.set_time_base(dst_time_base);
+            // }
+
+            Ok(out_frame)
         } else {
             Ok(frame)
         }

@@ -349,23 +349,35 @@ impl EncoderBuilder {
             .open(dict)
             .context("Failed to open encode context")?;
 
-        // get encoder target pixel format for codec context,
-        // if hardware acceleration is enabled, use the format of the hardware context
-        // otherwise, YUV420P is used as the default format
-        let target_format = hw_context
-            .as_ref()
-            .and_then(|_| encode_ctx.hw_frames_ctx_mut())
-            .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
-            .unwrap_or(PixelFormat::YUV420P);
+        let rescale = {
+            // get encoder target pixel format for codec context,
+            // if hardware acceleration is enabled, use the format of the hardware context
+            // otherwise, YUV420P is used as the default format
+            let target_format = hw_context
+                .as_ref()
+                .and_then(|_| encode_ctx.hw_frames_ctx_mut())
+                .map(|mut ctx| PixelFormat::from(ctx.data().sw_format))
+                .unwrap_or(PixelFormat::YUV420P);
+            Some((
+                encode_ctx.width as usize,
+                encode_ctx.height as usize,
+                target_format,
+            ))
+        };
 
-        let rescale = (
-            encode_ctx.width as usize,
-            encode_ctx.height as usize,
-            target_format,
-        );
+        let resample = if media_type == MediaType::AUDIO {
+            Some((
+                encode_ctx.ch_layout.nb_channels as usize,
+                encode_ctx.sample_rate as usize,
+                SampleFormat::from(encode_ctx.sample_fmt),
+            ))
+        } else {
+            None
+        };
 
         Ok(Encoder {
             rescale,
+            resample,
             encode_ctx,
             hw_context,
             media_type,
@@ -427,7 +439,10 @@ impl Default for EncoderBuilder {
 pub struct Encoder {
     encode_ctx: AVCodecContext,
     hw_context: Option<Arc<HWContext>>,
-    rescale: (usize, usize, PixelFormat),
+    // video rescaling: (width, height, pixel_format)
+    rescale: Option<(usize, usize, PixelFormat)>,
+    // audio resampling: (nb_channels, sample_rate, sample_format)
+    resample: Option<(usize, usize, SampleFormat)>,
     media_type: MediaType,
     frame_count: u64,
     keyframe_interval: u64,
@@ -518,7 +533,7 @@ impl Encoder {
     fn send_frame_to_encoder(&mut self, frame_opt: Option<RawFrame>) -> Result<()> {
         let frame = match (self.media_type, frame_opt) {
             (MediaType::VIDEO, Some(f)) => Some(self.process_video_frame(f)?),
-            (MediaType::AUDIO, Some(f)) => Some(f),
+            (MediaType::AUDIO, Some(f)) => Some(self.process_audio_frame(f)?),
             (_, None) => None,
             _ => return Err(Error::msg("Invalid frame type")),
         };
@@ -527,15 +542,16 @@ impl Encoder {
     }
 
     fn process_video_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
-        let (dst_w, dst_h, dst_pix_fmt) = self.rescale;
-
-        // scale frame if necessary
-        let is_scale_needed = !(frame.width == dst_w as i32
-            && frame.height == dst_h as i32
-            && frame.format == dst_pix_fmt.into());
-
-        let mut scaled = if is_scale_needed {
-            swctx::scale(&frame, dst_w as i32, dst_h as i32, dst_pix_fmt)?
+        let mut scaled = if let Some((dst_w, dst_h, dst_pix_fmt)) = self.rescale {
+            // scale frame if necessary
+            let is_scale_needed = !(frame.width == dst_w as i32
+                && frame.height == dst_h as i32
+                && frame.format == dst_pix_fmt.into());
+            if is_scale_needed {
+                swctx::scale(&frame, dst_w as i32, dst_h as i32, dst_pix_fmt)?
+            } else {
+                frame
+            }
         } else {
             frame
         };
@@ -557,6 +573,27 @@ impl Encoder {
         };
 
         Ok(hw_frame)
+    }
+
+    fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
+        // resample frame if necessary
+        if let Some((nb_channels, sample_rate, dst_sample_fmt)) = self.resample {
+            let is_resample_needed = !(frame.ch_layout.nb_channels == nb_channels as i32
+                && frame.sample_rate == sample_rate as i32
+                && frame.format == dst_sample_fmt as i32);
+            if is_resample_needed {
+                swctx::convert_frame(
+                    &frame,
+                    AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner(),
+                    sample_rate as i32,
+                    dst_sample_fmt as i32,
+                )
+            } else {
+                Ok(frame)
+            }
+        } else {
+            Ok(frame)
+        }
     }
 
     /// Get encoder time base.

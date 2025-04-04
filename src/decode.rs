@@ -6,9 +6,10 @@ use crate::io::Reader;
 use crate::options::Options;
 use crate::resize::Resize;
 use crate::stream::StreamInfo;
-use crate::{swctx, utils, MediaType, PixelFormat, RawFrame};
+use crate::{swctx, utils, MediaType, PixelFormat, RawFrame, SampleFormat};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
+use rsmpeg::avutil::AVChannelLayout;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -183,10 +184,22 @@ impl DecoderBuilder {
             None
         };
 
+        // audio resampling is not supported external settings available for now.
+        let resample = if media_type == MediaType::AUDIO {
+            Some((
+                decode_ctx.ch_layout.nb_channels as usize,
+                decode_ctx.sample_rate as usize,
+                SampleFormat::from(decode_ctx.sample_fmt),
+            ))
+        } else {
+            None
+        };
+
         Ok(Decoder {
             decode_ctx,
             hw_context,
             rescale,
+            resample,
             time_base,
             media_type,
             stream_index,
@@ -210,7 +223,10 @@ impl DecoderBuilder {
 pub struct Decoder {
     decode_ctx: AVCodecContext,
     hw_context: Option<Arc<HWContext>>,
+    // video rescaling: (width, height, pixel_format)
     rescale: Option<(usize, usize, PixelFormat)>,
+    // audio resampling: (nb_channels, sample_rate, sample_format)
+    resample: Option<(usize, usize, SampleFormat)>,
     time_base: ffi::AVRational,
     media_type: MediaType,
     stream_index: usize,
@@ -484,29 +500,13 @@ impl Decoder {
             other => return other,
         };
 
-        // hardware acceleration decoding
-        let sw_frame = self
-            .hw_context
-            .as_ref()
-            .and_then(|hw_ctx| {
-                if hw_ctx.is_hw_frame(&frame) {
-                    Some(hw_ctx.hw_download(&mut self.decode_ctx, &frame))
-                } else {
-                    log::warn!("Hardware acceleration decoding not available!");
-                    None
-                }
-            })
-            .map_or(Ok(frame), |result| {
-                result.map_err(|e| {
-                    log::error!("Failed to download frame from hw_device: {}", e);
-                    Error::msg(format!("HW frame download failed: {}", e))
-                })
-            })
-            .unwrap();
-
-        // filter chain processing
-        match self.rescale_frame(sw_frame) {
-            Ok(scaled_frame) => DecodeRawResult::Frame(scaled_frame),
+        let res = match self.media_type {
+            MediaType::VIDEO => self.process_video_frame(frame),
+            MediaType::AUDIO => self.process_audio_frame(frame),
+            _ => Ok(frame),
+        };
+        match res {
+            Ok(f) => DecodeRawResult::Frame(f),
             Err(e) => DecodeRawResult::Error(e),
         }
     }
@@ -532,19 +532,59 @@ impl Decoder {
     }
 
     /// Rescale frame if needed.
-    fn rescale_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
+    fn process_video_frame(&mut self, hw_frame: RawFrame) -> Result<RawFrame> {
+        // hardware acceleration decoding
+        let sw_frame = self
+            .hw_context
+            .as_ref()
+            .and_then(|hw_ctx| {
+                if hw_ctx.is_hw_frame(&hw_frame) {
+                    Some(hw_ctx.hw_download(&mut self.decode_ctx, &hw_frame))
+                } else {
+                    log::warn!("Hardware acceleration decoding not available!");
+                    None
+                }
+            })
+            .map_or(Ok(hw_frame), |result| {
+                result.map_err(|e| {
+                    log::error!("Failed to download frame from hw_device: {}", e);
+                    Error::msg(format!("HW frame download failed: {}", e))
+                })
+            })?;
+
+        // rescale
         if let Some((dst_w, dst_h, pix_fmt)) = self.rescale {
-            let is_scale_needed = !(frame.format == pix_fmt.into()
-                && frame.width == dst_w as i32
-                && frame.height == dst_h as i32);
-            let scaled_frame = if is_scale_needed {
-                swctx::scale(&frame, dst_w as i32, dst_h as i32, pix_fmt)?
+            let is_scale_needed = !(sw_frame.format == pix_fmt.into()
+                && sw_frame.width == dst_w as i32
+                && sw_frame.height == dst_h as i32);
+            if is_scale_needed {
+                swctx::scale(&sw_frame, dst_w as i32, dst_h as i32, pix_fmt)
             } else {
-                frame
-            };
-            return Ok(scaled_frame);
+                Ok(sw_frame)
+            }
+        } else {
+            Ok(sw_frame)
         }
-        Ok(frame)
+    }
+
+    fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
+        if let Some((nb_channels, sample_rate, sample_fmt)) = self.resample {
+            let is_resample_needed = !(frame.format == sample_fmt as i32
+                && frame.sample_rate == sample_rate as i32
+                && frame.ch_layout.nb_channels == nb_channels as i32);
+            if is_resample_needed {
+                swctx::convert_frame(
+                    &frame,
+                    AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner(),
+                    sample_rate as i32,
+                    sample_fmt as i32,
+                )
+            } else {
+                Ok(frame)
+            }
+        } else {
+            Ok(frame)
+        }
     }
 
     #[cfg(feature = "ndarray")]

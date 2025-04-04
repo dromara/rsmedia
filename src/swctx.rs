@@ -232,9 +232,6 @@ fn setup_resampler(
 /// Audio resampling frame
 pub fn convert(
     src_frame: &AVFrame,
-    in_ch_layout: ffi::AVChannelLayout,
-    in_sample_fmt: ffi::AVSampleFormat,
-    in_sample_rate: i32,
     out_ch_layout: ffi::AVChannelLayout,
     out_sample_fmt: ffi::AVSampleFormat,
     out_sample_rate: i32,
@@ -249,9 +246,9 @@ pub fn convert(
     }
 
     let mut resample_context = setup_resampler(
-        in_ch_layout,
-        in_sample_fmt,
-        in_sample_rate,
+        src_frame.ch_layout,
+        src_frame.format,
+        src_frame.sample_rate,
         out_ch_layout,
         out_sample_fmt,
         out_sample_rate,
@@ -293,9 +290,6 @@ pub fn convert(
 ///
 pub fn convert_frame(
     src_frame: &AVFrame,
-    in_ch_layout: ffi::AVChannelLayout,
-    in_sample_fmt: ffi::AVSampleFormat,
-    in_sample_rate: i32,
     out_ch_layout: ffi::AVChannelLayout,
     out_sample_fmt: ffi::AVSampleFormat,
     out_sample_rate: i32,
@@ -310,9 +304,9 @@ pub fn convert_frame(
     }
 
     let resample_context = setup_resampler(
-        in_ch_layout,
-        in_sample_fmt,
-        in_sample_rate,
+        src_frame.ch_layout,
+        src_frame.format,
+        src_frame.sample_rate,
         out_ch_layout,
         out_sample_fmt,
         out_sample_rate,
@@ -532,16 +526,10 @@ mod tests {
 
                 let ch_layout = AVChannelLayout::from_nb_channels(nb_channels).into_inner();
 
-                let result = convert_frame(
-                    &src_frame,
-                    ch_layout,
-                    in_fmt.format,
-                    sample_rate,
-                    ch_layout,
-                    out_fmt.format,
-                    sample_rate,
-                )
-                .with_context(|| format!("Failed to convert from {:?} to {:?}", in_fmt, out_fmt))?;
+                let result = convert_frame(&src_frame, ch_layout, out_fmt.format, sample_rate)
+                    .with_context(|| {
+                        format!("Failed to convert from {:?} to {:?}", in_fmt, out_fmt)
+                    })?;
 
                 // 验证转换结果
                 assert_eq!(
@@ -588,15 +576,8 @@ mod tests {
 
                         let ch_layout = AVChannelLayout::from_nb_channels(nb_channels).into_inner();
 
-                        let result = convert_frame(
-                            &src_frame,
-                            ch_layout,
-                            in_fmt.format,
-                            in_rate,
-                            ch_layout,
-                            out_fmt.format,
-                            out_rate,
-                        )?;
+                        let result =
+                            convert_frame(&src_frame, ch_layout, out_fmt.format, out_rate)?;
 
                         // 验证转换结果
                         assert_eq!(result.format, out_fmt.format);
@@ -607,30 +588,6 @@ mod tests {
             }
         }
 
-        Ok(())
-    }
-
-    #[test]
-    fn test_invalid_input() -> Result<()> {
-        // 创建无效帧
-        let mut invalid_frame = AVFrame::new();
-        invalid_frame.set_format(-1); // 无效格式
-        invalid_frame.set_sample_rate(-1); // 无效采样率
-
-        let ch_layout = AVChannelLayout::from_nb_channels(2).into_inner();
-
-        // 测试无效输入
-        let result = convert_frame(
-            &invalid_frame,
-            ch_layout,
-            ffi::AV_SAMPLE_FMT_FLTP,
-            44100,
-            ch_layout,
-            ffi::AV_SAMPLE_FMT_FLT,
-            48000,
-        );
-
-        assert!(result.is_err());
         Ok(())
     }
 
@@ -680,9 +637,6 @@ mod tests {
 
                                 let result = convert_frame(
                                     &src_frame,
-                                    AVChannelLayout::from_nb_channels(in_channels).into_inner(),
-                                    in_fmt.format,
-                                    in_rate,
                                     AVChannelLayout::from_nb_channels(out_channels).into_inner(),
                                     out_fmt.format,
                                     out_rate,

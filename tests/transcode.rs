@@ -219,10 +219,7 @@ fn init_filter<'graph>(
             .opt_set_bin(c"sample_fmts", &enc_ctx.sample_fmt)
             .context("Cannot set output sample format")?;
         buffersink_ctx
-            .opt_set(
-                c"ch_layouts",
-                &enc_ctx.ch_layout().describe().unwrap(),
-            )
+            .opt_set(c"ch_layouts", &enc_ctx.ch_layout().describe().unwrap())
             .context("Cannot set output channel layout")?;
         buffersink_ctx
             .opt_set_bin(c"sample_rates", &enc_ctx.sample_rate)

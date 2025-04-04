@@ -15,7 +15,7 @@ use rsmpeg::{
 };
 use std::{ffi::CStr, fs};
 
-fn _main(file: &CStr, out_dir: &str) -> Result<()> {
+fn dump_frame(file: &CStr, out_dir: &str) -> Result<()> {
     fs::create_dir_all(out_dir)?;
     let mut input_format_context = AVFormatContextInput::open(file, None, &mut None)?;
     input_format_context.dump(0, file)?;
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     #[ignore = "tutorial01_test0 测试运行依赖测试文件，暂时忽略"]
     fn tutorial01_test0() {
-        _main(
+        dump_frame(
             c"tests/assets/vids/centaur.mpg",
             "tests/output/tutorial01/centaur",
         )
@@ -106,7 +106,7 @@ mod tests {
     #[test]
     #[ignore = "tutorial01_test1 测试运行依赖测试文件，暂时忽略"]
     fn tutorial01_test1() {
-        _main(
+        dump_frame(
             c"tests/assets/vids/bear.mp4",
             "tests/output/tutorial01/bear",
         )
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     #[ignore = "tutorial01_test2 测试运行依赖测试文件，暂时忽略"]
     fn tutorial01_test2() {
-        _main(
+        dump_frame(
             c"tests/assets/vids/mov_sample.mov",
             "tests/output/tutorial01/mov_sample",
         )
@@ -126,10 +126,6 @@ mod tests {
     #[test]
     #[ignore = "tutorial01_test3 测试运行依赖测试文件，暂时忽略"]
     fn tutorial01_test3() {
-        _main(
-            c"tests/assets/vids/vp8.mp4",
-            "tests/output/tutorial01/vp8",
-        )
-        .unwrap();
+        dump_frame(c"tests/assets/vids/vp8.mp4", "tests/output/tutorial01/vp8").unwrap();
     }
 }

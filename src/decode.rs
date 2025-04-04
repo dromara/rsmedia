@@ -120,8 +120,6 @@ impl DecoderBuilder {
 
         let time_base = input_stream.time_base;
         let mut decode_ctx = AVCodecContext::new(&codec);
-        decode_ctx.set_time_base(time_base);
-        decode_ctx.set_pkt_timebase(time_base);
         decode_ctx.set_flags(self.flags as i32);
         decode_ctx.apply_codecpar(&input_stream.codecpar())?;
         if let Some(framerate) = input_stream.guess_framerate() {

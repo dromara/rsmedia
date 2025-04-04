@@ -89,7 +89,6 @@ fn open_input_file(
     let mut decode_ctx = AVCodecContext::new(&decode_codec);
     let time_base = avutil::ra(1, 24);
     decode_ctx.set_time_base(time_base);
-    decode_ctx.set_pkt_timebase(video_stream.time_base);
     decode_ctx.set_sample_aspect_ratio(avutil::ra(1, 1));
     decode_ctx.apply_codecpar(&video_stream.codecpar())?;
 

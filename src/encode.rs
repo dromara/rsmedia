@@ -211,6 +211,10 @@ impl EncoderBuilder {
     }
 
     pub fn with_nb_channels(mut self, nb_channels: u32) -> Self {
+        assert!(
+            nb_channels > 0 && nb_channels < 9,
+            "nb_channels should be in range [1, 8]"
+        );
         self.nb_channels = nb_channels as i32;
         self
     }
@@ -547,9 +551,7 @@ impl Encoder {
                 // sw_frame -> hw_frame
                 hw_ctx
                     .hw_upload(&mut self.encode_ctx, &scaled)
-                    .map_err(|e| {
-                        Error::msg(format!("HWContext failed to upload frame: {}", e))
-                    })?
+                    .map_err(|e| Error::msg(format!("HWContext failed to upload frame: {}", e)))?
             }
             _ => scaled.clone(),
         };

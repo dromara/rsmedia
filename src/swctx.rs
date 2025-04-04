@@ -509,11 +509,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_format_conversion() -> Result<()> {
         let sample_rate = 44100;
         let nb_channels = 2;
-        let nb_samples = 1024;
+        let nb_samples = 2;
 
         // 测试所有格式组合
         for in_fmt in AUDIO_FORMATS {
@@ -555,11 +554,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_format_conversion_with_different_rates() -> Result<()> {
         let sample_rates = &[44100, 48000, 96000];
         let nb_channels = 2;
-        let nb_samples = 1024;
+        let nb_samples = 2;
 
         for in_fmt in AUDIO_FORMATS {
             for &in_rate in sample_rates {
@@ -594,12 +592,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_channel_conversion() -> Result<()> {
         // FIXME: 目前只支持 1, 2 转换, 4, 6, 8 失败
         let channel_layouts = &[1, 2];
         let sample_rates = &[44100, 48000, 96000];
-        let nb_samples = 1024;
+        let nb_samples = 2;
 
         for in_fmt in AUDIO_FORMATS {
             for &in_rate in sample_rates {

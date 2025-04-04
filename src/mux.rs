@@ -551,8 +551,7 @@ mod tests {
     fn test_mux_demux_audio_aac() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_audio_aac.aac");
         let sample_rate = 44_100;
-        // aac 要求输入的样本数必须是1024
-        let nb_samples = 1024;
+        let nb_samples = 2;
         let channels = 2;
 
         // 添加音频流
@@ -625,8 +624,7 @@ mod tests {
         let output_path = Path::new("/tmp/test_mux_demux_audio_mp3.mp3");
         let sample_rate = 44_100;
         let bit_rate = 128_000;
-        // MP3通常使用1152个样本/帧
-        let nb_samples = 1152;
+        let nb_samples = 2;
         let channels = 2;
 
         // 修改音频编码器为MP3

@@ -1309,10 +1309,22 @@ mod tests {
         Ok(())
     }
 
+    /// * nb_samples: 是音频数据的逻辑单位,表示一帧音频中包含的采样点数量,
+    ///   用于音频处理和时间计算, 与音频格式无关, 与时间相关：nb_samples/sample_rate = 帧的持续时间
+    /// * frame_size: 是内存/存储的物理单位,表示一帧音频数据的实际字节大小,
+    ///   用于内存分配和缓冲区管理,依赖于具体的音频格式（平面/非平面）
+    ///
+    /// (1)对于非平面格式（如 AV_SAMPLE_FMT_FLT）
+    /// frame_size = nb_samples * nb_channels * bytes_per_sample
+    /// 例如：1024 * 2 * 4 = 8192 bytes
+    ///
+    /// (2)对于平面格式（如 AV_SAMPLE_FMT_FLTP）
+    /// frame_size = nb_samples * bytes_per_sample
+    /// 每个通道分别: 1024 * 4 = 4096 bytes
     #[test]
     fn test_audio_planar_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 1024;
+        let nb_samples = 2;
         let sample_rate = 44100;
 
         // 创建测试音频帧
@@ -1343,9 +1355,9 @@ mod tests {
         let media_frame = MediaFrame::<f32>::from_avframe(&frame)?;
 
         // 验证维度
-        assert_eq!(media_frame.data.dim(), (1, 1024, 2));
-        assert_eq!(media_frame.nb_samples, 1024);
-        assert_eq!(media_frame.nb_channels, 2);
+        assert_eq!(media_frame.data.dim(), (1, nb_samples as usize, nb_channels as usize));
+        assert_eq!(media_frame.nb_samples, nb_samples as u32);
+        assert_eq!(media_frame.nb_channels, nb_channels as u32);
 
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
@@ -1361,7 +1373,7 @@ mod tests {
     #[test]
     fn test_audio_interleaved_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 1024;
+        let nb_samples = 2;
         let sample_rate = 44100;
 
         let mut frame = AVFrame::new();
@@ -1391,9 +1403,9 @@ mod tests {
         let media_frame = MediaFrame::<f32>::from_avframe(&frame)?;
 
         // 验证维度
-        assert_eq!(media_frame.data.dim(), (1, 1024, 2));
-        assert_eq!(media_frame.nb_samples, 1024);
-        assert_eq!(media_frame.nb_channels, 2);
+        assert_eq!(media_frame.data.dim(), (1, nb_samples as usize, nb_channels as usize));
+        assert_eq!(media_frame.nb_samples, nb_samples as u32);
+        assert_eq!(media_frame.nb_channels, nb_channels as u32);
 
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);

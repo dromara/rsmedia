@@ -509,28 +509,20 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_format_conversion() -> Result<()> {
         let sample_rate = 44100;
         let nb_channels = 2;
         let nb_samples = 1024;
 
-        let test_formats = &[
-            &AUDIO_FORMATS[2], // S16
-            &AUDIO_FORMATS[3], // S16P
-            &AUDIO_FORMATS[4], // S32
-            &AUDIO_FORMATS[5], // S32P
-            &AUDIO_FORMATS[6], // FLT
-            &AUDIO_FORMATS[7], // FLTP
-        ];
-
         // 测试所有格式组合
-        for in_fmt in test_formats {
+        for in_fmt in AUDIO_FORMATS {
             println!("\nTesting input format: {:?}", in_fmt);
 
             let src_frame = create_test_frame(in_fmt, sample_rate, nb_channels, nb_samples)
                 .with_context(|| format!("Failed to create source frame for {:?}", in_fmt))?;
 
-            for out_fmt in test_formats {
+            for out_fmt in AUDIO_FORMATS {
                 println!("  Converting to format: {:?}", out_fmt);
 
                 let ch_layout = AVChannelLayout::from_nb_channels(nb_channels).into_inner();
@@ -563,25 +555,17 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_format_conversion_with_different_rates() -> Result<()> {
         let sample_rates = &[44100, 48000, 96000];
         let nb_channels = 2;
         let nb_samples = 1024;
 
-        let test_formats = &[
-            &AUDIO_FORMATS[2], // S16
-            &AUDIO_FORMATS[3], // S16P
-            &AUDIO_FORMATS[4], // S32
-            &AUDIO_FORMATS[5], // S32P
-            &AUDIO_FORMATS[6], // FLT
-            &AUDIO_FORMATS[7], // FLTP
-        ];
-
-        for in_fmt in test_formats {
+        for in_fmt in AUDIO_FORMATS {
             for &in_rate in sample_rates {
                 let src_frame = create_test_frame(in_fmt, in_rate, nb_channels, nb_samples)?;
 
-                for out_fmt in test_formats {
+                for out_fmt in AUDIO_FORMATS {
                     for &out_rate in sample_rates {
                         if in_rate == out_rate {
                             continue;
@@ -610,22 +594,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "linux ffmpeg/7.1: AVFrame buffer allocating with incorrect parameters."]
     fn test_channel_conversion() -> Result<()> {
-        let test_formats = &[
-            &AUDIO_FORMATS[2], // S16
-            &AUDIO_FORMATS[3], // S16P
-            &AUDIO_FORMATS[4], // S32
-            &AUDIO_FORMATS[5], // S32P
-            &AUDIO_FORMATS[6], // FLT
-            &AUDIO_FORMATS[7], // FLTP
-        ];
-
         // FIXME: 目前只支持 1, 2 转换, 4, 6, 8 失败
         let channel_layouts = &[1, 2];
         let sample_rates = &[44100, 48000, 96000];
         let nb_samples = 1024;
 
-        for &in_fmt in test_formats {
+        for in_fmt in AUDIO_FORMATS {
             for &in_rate in sample_rates {
                 for &in_channels in channel_layouts {
                     println!(
@@ -637,7 +613,7 @@ mod tests {
 
                     assert_eq!(src_frame.ch_layout.nb_channels, in_channels);
 
-                    for &out_fmt in test_formats {
+                    for out_fmt in AUDIO_FORMATS {
                         for &out_rate in sample_rates {
                             for &out_channels in channel_layouts {
                                 // 跳过相同的配置

@@ -271,34 +271,62 @@ impl<R: Reader> Demuxer<R> {
     }
 
     pub fn demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
-        for i in 0..self.streams.len() {
-            // 先获取 stream_idx，避免后面重复借用
-            let stream_idx = self.streams[i].stream_idx;
-
-            // 使用实际的 stream_idx 检查状态
-            if self.is_flushed(stream_idx) {
-                continue;
-            }
-
-            // 然后获取stream的可变引用
-            let stream = &mut self.streams[i];
-
-            match stream.decoder.decode_raw(&mut self.reader) {
-                Ok(Some(frame)) => {
-                    return Ok(Some((stream_idx, frame)));
+        let mut read_exhausted = false;
+        loop {
+            if !read_exhausted {
+                match self.reader.read_packet() {
+                    Ok(Some((stream, packet))) => {
+                        let stream_idx = stream.index();
+                        // get demuxer stream
+                        let demux_stream = self
+                            .streams
+                            .iter_mut()
+                            .find(|s| s.stream_idx == stream_idx)
+                            .unwrap();
+                        if let Some(frame) = demux_stream.decoder.decode_raw_packet(&packet)? {
+                            return Ok(Some((stream_idx, frame)));
+                        }
+                    }
+                    Ok(None) => {
+                        log::debug!("No more packets, Reader exhausted.");
+                        read_exhausted = true;
+                        continue;
+                    }
+                    Err(e) => {
+                        log::error!("Error reading packet: {}", e);
+                        return Err(e);
+                    }
                 }
-                Ok(None) => {
-                    log::debug!("stream:{} Decoder Flushed.", stream_idx);
-                    self.set_flushed(stream_idx);
-                    continue;
+            } else {
+                for i in 0..self.streams.len() {
+                    // 先获取 stream_idx，避免后面重复借用
+                    let stream_idx = self.streams[i].stream_idx;
+
+                    // 使用实际的 stream_idx 检查状态
+                    if self.is_flushed(stream_idx) {
+                        continue;
+                    }
+
+                    // 然后获取stream的可变引用
+                    let demuxer_stream = &mut self.streams[i];
+                    match demuxer_stream.decoder.drain_raw() {
+                        Ok(Some(frame)) => {
+                            return Ok(Some((demuxer_stream.stream_idx, frame)));
+                        }
+                        Ok(None) => {
+                            log::debug!("Stream: [{}] Decoder flushed. EOF reached.", stream_idx);
+                            self.set_flushed(stream_idx);
+                            continue;
+                        }
+                        Err(e) => {
+                            log::error!("Stream: [{}] Decoder Drain Error: {}", stream_idx, e);
+                            return Err(e);
+                        }
+                    }
                 }
-                Err(e) => {
-                    log::error!("stream:{} Decoder Error: {}", stream_idx, e);
-                    return Err(e);
-                }
+                return Ok(None);
             }
         }
-        Ok(None)
     }
 }
 

@@ -334,7 +334,7 @@ impl Decoder {
                             log::debug!("skip stream index: {}, {:?}", stream.index(), packet);
                             continue;
                         }
-                        if let Some(frame) = self._decode(&packet)? {
+                        if let Some(frame) = self.decode_packet(&packet)? {
                             break Some(frame);
                         }
                     }
@@ -397,7 +397,7 @@ impl Decoder {
                             log::debug!("skip stream index: {}, {:?}", stream.index(), packet);
                             continue;
                         }
-                        if let Some(frame) = self._decode_raw(&packet)? {
+                        if let Some(frame) = self.decode_raw_packet(&packet)? {
                             break Some(frame);
                         }
                     }
@@ -473,11 +473,11 @@ impl Decoder {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    fn _decode<T>(&mut self, packet: &AVPacket) -> Result<Option<MediaFrame<T>>>
+    pub fn decode_packet<T>(&mut self, packet: &AVPacket) -> Result<Option<MediaFrame<T>>>
     where
         T: MediaFrameType,
     {
-        match self._decode_raw(packet) {
+        match self.decode_raw_packet(packet) {
             Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(&raw_frame)?)),
             Ok(None) => Ok(None),
             Err(e) => Err(e),
@@ -496,7 +496,7 @@ impl Decoder {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    fn _decode_raw(&mut self, packet: &AVPacket) -> Result<Option<RawFrame>> {
+    pub fn decode_raw_packet(&mut self, packet: &AVPacket) -> Result<Option<RawFrame>> {
         self.send_packet_to_decoder(Some(packet))?;
         self.receive_frame_from_decoder()
     }

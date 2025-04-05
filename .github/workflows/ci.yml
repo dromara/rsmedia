@@ -234,8 +234,8 @@ jobs:
           LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
         run: cargo test --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} --verbose -- --nocapture
 
-  test:
-    name: test / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
+  test_and_clippy:
+    name: test & Clippy check / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
     container:
       image: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
@@ -300,67 +300,34 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Clippy
+        run: cargo clippy --all --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
       - name: Test
         run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   lints:
-    name: Rust fmt & Clippy check
-    runs-on: ubuntu-latest
-    container: jrottenberg/ffmpeg:7.1-ubuntu
+    name: Rust fmt / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          DEBIAN_FRONTEND=noninteractive apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential \
-            ca-certificates \
-            clang \
-            lld \
-            nasm \
-            yasm \
-            curl \
-            wget \
-            gnupg \
-            libc6 \
-            libc6-dev \
-            libgcc-s1 \
-            linux-libc-dev \
-            binutils \
-            pkg-config \
-            libx264-dev \
-            libx265-dev \
-            libavcodec-dev \
-            libavformat-dev \
-            libavutil-dev \
-            libswscale-dev \
-            libswresample-dev \
-            libavdevice-dev \
-            libavfilter-dev \
-            libssl-dev \
-            librtmp-dev \
-            libvpx-dev \
-            libaom-dev \
-            libsvtav1-dev \
-            libxvidcore-dev \
-            libmp3lame-dev \
-            libopus-dev \
-            libvorbis-dev \
-            libfdk-aac-dev \
-            libasound2-dev
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          components: rustfmt, clippy
+          components: rustfmt
 
       - name: Rust fmt
         run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all --all-features  -- -D warnings

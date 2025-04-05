@@ -1,6 +1,6 @@
 use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
-use crate::frame::MediaFrame;
+use crate::frame::{MediaFrame, MediaFrameType};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
@@ -204,9 +204,16 @@ impl DecoderBuilder {
             time_base,
             media_type,
             stream_index,
-            draining: false,
+            state: DecoderState::Normal,
         })
     }
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DecoderState {
+    Normal,
+    Drained,
+    Flushed,
 }
 
 /// Decode video files and streams.
@@ -231,7 +238,7 @@ pub struct Decoder {
     time_base: ffi::AVRational,
     media_type: MediaType,
     stream_index: usize,
-    draining: bool,
+    state: DecoderState,
 }
 
 impl Decoder {
@@ -284,13 +291,12 @@ impl Decoder {
     }
 
     /// Check if decoder is in draining mode.
-    pub fn draining(&self) -> bool {
-        self.draining
+    pub fn is_drained(&self) -> bool {
+        self.state == DecoderState::Drained
     }
 
-    /// Set draining mode.
-    pub fn set_draining(&mut self, draining: bool) {
-        self.draining = draining;
+    pub fn is_flushed(&self) -> bool {
+        self.state == DecoderState::Flushed
     }
 
     /// Decode a single frame.
@@ -308,36 +314,121 @@ impl Decoder {
     /// }
     /// ```
     #[cfg(feature = "ndarray")]
-    pub fn decode<T>(&mut self, packet: &AVPacket) -> DecodeResult<T>
+    pub fn decode<T>(&mut self, reader: &mut impl Reader) -> Result<Option<MediaFrame<T>>>
     where
-        T: 'static
-            + Clone
-            + Copy
-            + Send
-            + Sync
-            + PartialOrd
-            + num_traits::Zero
-            + num_traits::NumCast
-            + num_traits::NumAssign,
+        T: MediaFrameType,
     {
-        if !self.draining() {
-            self._decode(packet)
-        } else {
-            self.drain()
+        if self.is_flushed() {
+            return Err(anyhow::anyhow!(
+                "Decoder cannot decode after flushed. Call reset()."
+            ));
         }
+
+        let mut read_exhausted = false;
+        Ok(loop {
+            if !read_exhausted {
+                match reader.read_packet() {
+                    Ok(Some((stream, packet))) => {
+                        if stream.index() != self.stream_index() {
+                            // skip other streams
+                            log::debug!("skip stream index: {}, {:?}", stream.index(), packet);
+                            continue;
+                        }
+                        if let Some(frame) = self._decode(&packet)? {
+                            break Some(frame);
+                        }
+                    }
+                    Ok(None) => {
+                        log::debug!("No more packets, Reader exhausted.");
+                        read_exhausted = true;
+                        continue;
+                    }
+                    Err(e) => {
+                        log::error!("Error reading packet: {}", e);
+                        return Err(e);
+                    }
+                }
+            } else {
+                match self.drain() {
+                    Ok(Some(frame)) => {
+                        break Some(frame);
+                    }
+                    Ok(None) => {
+                        log::debug!("Decoder flushed. EOF reached.");
+                        // self.reset();
+                        // read_exhausted = false;
+                        break None;
+                    }
+                    Err(e) => {
+                        log::error!("Error to drain decoder: {}", e);
+                        return Err(e);
+                    }
+                }
+            }
+        })
     }
 
     /// Decode a single frame and return the raw ffmpeg `AvFrame`.
     ///
+    /// # Arguments
+    ///
+    /// * `reader` - A [`Reader`] to read the source from.
+    ///
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`].
-    pub fn decode_raw(&mut self, packet: &AVPacket) -> DecodeRawResult {
-        if !self.draining() {
-            self._decode_raw(packet)
-        } else {
-            self.drain_raw()
+    pub fn decode_raw<R>(&mut self, reader: &mut R) -> Result<Option<RawFrame>>
+    where
+        R: Reader,
+    {
+        if self.is_flushed() {
+            return Err(anyhow::anyhow!(
+                "Decoder cannot decode after flushed. Call reset()."
+            ));
         }
+
+        let mut read_exhausted = false;
+        Ok(loop {
+            if !read_exhausted {
+                match reader.read_packet() {
+                    Ok(Some((stream, packet))) => {
+                        if stream.index() != self.stream_index() {
+                            // skip other streams
+                            log::debug!("skip stream index: {}, {:?}", stream.index(), packet);
+                            continue;
+                        }
+                        if let Some(frame) = self._decode_raw(&packet)? {
+                            break Some(frame);
+                        }
+                    }
+                    Ok(None) => {
+                        log::debug!("No more packets, Reader exhausted.");
+                        read_exhausted = true;
+                        continue;
+                    }
+                    Err(e) => {
+                        log::error!("Error reading packet: {}", e);
+                        return Err(e);
+                    }
+                }
+            } else {
+                match self.drain_raw() {
+                    Ok(Some(frame)) => {
+                        break Some(frame);
+                    }
+                    Ok(None) => {
+                        log::debug!("Decoder flushed. EOF reached.");
+                        // self.reset();
+                        // read_exhausted = false;
+                        break None;
+                    }
+                    Err(e) => {
+                        log::error!("Error to drain decoder: {}", e);
+                        return Err(e);
+                    }
+                }
+            }
+        })
     }
 
     // /// Seek in reader.
@@ -382,26 +473,14 @@ impl Decoder {
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    fn _decode<T>(&mut self, packet: &AVPacket) -> DecodeResult<T>
+    fn _decode<T>(&mut self, packet: &AVPacket) -> Result<Option<MediaFrame<T>>>
     where
-        T: 'static
-            + Clone
-            + Copy
-            + Send
-            + Sync
-            + PartialOrd
-            + num_traits::Zero
-            + num_traits::NumCast
-            + num_traits::NumAssign,
+        T: MediaFrameType,
     {
         match self._decode_raw(packet) {
-            DecodeRawResult::Frame(raw_frame) => match self.raw_frame_to_media_frame(&raw_frame) {
-                Ok(media_frame) => DecodeResult::Frame(media_frame),
-                Err(e) => DecodeResult::Error(e),
-            },
-            DecodeRawResult::Drain => DecodeResult::Drain,
-            DecodeRawResult::Flushed => DecodeResult::Flushed,
-            DecodeRawResult::Error(e) => DecodeResult::Error(e),
+            Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(&raw_frame)?)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
@@ -417,58 +496,43 @@ impl Decoder {
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    fn _decode_raw(&mut self, packet: &AVPacket) -> DecodeRawResult {
-        debug_assert!(!self.draining());
-
-        self.send_packet_to_decoder(Some(packet)).unwrap();
+    fn _decode_raw(&mut self, packet: &AVPacket) -> Result<Option<RawFrame>> {
+        self.send_packet_to_decoder(Some(packet))?;
         self.receive_frame_from_decoder()
     }
 
     /// Drain one frame from the decoder.
     ///
     /// After calling drain once the decoder is in draining mode and the caller may not use normal
-    /// decode anymore or it will panic.
+    /// decode anymore, or it will panic.
     ///
     /// # Return value
     ///
     /// A tuple of the [`Frame`] and timestamp (relative to the stream) and the frame itself if the
     /// decoder has a frame available, [`None`] if not.
     #[cfg(feature = "ndarray")]
-    pub fn drain<T>(&mut self) -> DecodeResult<T>
+    pub fn drain<T>(&mut self) -> Result<Option<MediaFrame<T>>>
     where
-        T: 'static
-            + Clone
-            + Copy
-            + Send
-            + Sync
-            + PartialOrd
-            + num_traits::Zero
-            + num_traits::NumCast
-            + num_traits::NumAssign,
+        T: MediaFrameType,
     {
         match self.drain_raw() {
-            DecodeRawResult::Frame(raw_frame) => match self.raw_frame_to_media_frame(&raw_frame) {
-                Ok(media_frame) => DecodeResult::Frame(media_frame),
-                Err(e) => DecodeResult::Error(e),
-            },
-            DecodeRawResult::Drain => DecodeResult::Drain,
-            DecodeRawResult::Flushed => DecodeResult::Flushed,
-            DecodeRawResult::Error(e) => DecodeResult::Error(e),
+            Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(&raw_frame)?)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
     /// Drain one frame from the decoder.
     ///
     /// After calling drain once the decoder is in draining mode and the caller may not use normal
-    /// decode anymore or it will panic.
+    /// decode anymore, or it will panic.
     ///
     /// # Return value
     ///
     /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    pub fn drain_raw(&mut self) -> DecodeRawResult {
-        if !self.draining() {
-            self.send_packet_to_decoder(None).unwrap();
-            self.set_draining(true);
+    pub fn drain_raw(&mut self) -> Result<Option<RawFrame>> {
+        if !self.is_drained() {
+            self.send_packet_to_decoder(None)?;
         }
         self.receive_frame_from_decoder()
     }
@@ -476,10 +540,10 @@ impl Decoder {
     /// Reset the decoder to be used again after draining.
     pub fn reset(&mut self) {
         self.flush();
-        self.set_draining(false);
+        self.state = DecoderState::Normal;
     }
 
-    pub fn flush(&mut self) {
+    fn flush(&mut self) {
         unsafe {
             ffi::avcodec_flush_buffers(self.decode_ctx.as_mut_ptr());
         }
@@ -495,10 +559,11 @@ impl Decoder {
     }
 
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
-    fn receive_frame_from_decoder(&mut self) -> DecodeRawResult {
+    fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
         let frame = match self.decoder_receive_frame() {
-            DecodeRawResult::Frame(f) => f,
-            other => return other,
+            Ok(Some(f)) => f,
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(e),
         };
 
         let res = match self.media_type {
@@ -507,27 +572,29 @@ impl Decoder {
             _ => Ok(frame),
         };
         match res {
-            Ok(f) => DecodeRawResult::Frame(f),
-            Err(e) => DecodeRawResult::Error(e),
+            Ok(f) => Ok(Some(f)),
+            Err(e) => Err(e),
         }
     }
 
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
     /// the decoder signals `EAGAIN` and `EOF`
-    fn decoder_receive_frame(&mut self) -> DecodeRawResult {
+    fn decoder_receive_frame(&mut self) -> Result<Option<RawFrame>> {
         match self.decode_ctx.receive_frame() {
-            Ok(frame) => DecodeRawResult::Frame(frame),
+            Ok(frame) => Ok(Some(frame)),
             Err(rsmpeg::error::RsmpegError::DecoderDrainError) => {
                 log::debug!("Decoder drained. try send new packet again.");
-                DecodeRawResult::Drain
+                self.state = DecoderState::Drained;
+                Ok(None)
             }
             Err(rsmpeg::error::RsmpegError::DecoderFlushedError) => {
                 log::debug!("Decoder flushed. EOF reached.");
-                DecodeRawResult::Flushed
+                self.state = DecoderState::Flushed;
+                Ok(None)
             }
             Err(e) => {
                 log::warn!("Failed to receive frame from decoder: {}", e);
-                DecodeRawResult::Error(Error::new(e))
+                Err(Error::new(e))
             }
         }
     }
@@ -605,15 +672,7 @@ impl Decoder {
     #[cfg(feature = "ndarray")]
     fn raw_frame_to_media_frame<T>(&self, frame: &RawFrame) -> Result<MediaFrame<T>>
     where
-        T: 'static
-            + Clone
-            + Copy
-            + Send
-            + Sync
-            + PartialOrd
-            + num_traits::Zero
-            + num_traits::NumCast
-            + num_traits::NumAssign,
+        T: MediaFrameType,
     {
         // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
         // after I convert it, If you want RGB24, always remember to convert it yourself!
@@ -628,28 +687,33 @@ impl Decoder {
 impl Drop for Decoder {
     fn drop(&mut self) {
         // We need to drain the items still in the decoders queue.
-        if let Ok(()) = self.send_packet_to_decoder(None) {
-            loop {
-                match self.decoder_receive_frame() {
-                    DecodeRawResult::Frame(_) => {
-                        // If receive a frame, we continue to drain the queue.
-                        log::debug!("continue draining decoder queue.");
-                        continue;
-                    }
-                    DecodeRawResult::Drain => {
-                        // If we need more, we continue to drain the queue.
-                        log::debug!("Decoder drained. try send new packet again.");
-                        continue;
-                    }
-                    DecodeRawResult::Flushed => {
-                        log::debug!("Decoder flushed. EOF reached.");
-                        break;
-                    }
-                    DecodeRawResult::Error(e) => {
-                        log::error!("Failed to drain decoder: {}", e);
-                        break;
+        match self.send_packet_to_decoder(None) {
+            Ok(_) => {
+                loop {
+                    match self.decoder_receive_frame() {
+                        Ok(Some(_frame)) => {
+                            // If receive a frame, we continue to drain the queue.
+                            log::debug!("continue draining decoder queue.");
+                        }
+                        Ok(None) => {
+                            if self.is_drained() {
+                                // If we need more, we continue to drain the queue.
+                                log::debug!("Decoder drained. try send new packet again.");
+                                continue;
+                            } else {
+                                log::debug!("Decoder flushed. EOF reached.");
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to drain decoder: {}", e);
+                            break;
+                        }
                     }
                 }
+            }
+            Err(e) => {
+                log::warn!("Failed to send flush packet to decoder: {}", e)
             }
         }
 
@@ -679,33 +743,6 @@ impl Drop for Decoder {
 unsafe impl Send for Decoder {}
 unsafe impl Sync for Decoder {}
 
-/// decode result
-#[cfg(feature = "ndarray")]
-#[derive(Debug)]
-pub enum DecodeResult<T> {
-    /// decoded frame as [`MediaFrame`]
-    Frame(MediaFrame<T>),
-    /// decoder is drained
-    Drain,
-    /// decoder is flushed reached
-    Flushed,
-    /// decoder error
-    Error(Error),
-}
-
-/// decode_raw result
-#[derive(Debug)]
-pub enum DecodeRawResult {
-    /// decoded frame
-    Frame(RawFrame),
-    /// decoder is drained
-    Drain,
-    /// decoder is flushed reached EOF
-    Flushed,
-    /// decoder error
-    Error(Error),
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -718,47 +755,17 @@ mod tests {
 
         let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = Decoder::new_video(&stream_reader).unwrap();
-
         loop {
-            match stream_reader.read_packet() {
-                Ok(Some((in_stream, mut packet))) => {
-                    // println!("packet: {:?}", packet);
-                    // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
-                    // 如果是视频流，需要先判断是否是视频流，然后再decode
-                    if decoder.stream_index() == in_stream.index() {
-                        // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
-                        // in_stream->time_base  =>  dec_ctx->time_base
-                        packet.rescale_ts(in_stream.time_base(), decoder.time_base());
-                        match decoder.decode_raw(&packet) {
-                            DecodeRawResult::Frame(frame) => {
-                                println!(
-                                    "video frame: {:?}, timebase:{:?}",
-                                    frame, frame.time_base
-                                );
-                            }
-                            DecodeRawResult::Drain => {
-                                println!("decoder is drained.");
-                                continue;
-                            }
-                            DecodeRawResult::Flushed => {
-                                println!("decoder is flushed.");
-                                break;
-                            }
-                            DecodeRawResult::Error(e) => {
-                                log::error!("Error on decoding frame: {}", e);
-                                return Err(e);
-                            }
-                        }
-                    } else {
-                        println!("skip packet for stream index: {}", in_stream.index())
-                    }
+            match decoder.decode_raw(&mut stream_reader) {
+                Ok(Some(frame)) => {
+                    println!("video frame: {:?}, timebase:{:?}", frame, frame.time_base);
                 }
                 Ok(None) => {
-                    println!("No more packets, Reader exhausted.");
+                    println!("No more frames, decoder flushed");
                     break;
                 }
                 Err(e) => {
-                    log::error!("Error reading packet: {}", e);
+                    log::error!("Error decoding frame: {}", e);
                     return Err(e);
                 }
             }
@@ -774,47 +781,17 @@ mod tests {
 
         let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = Decoder::new_audio(&stream_reader).unwrap();
-
         loop {
-            match stream_reader.read_packet() {
-                Ok(Some((in_stream, mut packet))) => {
-                    // println!("packet: {:?}", packet);
-                    // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
-                    // 如果是视频流，需要先判断是否是视频流，然后再decode
-                    if decoder.stream_index() == in_stream.index() {
-                        // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
-                        // in_stream->time_base  =>  dec_ctx->time_base
-                        packet.rescale_ts(in_stream.time_base(), decoder.time_base());
-                        match decoder.decode_raw(&packet) {
-                            DecodeRawResult::Frame(frame) => {
-                                println!(
-                                    "audio frame: {:?}, timebase:{:?}",
-                                    frame, frame.time_base
-                                );
-                            }
-                            DecodeRawResult::Drain => {
-                                println!("decoder is drained.");
-                                continue;
-                            }
-                            DecodeRawResult::Flushed => {
-                                println!("decoder is flushed.");
-                                break;
-                            }
-                            DecodeRawResult::Error(e) => {
-                                log::error!("Error on decoding frame: {}", e);
-                                return Err(e);
-                            }
-                        }
-                    } else {
-                        println!("skip packet for stream index: {}", in_stream.index())
-                    }
+            match decoder.decode_raw(&mut stream_reader) {
+                Ok(Some(frame)) => {
+                    println!("audio frame: {:?}, timebase:{:?}", frame, frame.time_base);
                 }
                 Ok(None) => {
-                    println!("No more packets, Reader exhausted.");
+                    println!("No more frames, decoder flushed");
                     break;
                 }
                 Err(e) => {
-                    log::error!("Error reading packet: {}", e);
+                    log::error!("Error decoding frame: {}", e);
                     return Err(e);
                 }
             }

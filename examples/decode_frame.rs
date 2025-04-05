@@ -1,8 +1,6 @@
 use image::{ImageBuffer, Rgb};
 
-use rsmedia::{
-    decode::DecodeResult, DecoderBuilder, MediaFrame, MediaType, Reader, Resize, StreamReader,
-};
+use rsmedia::{DecoderBuilder, MediaFrame, MediaType, Resize, StreamReader};
 
 use anyhow::{Context, Result};
 use futures::future::join_all;
@@ -47,51 +45,19 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(OUTPUT_DIR).context("failed to create output directory")?;
 
     loop {
-        match stream_reader.read_packet() {
-            Ok(Some((stream, mut packet))) => {
-                // println!("packet: {:?}", packet);
-                // 这里需要注意，reader 读取到的包是没有解码的所有通道的数据包
-                // 如果是视频流，需要先判断是否是视频流，然后再decode
-                if decoder.stream_index() == stream.index() {
-                    // 注意时间转换
-                    packet.rescale_ts(stream.time_base(), decoder.time_base());
-
-                    match decoder.decode::<u8>(&packet) {
-                        DecodeResult::Frame(yuv_frame) => {
-                            println!(
-                                "{:?} #{}, {:?}",
-                                MediaType::from(stream.parameters().codec_type),
-                                stream.index(),
-                                packet
-                            );
-
-                            let (width, height) = (decoder.width(), decoder.height());
-                            process_frame(yuv_frame, width as u32, height as u32)?;
-                        }
-                        DecodeResult::Drain => {
-                            println!("Need more data for decoding");
-                            continue;
-                        }
-                        DecodeResult::Flushed => {
-                            println!("EOF reached, stopping decoding");
-                            break;
-                        }
-                        DecodeResult::Error(e) => {
-                            println!("Error decoding frame: {}", e);
-                            break;
-                        }
-                    }
-                } else {
-                    println!("Packet for stream {} discarded", stream.index());
-                }
+        match decoder.decode::<u8>(&mut stream_reader) {
+            Ok(Some(yuv_frame)) => {
+                println!("decoded frame:{:?}", yuv_frame);
+                let (width, height) = (decoder.width(), decoder.height());
+                process_frame(yuv_frame, width as u32, height as u32)?;
             }
             Ok(None) => {
-                println!("No more packets, Reader exhausted.");
+                println!("Decoder has reached the end of the stream");
                 break;
             }
             Err(e) => {
-                log::error!("Error on reading packet: {}", e);
-                return Err(e);
+                println!("Error decoding frame: {}", e);
+                break;
             }
         }
     }

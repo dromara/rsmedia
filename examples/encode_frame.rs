@@ -1,6 +1,5 @@
 use rsmedia::{
     colors,
-    encode::EncodeResult,
     frame::MediaFrame,
     io::private::{Output, Write},
     stream::StreamInfo,
@@ -56,7 +55,7 @@ fn main() {
                 .unwrap(),
         );
         match encoder.encode(frame) {
-            EncodeResult::Packet(mut packet) => {
+            Ok(Some(mut packet)) => {
                 packet.set_pos(-1);
                 packet.set_stream_index(video_index as i32);
                 packet.rescale_ts(encoder.time_base(), stream_info.time_base);
@@ -65,15 +64,16 @@ fn main() {
                     .context("failed to write frame")
                     .unwrap();
             }
-            EncodeResult::Drain => {
-                println!("Encoder drained, try send new frame again.");
-                continue;
+            Ok(None) => {
+                if encoder.is_drained() {
+                    println!("Encoder drained, try send new frame again.");
+                    continue;
+                } else {
+                    println!("Encoder flushed, EOF reached.");
+                    break;
+                }
             }
-            EncodeResult::Flushed => {
-                println!("Encoder flushed, EOF reached.");
-                break;
-            }
-            EncodeResult::Error(e) => {
+            Err(e) => {
                 println!("Error encoding frame: {:?}", e);
                 break;
             }

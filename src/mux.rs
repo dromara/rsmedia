@@ -1,5 +1,3 @@
-use crate::decode::DecodeRawResult;
-use crate::encode::EncodeRawResult;
 use crate::flags::MediaType;
 use crate::hwaccel::HWDeviceConfig;
 use crate::io::{private::Output, Reader, Writer};
@@ -9,7 +7,9 @@ use crate::{utils, Decoder, DecoderBuilder, Encoder, Resize, StreamReader, Strea
 use rsmpeg::avutil::AVFrame;
 
 use anyhow::{Context, Error, Result};
+use dashmap::DashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Represents a muxer. A muxer allows muxing media packets into a new container format. Muxing does
 /// not require encoding and/or decoding.
@@ -117,7 +117,7 @@ impl<W: Writer> Muxer<W> {
             let mux_stream = self.get_stream_mut(stream_idx)?;
 
             match mux_stream.encoder.encode_raw(frame) {
-                EncodeRawResult::Packet(mut packet) => {
+                Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(mux_stream.stream_idx as i32);
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
@@ -135,11 +135,11 @@ impl<W: Writer> Muxer<W> {
                         }
                     }))
                 }
-                EncodeRawResult::Drain | EncodeRawResult::Flushed => {
+                Ok(None) => {
                     log::debug!("Encoder Drain or Flushed.");
                     Ok(None)
                 }
-                EncodeRawResult::Error(e) => Err(e),
+                Err(e) => Err(e),
             }
         } else {
             self.have_written_header = true;
@@ -179,6 +179,7 @@ unsafe impl<W: Writer> Sync for Muxer<W> {}
 pub struct Demuxer<R: Reader> {
     pub reader: R,
     streams: Vec<DemuxerStream>,
+    states: Arc<DashMap<usize, i32>>,
 }
 
 /// stream definition for demuxer
@@ -200,19 +201,6 @@ impl DemuxerStream {
             stream_idx,
         }
     }
-}
-
-/// Demux result
-#[derive(Debug)]
-pub enum DemuxResult {
-    /// decoded frame
-    Frame(usize, AVFrame),
-    /// need more data
-    Drain,
-    /// EOF of input
-    Flushed,
-    /// error
-    Error(Error),
 }
 
 impl<R: Reader> Demuxer<R> {
@@ -246,7 +234,11 @@ impl<R: Reader> Demuxer<R> {
             streams.push(DemuxerStream::new(decoder, stream_info));
         }
 
-        Ok(Self { reader, streams })
+        Ok(Self {
+            reader,
+            streams,
+            states: Arc::new(DashMap::new()),
+        })
     }
 
     pub fn streams(&self) -> &[DemuxerStream] {
@@ -267,36 +259,46 @@ impl<R: Reader> Demuxer<R> {
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
     }
 
-    pub fn demux(&mut self) -> DemuxResult {
-        match self.internal_demux() {
-            (index, DecodeRawResult::Frame(frame)) => DemuxResult::Frame(index, frame),
-            (_i, DecodeRawResult::Drain) => DemuxResult::Drain,
-            (_i, DecodeRawResult::Flushed) => DemuxResult::Flushed,
-            (_i, DecodeRawResult::Error(e)) => DemuxResult::Error(e),
-        }
+    fn set_flushed(&self, stream_index: usize) {
+        self.states.insert(stream_index, 1);
     }
 
-    /// handle demux internal logic
-    fn internal_demux(&mut self) -> (usize, DecodeRawResult) {
-        let (in_stream_index, in_stream_time_base, mut packet) = {
-            let (in_stream, pkt) = match self.reader.read_packet() {
-                Ok(Some((s, p))) => (s, p),
-                Ok(None) => return (0, DecodeRawResult::Flushed),
-                Err(e) => {
-                    log::error!("Error reading packet: {}", e);
-                    return (0, DecodeRawResult::Error(e));
-                }
-            };
-            (in_stream.index(), in_stream.time_base(), pkt)
-        };
+    fn is_flushed(&self, stream_index: usize) -> bool {
+        self.states
+            .get(&stream_index)
+            .map(|v| *v.value() == 1)
+            .unwrap_or(false)
+    }
 
-        let demux_stream = self.get_stream_mut(in_stream_index).unwrap();
-        // 解码前处理输入数据包, 将输入容器的时间基转换为解码器的时间基
-        // in_stream->time_base  =>  dec_ctx->time_base
-        packet.set_pos(-1);
-        packet.set_stream_index(in_stream_index as i32);
-        packet.rescale_ts(in_stream_time_base, demux_stream.decoder.time_base());
-        (in_stream_index, demux_stream.decoder.decode_raw(&packet))
+    pub fn demux(&mut self) -> Result<Option<(usize, AVFrame)>> {
+        for i in 0..self.streams.len() {
+            // 先获取 stream_idx，避免后面重复借用
+            let stream_idx = self.streams[i].stream_idx;
+
+            // 使用实际的 stream_idx 检查状态
+            if self.is_flushed(stream_idx) {
+                continue;
+            }
+
+            // 然后获取stream的可变引用
+            let stream = &mut self.streams[i];
+
+            match stream.decoder.decode_raw(&mut self.reader) {
+                Ok(Some(frame)) => {
+                    return Ok(Some((stream_idx, frame)));
+                }
+                Ok(None) => {
+                    log::debug!("stream:{} Decoder Flushed.", stream_idx);
+                    self.set_flushed(stream_idx);
+                    continue;
+                }
+                Err(e) => {
+                    log::error!("stream:{} Decoder Error: {}", stream_idx, e);
+                    return Err(e);
+                }
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -315,10 +317,9 @@ impl<R: Reader> Iterator for Demuxer<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.demux() {
-            DemuxResult::Frame(stream_index, frame) => Some(Ok((stream_index, frame))),
-            DemuxResult::Drain => self.next(),
-            DemuxResult::Flushed => None,
-            DemuxResult::Error(e) => Some(Err(e)),
+            Ok(Some(item)) => Some(Ok(item)),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
         }
     }
 }
@@ -624,7 +625,7 @@ mod tests {
         let output_path = Path::new("/tmp/test_mux_demux_audio_mp3.mp3");
         let sample_rate = 44_100;
         let bit_rate = 128_000;
-        let nb_samples = 1024;
+        let nb_samples = 1152; // libmp3lame 要求的 frame_size 为 1152
         let channels = 2;
 
         // 修改音频编码器为MP3
@@ -695,7 +696,7 @@ mod tests {
             .build()?;
 
         let audio_encoder =
-            Encoder::new_audio(AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, SampleFormat::FLTP).unwrap();
+            Encoder::new_audio(AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, SampleFormat::FLTP)?;
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);

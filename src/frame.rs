@@ -10,6 +10,30 @@ use yuvutils_rs::{
     YuvStandardMatrix,
 };
 
+pub trait MediaFrameType:
+    'static
+    + Clone
+    + Copy
+    + Send
+    + Sync
+    + PartialOrd
+    + num_traits::Zero
+    + num_traits::NumCast
+    + num_traits::NumAssign
+{
+}
+
+impl MediaFrameType for i8 {}
+impl MediaFrameType for u8 {}
+impl MediaFrameType for i16 {}
+impl MediaFrameType for u16 {}
+impl MediaFrameType for i32 {}
+impl MediaFrameType for u32 {}
+impl MediaFrameType for i64 {}
+impl MediaFrameType for u64 {}
+impl MediaFrameType for f32 {}
+impl MediaFrameType for f64 {}
+
 /// A frame array is the `ndarray` version of `AVFrame`
 /// It is 3-dimensional array with dims `(H, W, C)` and type byte.
 ///
@@ -51,15 +75,7 @@ pub struct MediaFrame<T> {
 
 impl<T> MediaFrame<T>
 where
-    T: 'static
-        + Clone
-        + Copy
-        + Send
-        + Sync
-        + PartialOrd
-        + num_traits::Zero
-        + num_traits::NumCast
-        + num_traits::NumAssign,
+    T: MediaFrameType,
 {
     /// 创建视频帧
     pub fn new_video(

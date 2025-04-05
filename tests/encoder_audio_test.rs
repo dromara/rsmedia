@@ -2,7 +2,6 @@
 mod tests {
     use anyhow::{Context, Result};
     use dasp::Signal;
-    use rsmedia::encode::EncodeRawResult;
     use rsmedia::io::private::{Output, Write};
     use rsmedia::stream::StreamInfo;
     use rsmedia::{utils, EncoderBuilder, SampleFormat, StreamWriterBuilder};
@@ -529,21 +528,22 @@ mod tests {
             frame.set_pts(frame_idx * frame_size as i64);
 
             match encoder.encode_raw(frame.clone()) {
-                EncodeRawResult::Packet(mut packet) => {
+                Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(audio_index as i32);
                     packet.rescale_ts(encoder.time_base(), stream_info.time_base);
                     stream_writer.write_frame(&mut packet)?;
                 }
-                EncodeRawResult::Drain => {
-                    println!("Encoder drained, try send new frame again.");
-                    continue;
+                Ok(None) => {
+                    if encoder.is_drained() {
+                        println!("Encoder drained, try send new frame again.");
+                        continue;
+                    } else {
+                        println!("Encoder flushed, EOF reached.");
+                        break;
+                    }
                 }
-                EncodeRawResult::Flushed => {
-                    println!("Encoder flushed, EOF reached.");
-                    break;
-                }
-                EncodeRawResult::Error(e) => {
+                Err(e) => {
                     println!("Encode error: {}", e);
                     break;
                 }
@@ -559,7 +559,7 @@ mod tests {
             frame.set_pts(total_samples - remaining as i64);
 
             // write last frame
-            if let EncodeRawResult::Packet(mut packet) = encoder.encode_raw(frame) {
+            if let Some(mut packet) = encoder.encode_raw(frame)? {
                 packet.set_pos(-1);
                 packet.set_stream_index(audio_index as i32);
                 // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基

@@ -24,6 +24,7 @@ link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
 [dependencies]
 url = "2.5"
 rayon = "1.10"
+dashmap = "6.1"
 palette = "0.7"
 ab_glyph = "0.2"
 image = "0.25"

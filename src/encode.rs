@@ -1,6 +1,6 @@
 use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
-use crate::frame::MediaFrame;
+use crate::frame::{MediaFrame, MediaFrameType};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
@@ -382,6 +382,7 @@ impl EncoderBuilder {
             hw_context,
             media_type,
             frame_count: 0,
+            state: EncoderState::Normal,
             keyframe_interval: self.keyframe_interval,
         })
     }
@@ -416,6 +417,13 @@ impl Default for EncoderBuilder {
     }
 }
 
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum EncoderState {
+    Normal,
+    Drained,
+    Flushed,
+}
+
 /// Encodes frames into a video stream.
 ///
 /// # Example
@@ -446,6 +454,7 @@ pub struct Encoder {
     media_type: MediaType,
     frame_count: u64,
     keyframe_interval: u64,
+    state: EncoderState,
 }
 
 impl Encoder {
@@ -479,6 +488,15 @@ impl Encoder {
         EncoderBuilder::new_audio(128_000, nb_channels, sample_rate, sample_format).build()
     }
 
+    /// Check if encoder is in draining mode.
+    pub fn is_drained(&self) -> bool {
+        self.state == EncoderState::Drained
+    }
+
+    pub fn is_flushed(&self) -> bool {
+        self.state == EncoderState::Flushed
+    }
+
     /// Encode a single `ndarray` frame.
     ///
     /// # Arguments
@@ -487,26 +505,13 @@ impl Encoder {
     /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
     ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
-    pub fn encode<T>(&mut self, frame: MediaFrame<T>) -> EncodeResult
+    pub fn encode<T>(&mut self, frame: MediaFrame<T>) -> Result<Option<AVPacket>>
     where
-        T: 'static
-            + Clone
-            + Copy
-            + Send
-            + Sync
-            + PartialOrd
-            + num_traits::Zero
-            + num_traits::NumCast
-            + num_traits::NumAssign,
+        T: MediaFrameType,
     {
-        let frame = frame.to_avframe().unwrap();
+        let frame = frame.to_avframe()?;
 
-        match self.encode_raw(frame) {
-            EncodeRawResult::Packet(pkt) => EncodeResult::Packet(pkt),
-            EncodeRawResult::Drain => EncodeResult::Drain,
-            EncodeRawResult::Flushed => EncodeResult::Flushed,
-            EncodeRawResult::Error(e) => EncodeResult::Error(e),
-        }
+        self.encode_raw(frame)
     }
 
     /// Encode a single raw frame.
@@ -514,15 +519,11 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, raw_frame: RawFrame) -> EncodeRawResult {
-        log::info!(
-            "raw_frame: {:?}, time_base: {:?}",
-            raw_frame,
-            raw_frame.time_base
-        );
+    pub fn encode_raw(&mut self, raw_frame: RawFrame) -> Result<Option<AVPacket>> {
+        log::info!("{:?}, time_base: {:?}", raw_frame, raw_frame.time_base);
 
         // send frame to encoder
-        self.send_frame_to_encoder(Some(raw_frame)).unwrap();
+        self.send_frame_to_encoder(Some(raw_frame))?;
 
         // Increment frame count regardless of whether frame is written,
         self.frame_count += 1;
@@ -665,18 +666,20 @@ impl Encoder {
 
     /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
     /// result, in which case we just need to go again.
-    fn receive_packet(&mut self) -> EncodeRawResult {
+    fn receive_packet(&mut self) -> Result<Option<AVPacket>> {
         match self.encode_ctx.receive_packet() {
-            Ok(pkt) => EncodeRawResult::Packet(pkt),
+            Ok(pkt) => Ok(Some(pkt)),
             Err(rsmpeg::error::RsmpegError::EncoderDrainError) => {
                 log::debug!("Encoder drained, try send new frame again.");
-                EncodeRawResult::Drain
+                self.state = EncoderState::Drained;
+                Ok(None)
             }
             Err(rsmpeg::error::RsmpegError::EncoderFlushedError) => {
                 log::debug!("Encoder flushed, EOF reached.");
-                EncodeRawResult::Flushed
+                self.state = EncoderState::Flushed;
+                Ok(None)
             }
-            Err(err) => EncodeRawResult::Error(Error::new(err)),
+            Err(err) => Err(Error::new(err)),
         }
     }
 
@@ -702,7 +705,7 @@ impl Encoder {
         // drain the items still on the queue before giving up.
         loop {
             match self.receive_packet() {
-                EncodeRawResult::Packet(mut packet) => {
+                Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(index as i32);
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
@@ -714,16 +717,17 @@ impl Encoder {
                         writer.write_frame(&mut packet)?;
                     }
                 }
-                EncodeRawResult::Drain => {
-                    log::debug!("Encoder drained, try send new frame again.");
-                    continue;
+                Ok(None) => {
+                    if self.is_drained() {
+                        log::debug!("Encoder drained, try send new frame again.");
+                        continue;
+                    } else {
+                        log::debug!("Encoder flushed, EOF reached.");
+                        break;
+                    }
                 }
-                EncodeRawResult::Flushed => {
-                    log::debug!("Encoder flushed, EOF reached.");
-                    break;
-                }
-                EncodeRawResult::Error(e) => {
-                    log::debug!("Encode error: {}", e);
+                Err(e) => {
+                    log::debug!("Encode packet error: {}", e);
                     break;
                 }
             }
@@ -741,23 +745,6 @@ impl Drop for Encoder {
 
 unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
-
-/// encode_raw result
-#[derive(Debug)]
-pub enum EncodeRawResult {
-    /// encoder packet
-    Packet(AVPacket),
-    /// encoder drained
-    Drain,
-    /// encoder
-    Flushed,
-    /// encoder error
-    Error(Error),
-}
-
-/// encode result
-#[cfg(feature = "ndarray")]
-pub type EncodeResult = EncodeRawResult;
 
 #[cfg(test)]
 mod tests {
@@ -1067,7 +1054,7 @@ mod tests {
                     .unwrap(),
             );
             match encoder.encode(frame) {
-                EncodeResult::Packet(mut packet) => {
+                Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
                     packet.set_stream_index(video_index as i32);
 
@@ -1083,15 +1070,16 @@ mod tests {
 
                     stream_writer.write_frame(&mut packet)?;
                 }
-                EncodeResult::Drain => {
-                    println!("Encoder drained, try send new frame again.");
-                    continue;
+                Ok(None) => {
+                    if encoder.is_flushed() {
+                        println!("Encoder flushed, EOF reached.");
+                        break;
+                    } else {
+                        println!("Encoder drained, try send new frame again.");
+                        continue;
+                    }
                 }
-                EncodeResult::Flushed => {
-                    println!("Encoder flushed, EOF reached.");
-                    break;
-                }
-                EncodeResult::Error(e) => {
+                Err(e) => {
                     println!("Encode error: {}", e);
                     break;
                 }

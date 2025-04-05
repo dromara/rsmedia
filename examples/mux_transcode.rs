@@ -1,5 +1,5 @@
 use rsmedia::{
-    mux::{DemuxResult, Demuxer, Muxer},
+    mux::{Demuxer, Muxer},
     EncoderBuilder, MediaType, Options, PixelFormat, SampleFormat, StreamReader,
     StreamWriterBuilder,
 };
@@ -71,19 +71,15 @@ fn main() {
     // demux and mux all frames from input to output muxer
     loop {
         match demuxer.demux() {
-            DemuxResult::Frame(stream_index, frame) => {
+            Ok(Some((stream_index, frame))) => {
                 println!("stream index:{}, {:?}", stream_index, frame);
                 let _ = muxer.mux(frame, stream_index).unwrap();
             }
-            DemuxResult::Drain => {
-                println!("Need more data, continuing...");
-                continue;
-            }
-            DemuxResult::Flushed => {
-                println!("Input stream EOF reached");
+            Ok(None) => {
+                log::info!("End of input file");
                 break;
             }
-            DemuxResult::Error(e) => {
+            Err(e) => {
                 eprintln!("Demuxing error: {}", e);
                 break;
             }

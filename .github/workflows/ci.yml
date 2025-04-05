@@ -235,7 +235,7 @@ jobs:
         run: cargo test --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} --verbose -- --nocapture
 
   test_and_clippy:
-    name: test & Clippy check / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
+    name: Clippy & Test / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
     container:
       image: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu

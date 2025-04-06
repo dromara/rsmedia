@@ -1,5 +1,3 @@
-// #![allow(dead_code)]
-//
 // use crate::{MediaType, PixelFormat, SampleFormat};
 // use std::collections::HashMap;
 //

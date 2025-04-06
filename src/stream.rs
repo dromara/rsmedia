@@ -27,11 +27,11 @@ pub struct StreamInfo {
     pub codec_id: u32,
     /// Codec Additional Info
     pub codec_tag: u32,
-    /// Pixel format / Sample format
+    /// Video: [`PixelFormat`], Audio: [`SampleFormat`]
     pub format: i32,
-    /// codec bits per sample
+    /// Number of bits per sample or zero if unknown for the given codec.
     pub bits_per_sample: i32,
-    /// codec bits per sample
+    /// Only return non-zero if the bits per sample is exactly correct, not an approximation.
     pub exact_bits_per_sample: i32,
     /// the number of bits actually used for storing the pixel information,
     /// that is padding bits are not counted.
@@ -40,7 +40,7 @@ pub struct StreamInfo {
     /// including any padding or unused bits.
     pub padded_bits_per_pixel: i32,
 
-    /// time_base
+    /// time_base of stream
     pub time_base: ffi::AVRational,
     /// Stream Duration
     pub duration: i64,

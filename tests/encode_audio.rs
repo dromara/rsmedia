@@ -13,7 +13,7 @@ use std::ffi::CStr;
 
 /// 编码器能力描述结构体
 #[derive(Debug, Clone)]
-pub struct CodecConfig {
+struct CodecConfig {
     /// 支持的帧率列表（视频编码器）
     pub supported_frame_rates: Option<Vec<ffi::AVRational>>,
     /// 支持的采样率列表（音频编码器）

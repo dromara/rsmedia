@@ -34,6 +34,7 @@ anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
 once_cell = "1.21"
+num_cpus = "1.16"
 ndarray = { version = "0.16", optional = true }
 yuvutils-rs = {version = "0.8", features = ["rayon", "professional_mode"]}
 rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-features = false }
@@ -47,8 +48,6 @@ ctor = "0.4"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
 
 ## parallel
-num_cpus = "1.16"
-crossbeam = "0.8"
 
 ## security & async
 futures = "0.3"

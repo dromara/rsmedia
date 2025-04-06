@@ -34,7 +34,7 @@ pub struct EncoderBuilder {
     sample_format: SampleFormat,
     /// Common
     bit_rate: i64,
-    thread_count: i32,
+    thread_count: usize,
     media_type: MediaType,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
@@ -128,7 +128,7 @@ impl EncoderBuilder {
     }
 
     /// set the thread count.
-    pub fn with_thread_count(mut self, thread_count: i32) -> Self {
+    pub fn with_thread_count(mut self, thread_count: usize) -> Self {
         self.thread_count = thread_count;
         self
     }
@@ -266,7 +266,7 @@ impl EncoderBuilder {
             panic!("{}", format!("Unsupported media type:{:?}", media_type))
         }
         unsafe {
-            (*encoder.as_mut_ptr()).thread_count = self.thread_count;
+            (*encoder.as_mut_ptr()).thread_count = self.thread_count as i32;
         }
     }
 
@@ -408,7 +408,7 @@ impl Default for EncoderBuilder {
             sample_format: SampleFormat::FLTP,
             // common
             media_type: MediaType::VIDEO,
-            thread_count: 0,
+            thread_count: num_cpus::get(),
             codec_name: None,
             codec_opts: None,
             hw_device_config: None,

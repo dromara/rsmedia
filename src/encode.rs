@@ -291,11 +291,10 @@ impl EncoderBuilder {
                     _ => panic!("Unsupported media type, please specify codec name."),
                 }
             };
-            AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
-                .context(format!(
-                    "Failed to find encoder for codec: '{}'",
-                    codec_name
-                ))?
+            AVCodec::find_encoder_by_name(&utils::from_str(codec_name)).context(format!(
+                "Failed to find encoder for codec: '{}'",
+                codec_name
+            ))?
         };
 
         let mut encode_ctx = AVCodecContext::new(&codec);

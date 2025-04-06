@@ -65,18 +65,20 @@ impl EncoderBuilder {
 
     /// Create a video encoder with the specified destination
     ///
+    /// The default codec is `libx264`, with default frame rate and bit rate.
+    ///
     /// # Arguments
     ///
     /// * `width` - The width of the video stream.
     /// * `height` - The height of the video stream.
     /// * `pixel_format` - The desired pixel format for the video stream.
-    ///
-    /// note: default video codec is `libx264`
     pub fn new_video(width: usize, height: usize) -> Self {
         Self::default().with_width(width).with_height(height)
     }
 
     /// Create an audio encoder with the specified parameters.
+    ///
+    /// The default codec is `aac`, with default bit rate of 128k.
     ///
     /// # Arguments
     ///
@@ -84,8 +86,6 @@ impl EncoderBuilder {
     /// * `nb_channels` - The number of channels in the audio stream.
     /// * `sample_rate` - The sample rate of the audio stream.
     /// * `sample_format` - The sample format of the audio stream.
-    ///
-    /// note: default audio codec is `aac`
     pub fn new_audio(
         bit_rate: i64,
         nb_channels: u32,
@@ -295,8 +295,7 @@ impl EncoderBuilder {
                 .context(format!(
                     "Failed to find encoder for codec: '{}'",
                     codec_name
-                ))
-                .unwrap()
+                ))?
         };
 
         let mut encode_ctx = AVCodecContext::new(&codec);
@@ -488,22 +487,23 @@ impl Encoder {
         EncoderBuilder::new_audio(128_000, nb_channels, sample_rate, sample_format).build()
     }
 
-    /// Check if encoder is in draining mode.
+    /// Returns `true` if the encoder is in the "drained" state.
+    ///
+    /// This means all input has been processed, but not fully flushed.
     pub fn is_drained(&self) -> bool {
         self.state == EncoderState::Drained
     }
 
+    /// Returns `true` if the encoder is fully flushed and finished.
     pub fn is_flushed(&self) -> bool {
         self.state == EncoderState::Flushed
     }
 
-    /// Encode a single `ndarray` frame.
+    /// Encode a high-level frame (a single frame ndarray-based)
     ///
     /// # Arguments
     ///
     /// * `frame` - Frame to encode in `HWC` format and standard layout.
-    /// * `source_timestamp` - Frame timestamp of original source. This is necessary to make sure
-    ///   the output will be timed correctly.
     #[cfg(feature = "ndarray")]
     pub fn encode<T>(&mut self, frame: MediaFrame<T>) -> Result<Option<AVPacket>>
     where
@@ -542,6 +542,11 @@ impl Encoder {
         Ok(self.encode_ctx.send_frame(frame.as_ref())?)
     }
 
+    /// Internal: process a video frame (e.g., scale, convert, keyframe decision).
+    ///
+    /// - Applies scaling if needed.
+    /// - Forces keyframe insertion based on interval.
+    /// - Uploads to GPU if hardware acceleration is enabled.
     fn process_video_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
         let mut scaled = if let Some((dst_w, dst_h, dst_pix_fmt)) = self.rescale {
             // scale frame if necessary
@@ -584,6 +589,9 @@ impl Encoder {
         Ok(hw_frame)
     }
 
+    /// Internal: process an audio frame (e.g., resample if needed).
+    ///
+    /// Ensures audio matches encoder sample rate, format, and channels.
     fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
         // resample frame if necessary
         if let Some((nb_channels, sample_rate, dst_sample_fmt)) = self.resample {
@@ -664,8 +672,13 @@ impl Encoder {
         self.encode_ctx.ch_layout()
     }
 
-    /// Pull an encoded packet from the decoder. This function also handles the possible `EAGAIN`
-    /// result, in which case we just need to go again.
+    /// Internal: Pull an encoded packet from the decoder.
+    ///
+    /// Handles `EAGAIN`, drained, and flushed states.
+    ///
+    /// # Returns
+    ///
+    /// `Some(packet)` if a packet is returned, `None` if waiting or end.
     fn receive_packet(&mut self) -> Result<Option<AVPacket>> {
         match self.encode_ctx.receive_packet() {
             Ok(pkt) => Ok(Some(pkt)),
@@ -683,7 +696,22 @@ impl Encoder {
         }
     }
 
-    /// Flush the encoder, drain any packets that still need processing.
+    /// Flush the encoder and write any remaining packets.
+    ///
+    /// This function sends an end-of-stream signal to the encoder, and continues
+    /// to pull packets until the encoder is fully flushed.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer` - Writer to write encoded packets.
+    /// * `interleaved` - Whether to write packets in interleaved mode (typical for most formats).
+    /// * `index` - Stream index for the output stream.
+    /// * `out_stream_time_base` - Time base of the output stream.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if flushing completes successfully.
+    /// May return an error if writing fails or encoder returns an error.
     pub fn flush<W: Writer>(
         &mut self,
         writer: &mut W,
@@ -738,11 +766,24 @@ impl Encoder {
 }
 
 impl Drop for Encoder {
+    /// Automatically called when the `Encoder` is dropped.
+    ///
+    /// **Warning**: This does NOT automatically flush the encoder.
+    /// The user is responsible for calling [`Encoder::flush`] manually
+    /// before dropping the encoder to ensure all frames are written.
     fn drop(&mut self) {
-        // let _ = self.flush();
+        //! let _ = self.flush();
+        if !self.is_flushed() {
+            log::error!("Encoder dropped without flushing, data may be lost.");
+        }
     }
 }
 
+/// SAFETY:
+/// - Encoder contains `AVCodecContext`, which is not inherently thread-safe.
+/// - We implement `Send`/`Sync` only because `Encoder` is guaranteed to be used
+///   in a single-threaded context or externally synchronized by the caller.
+/// - If used across threads, caller must ensure no concurrent access.
 unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
 

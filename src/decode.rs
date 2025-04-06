@@ -9,6 +9,7 @@ use crate::stream::StreamInfo;
 use crate::{swctx, utils, MediaType, PixelFormat, RawFrame, SampleFormat};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
+use rsmpeg::avformat::AVStream;
 use rsmpeg::avutil::AVChannelLayout;
 use rsmpeg::ffi;
 
@@ -19,6 +20,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct DecoderBuilder {
     flags: AvCodecFlags,
+    thread_count: usize,
     media_type: MediaType,
     resize: Option<Resize>,
     codec_name: Option<String>,
@@ -39,6 +41,7 @@ impl DecoderBuilder {
             codec_name: None,
             codec_opts: None,
             hw_device_config: None,
+            thread_count: num_cpus::get(),
             flags: AvCodecFlags::LOW_DELAY,
         }
     }
@@ -85,12 +88,41 @@ impl DecoderBuilder {
         self
     }
 
+    /// set the thread count.
+    pub fn with_thread_count(mut self, thread_count: usize) -> Self {
+        self.thread_count = thread_count;
+        self
+    }
+
     /// Enable hardware acceleration with the specified device type.
     ///
     /// * `device_config` - Device to use for hardware acceleration.
     pub fn with_hardware_device(mut self, device_config: Option<HWDeviceConfig>) -> Self {
         self.hw_device_config = device_config;
         self
+    }
+
+    fn setup_codec_context(&self, decoder: &mut AVCodecContext, input: &AVStream) -> Result<()> {
+        let media_type = self.media_type;
+        if media_type as ffi::AVMediaType != decoder.codec_type {
+            return Err(Error::msg(format!(
+                "Decoder codec type not supported: {:?} vs. {:?}",
+                media_type, decoder.codec_type
+            )));
+        }
+
+        decoder.apply_codecpar(&input.codecpar())?;
+        decoder.set_flags(self.flags as i32);
+        decoder.set_time_base(input.time_base);
+        if let Some(framerate) = input.guess_framerate() {
+            decoder.set_framerate(framerate);
+        }
+
+        unsafe {
+            (*decoder.as_mut_ptr()).thread_count = self.thread_count as i32;
+        }
+
+        Ok(())
     }
 
     /// Build [`Decoder`].
@@ -119,15 +151,10 @@ impl DecoderBuilder {
             ))?
         };
 
-        let time_base = input_stream.time_base;
         let mut decode_ctx = AVCodecContext::new(&codec);
-        decode_ctx.apply_codecpar(&input_stream.codecpar())?;
-        decode_ctx.set_flags(self.flags as i32);
-        decode_ctx.set_time_base(time_base);
-        if let Some(framerate) = input_stream.guess_framerate() {
-            decode_ctx.set_framerate(framerate);
-        }
+        self.setup_codec_context(&mut decode_ctx, input_stream)?;
 
+        let time_base = input_stream.time_base;
         let (width, height) = (decode_ctx.width, decode_ctx.height);
         let hw_context = self
             .hw_device_config

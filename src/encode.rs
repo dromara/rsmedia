@@ -244,7 +244,20 @@ impl EncoderBuilder {
     /// # Return value
     ///
     /// New encoder with settings applied.
-    fn setup_codec_context(&self, encoder: &mut AVCodecContext, media_type: MediaType) {
+    fn setup_codec_context(&self, encoder: &mut AVCodecContext) -> Result<()> {
+        let media_type = self.media_type;
+        if media_type as ffi::AVMediaType != encoder.codec_type {
+            return Err(Error::msg(format!(
+                "Encoder codec type not supported: {:?} vs. {:?}",
+                media_type, encoder.codec_type
+            )));
+        }
+
+        // Some formats want stream headers to be separate.
+        if self.oformat_flags & ffi::AVFMT_GLOBALHEADER as i32 != 0 {
+            encoder.set_flags(encoder.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
+        }
+
         if media_type == MediaType::VIDEO {
             encoder.set_width(self.width as i32);
             encoder.set_height(self.height as i32);
@@ -263,11 +276,17 @@ impl EncoderBuilder {
             encoder.set_time_base(avutil::ra(1, self.sample_rate));
             encoder.set_sample_fmt(self.sample_format as _);
         } else {
-            panic!("{}", format!("Unsupported media type:{:?}", media_type))
+            return Err(Error::msg(format!(
+                "Unsupported media type: {:?}",
+                media_type
+            )));
         }
+
         unsafe {
             (*encoder.as_mut_ptr()).thread_count = self.thread_count as i32;
         }
+
+        Ok(())
     }
 
     /// Build an [`Encoder`].
@@ -288,7 +307,12 @@ impl EncoderBuilder {
                 match media_type {
                     MediaType::VIDEO => Self::VIDEO_CODEC_NAME,
                     MediaType::AUDIO => Self::AUDIO_CODEC_NAME,
-                    _ => panic!("Unsupported media type, please specify codec name."),
+                    _ => {
+                        return Err(Error::msg(format!(
+                            "Unsupported media type:{:?}",
+                            media_type
+                        )))
+                    }
                 }
             };
             AVCodec::find_encoder_by_name(&utils::from_str(codec_name)).context(format!(
@@ -298,13 +322,7 @@ impl EncoderBuilder {
         };
 
         let mut encode_ctx = AVCodecContext::new(&codec);
-
-        // Some formats want stream headers to be separate.
-        if self.oformat_flags & ffi::AVFMT_GLOBALHEADER as i32 != 0 {
-            encode_ctx.set_flags(encode_ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
-        }
-
-        self.setup_codec_context(&mut encode_ctx, media_type);
+        self.setup_codec_context(&mut encode_ctx)?;
 
         let hw_context = self
             .hw_device_config

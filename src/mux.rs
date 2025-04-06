@@ -354,8 +354,8 @@ impl<R: Reader> Iterator for Demuxer<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{utils, EncoderBuilder, PixelFormat, SampleFormat, StreamReader, StreamWriter};
     use crate::io::private::Output;
+    use crate::{utils, EncoderBuilder, PixelFormat, SampleFormat, StreamReader, StreamWriter};
 
     use anyhow::{Context, Result};
     use rsmpeg::avutil::{AVChannelLayout, AVFrame};
@@ -770,7 +770,6 @@ mod tests {
         Ok(())
     }
 
-
     /// transcode from one container format to another
     ///
     /// # Examples
@@ -792,7 +791,8 @@ mod tests {
                 .iter()
                 .map(|stream| {
                     let codec_type = stream.codecpar().codec_type();
-                    if !codec_type.is_video() && !codec_type.is_audio() && !codec_type.is_subtitle() {
+                    if !codec_type.is_video() && !codec_type.is_audio() && !codec_type.is_subtitle()
+                    {
                         None
                     } else {
                         output.new_stream().set_codecpar(stream.codecpar().clone());

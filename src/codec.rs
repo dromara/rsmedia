@@ -171,7 +171,7 @@ impl<'codec> CodecConfig {
             self.get_supported_config(ffi::AV_CODEC_CONFIG_CHANNEL_LAYOUT, 0)
         }
         #[cfg(not(feature = "ffmpeg7"))]
-        unsafe {
+        {
             Ok(None)
         }
     }

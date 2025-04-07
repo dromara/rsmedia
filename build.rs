@@ -74,8 +74,8 @@ fn configure_linux(target_arch: &str) {
     // using it will prevent the need to regenerate the same binding file repeatedly.
     //
     // ffmpeg libs
+    #[cfg(target_os = "linux")]
     for lib in FFMPEG_LIBS.iter() {
-        // cargo link
         // println!("cargo:rustc-link-lib={}", lib);
         match pkg_config::probe_library(format!("lib{}", lib).as_str()) {
             Ok(lib_info) => {

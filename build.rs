@@ -19,8 +19,8 @@ static FFMPEG_LIBS: [&str; 7] = [
     "avdevice",
     "avfilter",
     "avformat",
-    "swresample",
     "swscale",
+    "swresample",
 ];
 
 fn configure_macos() {

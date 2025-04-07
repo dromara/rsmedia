@@ -78,6 +78,7 @@ impl<'a> CodecConfig {
     /// * `flags`    Currently unused; should be set to zero.
     /// * `out_configs`    On success, set to a list of configurations, terminated by a config-specific terminator, or NULL if all possible values are supported.
     /// * `out_num_configs`    On success, set to the number of elements in out_configs, excluding the terminator. Optional.
+    #[cfg(feature = "ffmpeg7")]
     unsafe fn get_supported_config<T>(
         &self,
         config_type: ffi::AVCodecConfig,
@@ -108,44 +109,91 @@ impl<'a> CodecConfig {
     }
 
     pub fn supported_pixel_formats(&self) -> Result<Option<&'a [ffi::AVPixelFormat]>> {
-        unsafe { self.get_supported_config(ffi::AV_CODEC_CONFIG_PIX_FORMAT, ffi::AV_PIX_FMT_NONE) }
+        #[cfg(feature = "ffmpeg7")]
+        unsafe {
+            self.get_supported_config(ffi::AV_CODEC_CONFIG_PIX_FORMAT, ffi::AV_PIX_FMT_NONE)
+        }
+        #[cfg(not(feature = "ffmpeg7"))]
+        {
+            let codec = self.find_codec()?;
+            Ok(codec.pix_fmts())
+        }
     }
 
     pub fn supported_frame_rates(&self) -> Result<Option<&'a [ffi::AVRational]>> {
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             self.get_supported_config(
                 ffi::AV_CODEC_CONFIG_FRAME_RATE,
                 ffi::AVRational { num: 0, den: 0 },
             )
         }
+        #[cfg(not(feature = "ffmpeg7"))]
+        {
+            let codec = self.find_codec()?;
+            Ok(codec.supported_framerates())
+        }
     }
 
     pub fn supported_sample_rates(&self) -> Result<Option<&'a [i32]>> {
-        unsafe { self.get_supported_config(ffi::AV_CODEC_CONFIG_SAMPLE_RATE, 0) }
+        #[cfg(feature = "ffmpeg7")]
+        unsafe {
+            self.get_supported_config(ffi::AV_CODEC_CONFIG_SAMPLE_RATE, 0)
+        }
+        #[cfg(not(feature = "ffmpeg7"))]
+        {
+            let codec = self.find_codec()?;
+            Ok(codec.supported_samplerates())
+        }
     }
 
     pub fn supported_sample_formats(&self) -> Result<Option<&'a [ffi::AVSampleFormat]>> {
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             self.get_supported_config(ffi::AV_CODEC_CONFIG_SAMPLE_FORMAT, ffi::AV_SAMPLE_FMT_NONE)
+        }
+        #[cfg(not(feature = "ffmpeg7"))]
+        {
+            let codec = self.find_codec()?;
+            Ok(codec.sample_fmts())
         }
     }
 
     pub fn supported_channel_layouts(&self) -> Result<Option<&'a [i32]>> {
-        unsafe { self.get_supported_config(ffi::AV_CODEC_CONFIG_CHANNEL_LAYOUT, 0) }
+        #[cfg(feature = "ffmpeg7")]
+        unsafe {
+            self.get_supported_config(ffi::AV_CODEC_CONFIG_CHANNEL_LAYOUT, 0)
+        }
+        #[cfg(not(feature = "ffmpeg7"))]
+        unsafe {
+            let codec = self.find_codec()?;
+            let ch_layouts = Self::build_array((*codec.ch_layouts).nb_channels as *const i32, 0);
+            Ok(ch_layouts)
+        }
     }
 
     pub fn supported_color_ranges(&self) -> Result<Option<&'a [ffi::AVColorRange]>> {
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             self.get_supported_config(
                 ffi::AV_CODEC_CONFIG_COLOR_RANGE,
                 ffi::AVCOL_RANGE_UNSPECIFIED,
             )
         }
+        #[cfg(not(feature = "ffmpeg7"))]
+        {
+            Ok(None)
+        }
     }
 
     pub fn supported_color_spaces(&self) -> Result<Option<&'a [ffi::AVColorSpace]>> {
+        #[cfg(feature = "ffmpeg7")]
         unsafe {
             self.get_supported_config(ffi::AV_CODEC_CONFIG_COLOR_SPACE, ffi::AVCOL_SPC_UNSPECIFIED)
+        }
+        #[cfg(not(feature = "ffmpeg7"))]
+        {
+            Ok(None)
         }
     }
 

@@ -51,7 +51,7 @@ impl Time {
     pub fn from_nth_of_a_second(nth: usize) -> Self {
         Self {
             time: Some(1),
-            time_base: avutil::ra(1, nth as i32),
+            time_base: new_rational(1, nth as i32),
         }
     }
 
@@ -88,7 +88,7 @@ impl Time {
     pub fn from_units(time: usize, base_den: usize) -> Self {
         Self {
             time: Some(time as i64),
-            time_base: avutil::ra(1, base_den as i32),
+            time_base: new_rational(1, base_den as i32),
         }
     }
 
@@ -96,7 +96,7 @@ impl Time {
     pub fn zero() -> Self {
         Time {
             time: Some(0),
-            time_base: avutil::ra(1, 90000),
+            time_base: new_rational(1, 90000),
         }
     }
 
@@ -219,8 +219,18 @@ impl<T: Into<i64> + Clone> Rescale for T {
 }
 
 #[inline(always)]
+pub fn new_rational(num: i32, den: i32) -> AVRational {
+    avutil::ra(num, den)
+}
+
+#[inline(always)]
 pub fn av_rational_eq(a: &AVRational, b: &AVRational) -> bool {
     a.num == b.num && a.den == b.den
+}
+
+#[inline(always)]
+pub fn av_rational_contains(arr: &[AVRational], a: &AVRational) -> bool {
+    arr.iter().any(|b| av_rational_eq(a, b))
 }
 
 impl PartialEq for Time {
@@ -350,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let time = Time::new(Some(2), avutil::ra(3, 9));
+        let time = Time::new(Some(2), new_rational(3, 9));
         assert!(time.has_value());
         assert_eq!(time.as_secs(), 2.0 / 3.0);
         assert_eq!(time.into_value(), Some(2));
@@ -358,9 +368,9 @@ mod tests {
 
     #[test]
     fn test_with_time_base() {
-        let time = Time::new(Some(2), avutil::ra(3, 9));
+        let time = Time::new(Some(2), new_rational(3, 9));
         assert_eq!(time.as_secs(), 2.0 / 3.0);
-        let time = time.with_time_base(avutil::ra(1, 9));
+        let time = time.with_time_base(new_rational(1, 9));
         assert_eq!(time.as_secs(), 2.0 / 3.0);
         assert_eq!(time.into_value(), Some(6));
     }
@@ -433,7 +443,7 @@ mod tests {
         assert_eq!(time.as_secs(), 0.25);
         let time = Time::from_secs(0.3);
         assert_eq!(time.as_secs(), 0.3);
-        let time = Time::new(None, avutil::ra(0, 0));
+        let time = Time::new(None, new_rational(0, 0));
         assert_eq!(time.as_secs(), 0.0);
     }
 
@@ -443,19 +453,19 @@ mod tests {
         assert_eq!(time.as_secs_f64(), 0.25);
         let time = Time::from_secs_f64(0.3);
         assert_eq!(time.as_secs_f64(), 0.3);
-        let time = Time::new(None, avutil::ra(0, 0));
+        let time = Time::new(None, new_rational(0, 0));
         assert_eq!(time.as_secs_f64(), 0.0);
     }
 
     #[test]
     fn test_into_parts() {
-        let time = Time::new(Some(1), avutil::ra(2, 3));
-        assert_eq!(time, (Some(1), avutil::ra(2, 3)));
+        let time = Time::new(Some(1), new_rational(2, 3));
+        assert_eq!(time, (Some(1), new_rational(2, 3)));
     }
 
     #[test]
     fn test_into_value_none() {
-        let time = Time::new(None, avutil::ra(0, 0));
+        let time = Time::new(None, new_rational(0, 0));
         assert_eq!(time.into_value(), None);
     }
 
@@ -485,7 +495,7 @@ mod tests {
 
     #[test]
     fn test_apply_different_time_bases() {
-        let a = Time::new(Some(3), avutil::ra(2, 32));
+        let a = Time::new(Some(3), new_rational(2, 32));
         let b = Time::from_nth_of_a_second(4);
         assert!(
             (a.aligned_with(b).apply(|x, y| x + y).as_secs()
@@ -498,14 +508,14 @@ mod tests {
     #[test]
     fn test_negative_into_duration_clamps() {
         assert_eq!(
-            Duration::from(Time::new(Some(-100), avutil::ra(0, 0))),
+            Duration::from(Time::new(Some(-100), new_rational(0, 0))),
             Duration::ZERO,
         )
     }
 
     #[test]
     fn test_av_no_pts_value() {
-        let nopts = Time::new(Some(ffi::AV_NOPTS_VALUE), avutil::ra(0, 0));
+        let nopts = Time::new(Some(ffi::AV_NOPTS_VALUE), new_rational(0, 0));
         assert_eq!(nopts.into_value(), Some(ffi::AV_NOPTS_VALUE));
         assert_eq!(Duration::from(nopts).as_secs_f32(), 0.0);
     }

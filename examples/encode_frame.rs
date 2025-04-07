@@ -3,12 +3,11 @@ use rsmedia::{
     frame::MediaFrame,
     io::private::{Output, Write},
     stream::StreamInfo,
-    time::Time,
+    time::{self, Time},
     EncoderBuilder, PixelFormat, StreamWriter,
 };
 
 use anyhow::Context;
-use rsmpeg::avutil;
 use std::path::Path;
 
 fn main() {
@@ -104,9 +103,13 @@ fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
 
     // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
     // pixel are equal, and determined by the `rgb` we chose above.
-    let mut frame =
-        MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, avutil::ra(1, 24))
-            .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(
+        width,
+        height,
+        PixelFormat::RGB24,
+        time::new_rational(1, 24),
+    )
+    .unwrap();
     for y in 0..height {
         for x in 0..width {
             frame.data[[y, x, 0]] = rgb[0];

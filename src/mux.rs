@@ -462,7 +462,7 @@ mod tests {
         let output_path = Path::new("/tmp/test_mux_demux_video.mp4");
 
         let (width, height) = (1920, 1080);
-        let video_encoder = Encoder::new_video(width, height).unwrap();
+        let video_encoder = Encoder::new_video(width, height)?;
 
         let stream_writer = StreamWriter::new(output_path)?;
         let mut muxer = Muxer::from_writer(stream_writer);
@@ -515,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "test_mux_demux_audio_aac 需要写文件操作"]
+    #[ignore = "test_mux_demux_audio_aac is need write file"]
     fn test_mux_demux_audio_aac() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_audio_aac.aac");
         let sample_rate = 44_100;
@@ -587,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "test_mux_demux_audio_mp3 需要写文件操作"]
+    #[ignore = "test_mux_demux_audio_mp3 is need write file"]
     fn test_mux_demux_audio_mp3() -> Result<()> {
         let output_path = Path::new("/tmp/test_mux_demux_audio_mp3.mp3");
         let sample_rate = 44_100;
@@ -641,7 +641,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "demux test_multiple_streams"]
+    #[ignore = "demux test_multiple_streams need a file"]
     fn test_multiple_streams() -> Result<()> {
         // 视频参数
         pub const VIDEO_WIDTH: usize = 1280;

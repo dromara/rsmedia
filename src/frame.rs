@@ -1,8 +1,8 @@
 use crate::pixel::PixelFormat;
-use crate::{MediaType, SampleFormat};
+use crate::{time, MediaType, SampleFormat};
 
 use rsmpeg::avutil::{AVChannelLayout, AVFrame};
-use rsmpeg::{avutil, ffi};
+use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
 use yuvutils_rs::{
@@ -256,7 +256,7 @@ where
             frame.set_format(self.format);
             frame.set_nb_samples(self.nb_samples as i32);
             frame.set_sample_rate(self.sample_rate as i32);
-            time_base = avutil::ra(1, self.sample_rate as i32);
+            time_base = time::new_rational(1, self.sample_rate as i32);
             frame.set_ch_layout(
                 AVChannelLayout::from_nb_channels(self.nb_channels as i32).into_inner(),
             );

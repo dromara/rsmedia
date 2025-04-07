@@ -172,16 +172,7 @@ impl<'codec> CodecConfig {
         }
         #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
-            let codec = self.find_codec()?;
-            if codec.ch_layouts.is_null() {
-                Ok(None)
-            } else {
-                // terminates with 0
-                Ok(Self::build_array(
-                    (*codec.ch_layouts).nb_channels as *const i32,
-                    0,
-                ))
-            }
+            Ok(None)
         }
     }
 

@@ -165,14 +165,24 @@ impl<'codec> CodecConfig {
         }
     }
 
-    pub fn supported_channel_layouts(&self) -> Result<Option<&'codec [i32]>> {
+    pub fn supported_channel_layouts(&self) -> Result<Option<&'codec [ffi::AVChannelLayout]>> {
+        let tail = unsafe {
+            ffi::AVChannelLayout {
+                order: ffi::AV_CHANNEL_ORDER_UNSPEC,
+                nb_channels: 0,
+                u: std::mem::zeroed(),
+                opaque: std::ptr::null_mut(),
+            }
+        };
         #[cfg(feature = "ffmpeg7")]
         unsafe {
-            self.get_supported_config(ffi::AV_CODEC_CONFIG_CHANNEL_LAYOUT, 0)
+            self.get_supported_config(ffi::AV_CODEC_CONFIG_CHANNEL_LAYOUT, tail)
         }
         #[cfg(not(feature = "ffmpeg7"))]
-        {
-            Ok(None)
+        unsafe {
+            let codec = self.find_codec()?;
+            // terminates with {0}
+            Ok(Self::build_array(codec.ch_layouts, tail))
         }
     }
 

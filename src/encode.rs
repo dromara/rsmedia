@@ -653,13 +653,14 @@ impl Encoder {
         };
 
         // check supported channel layout
-        if let Some(nb_channels) = self.config.supported_channel_layouts()? {
+        if let Some(channel_layouts) = self.config.supported_channel_layouts()? {
             let ch = processed.ch_layout.nb_channels;
-            assert!(
-                nb_channels.contains(&ch),
-                "Unsupported channel layout:{}",
-                ch
-            );
+            let channels = channel_layouts
+                .as_ref()
+                .iter()
+                .map(|l| l.nb_channels)
+                .collect::<Vec<_>>();
+            assert!(channels.contains(&ch), "Unsupported channel layout:{}", ch);
         };
 
         // check supported sample format

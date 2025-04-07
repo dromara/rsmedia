@@ -13,6 +13,7 @@ use std::ffi::CStr;
 
 /// 编码器能力描述结构体
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct CodecConfig {
     /// 支持的帧率列表（视频编码器）
     pub supported_frame_rates: Option<Vec<ffi::AVRational>>,
@@ -87,6 +88,7 @@ impl CodecConfig {
     }
 
     /// 获取默认采样格式（优先级：FLTP > S16P > 首个支持格式）
+    #[allow(dead_code)]
     pub fn default_sample_fmt(&self) -> Option<ffi::AVSampleFormat> {
         [ffi::AV_SAMPLE_FMT_FLTP, ffi::AV_SAMPLE_FMT_S16P]
             .iter()

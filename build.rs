@@ -48,14 +48,24 @@ fn configure_linux(target_arch: &str) {
     println!("cargo:rustc-link-lib=dylib=pthread");
 
     // arch-specific paths prioritized
-    let _arch_specific_paths = match target_arch {
+    let arch_specific_paths = match target_arch {
         "x86_64" => vec!["/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu"],
         "aarch64" => vec!["/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu"],
         _ => vec![],
     };
-    // for path in arch_specific_paths {
-    //     println!("cargo:rustc-link-search=native={}", path);
-    // }
+    for path in arch_specific_paths {
+        println!("cargo:rustc-link-search=native={}", path);
+    }
+
+    // ffmpeg libs
+    for lib in FFMPEG_LIBS.iter() {
+        println!("cargo:rustc-link-lib={}", lib);
+        // if is_static {
+        //     println!("cargo:rustc-link-lib=static={}", lib);
+        // } else {
+        //     println!("cargo:rustc-link-lib={}", lib);
+        // }
+    }
 
     // common
     println!("cargo:rustc-link-search=native=/usr/local/lib");

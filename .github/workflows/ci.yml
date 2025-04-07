@@ -49,19 +49,25 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             build-essential \
             ca-certificates \
-            clang \
-            lld \
+            pkg-config \
+            libtool \
+            autoconf \
+            automake \
+            cmake \
             nasm \
             yasm \
             curl \
             wget \
+            unzip \
             gnupg \
-            libc6 \
-            libc6-dev \
-            libgcc-s1 \
+            clang \
+            llvm-dev \
+            libclang-dev \
             linux-libc-dev \
+            libgnutls28-dev \
+            zlib1g-dev \
+            libass-dev \
             binutils \
-            pkg-config \
             libx264-dev \
             libx265-dev \
             libavcodec-dev \
@@ -73,9 +79,11 @@ jobs:
             libavfilter-dev \
             libssl-dev \
             librtmp-dev \
+            libva-dev \
             libvpx-dev \
             libaom-dev \
             libsvtav1-dev \
+            libdav1d-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \
@@ -264,19 +272,25 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             build-essential \
             ca-certificates \
-            clang \
-            lld \
+            pkg-config \
+            libtool \
+            autoconf \
+            automake \
+            cmake \
             nasm \
             yasm \
             curl \
             wget \
+            unzip \
             gnupg \
-            libc6 \
-            libc6-dev \
-            libgcc-s1 \
+            clang \
+            llvm-dev \
+            libclang-dev \
             linux-libc-dev \
+            libgnutls28-dev \
+            zlib1g-dev \
+            libass-dev \
             binutils \
-            pkg-config \
             libx264-dev \
             libx265-dev \
             libavcodec-dev \
@@ -288,9 +302,11 @@ jobs:
             libavfilter-dev \
             libssl-dev \
             librtmp-dev \
+            libva-dev \
             libvpx-dev \
             libaom-dev \
             libsvtav1-dev \
+            libdav1d-dev \
             libxvidcore-dev \
             libmp3lame-dev \
             libopus-dev \

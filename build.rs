@@ -74,13 +74,8 @@ fn configure_linux(target_arch: &str) {
     // using it will prevent the need to regenerate the same binding file repeatedly.
     //
     // ffmpeg libs
-    let is_static = env::var("FFMPEG_LIBS_DIR").is_ok();
     for lib in FFMPEG_LIBS.iter() {
-        if is_static {
-            println!("cargo:rustc-link-lib=static={}", lib);
-        } else {
-            println!("cargo:rustc-link-lib={}", lib);
-        }
+        println!("cargo:rustc-link-lib={}", lib);
     }
 
     // common

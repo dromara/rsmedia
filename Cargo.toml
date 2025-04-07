@@ -17,9 +17,9 @@ default = ["ndarray", "ffmpeg7", "link_system_ffmpeg"]
 ffmpeg6 = ["rsmpeg/ffmpeg6"]
 ffmpeg7 = ["rsmpeg/ffmpeg7"]
 ## unxi linking ffmpeg with pkg-config.
-link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg"]
+link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg", "pkg-config"]
 ## windows linking ffmpeg with vcpkg.
-link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
+link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg", "vcpkg"]
 
 [dependencies]
 url = "2.5"
@@ -68,6 +68,10 @@ wavers = "1.5"
 rubato = "0.16"
 dasp = { version = "0.11", features = ["all"] }
 rodio = { version = "0.20", features = ["symphonia-all", "tracing"] }
+
+[build-dependencies]
+vcpkg = { version = "0.2", optional = true }
+pkg-config = { version = "0.3", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

@@ -75,7 +75,22 @@ fn configure_linux(target_arch: &str) {
     //
     // ffmpeg libs
     for lib in FFMPEG_LIBS.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
+        // cargo link
+        // println!("cargo:rustc-link-lib={}", lib);
+        match pkg_config::probe_library(format!("lib{}", lib).as_str()) {
+            Ok(lib_info) => {
+                println!("Found library: {}", lib);
+                for path in lib_info.include_paths.iter() {
+                    println!("Include path: {:?}", path);
+                }
+                for path in lib_info.link_paths.iter() {
+                    println!("Library path: {:?}", path);
+                }
+            }
+            Err(e) => {
+                panic!("Could not find {} via pkg-config: {:?}", lib, e);
+            }
+        }
     }
 
     // common
@@ -116,7 +131,6 @@ fn configure_windows(target_arch: &str) {
     }
 
     let (triplet, lib_path) = found_triplet.expect("No valid vcpkg triplets found!");
-    let is_static = triplet.contains("static");
 
     // 添加 vcpkg 库路径
     println!("cargo:rustc-link-search=native={}", lib_path.display());
@@ -130,13 +144,15 @@ fn configure_windows(target_arch: &str) {
         println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
     }
 
+    // ffmpeg libs
     for lib in FFMPEG_LIBS.iter() {
-        if is_static {
-            println!("cargo:rustc-link-lib=static={}", lib);
-        } else {
-            println!("cargo:rustc-link-lib={}", lib);
-        }
+        println!("cargo:rustc-link-lib={}", lib);
     }
+
+    println!("Using vcpkg on Windows.");
+    #[cfg(target_os = "windows")]
+    vcpkg::find_package("ffmpeg")
+        .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
 
     // Windows 系统库
     let system_libs = [

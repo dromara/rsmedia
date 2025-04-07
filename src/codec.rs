@@ -7,7 +7,7 @@ pub struct CodecConfig {
     id: ffi::AVCodecID,
 }
 
-impl<'a> CodecConfig {
+impl<'codec> CodecConfig {
     pub fn new(id: ffi::AVCodecID) -> Self {
         CodecConfig { id }
     }
@@ -83,7 +83,7 @@ impl<'a> CodecConfig {
         &self,
         config_type: ffi::AVCodecConfig,
         tail: T,
-    ) -> Result<Option<&'a [T]>> {
+    ) -> Result<Option<&'codec [T]>> {
         let mut configs = std::ptr::null();
         let mut num_configs = 0;
 
@@ -108,7 +108,7 @@ impl<'a> CodecConfig {
         Ok(unsafe { Self::build_array(configs as *const T, tail) })
     }
 
-    pub fn supported_pixel_formats(&self) -> Result<Option<&'a [ffi::AVPixelFormat]>> {
+    pub fn supported_pixel_formats(&self) -> Result<Option<&'codec [ffi::AVPixelFormat]>> {
         // #[cfg(feature = "ffmpeg7")]
         // unsafe {
         //     self.get_supported_config(ffi::AV_CODEC_CONFIG_PIX_FORMAT, ffi::AV_PIX_FMT_NONE)
@@ -122,7 +122,7 @@ impl<'a> CodecConfig {
         }
     }
 
-    pub fn supported_frame_rates(&self) -> Result<Option<&'a [ffi::AVRational]>> {
+    pub fn supported_frame_rates(&self) -> Result<Option<&'codec [ffi::AVRational]>> {
         // #[cfg(feature = "ffmpeg7")]
         // unsafe {
         //     self.get_supported_config(
@@ -142,7 +142,7 @@ impl<'a> CodecConfig {
         }
     }
 
-    pub fn supported_sample_rates(&self) -> Result<Option<&[i32]>> {
+    pub fn supported_sample_rates(&self) -> Result<Option<&'codec [i32]>> {
         // #[cfg(feature = "ffmpeg7")]
         // unsafe {
         //     self.get_supported_config(ffi::AV_CODEC_CONFIG_SAMPLE_RATE, 0)
@@ -156,7 +156,7 @@ impl<'a> CodecConfig {
         }
     }
 
-    pub fn supported_sample_formats(&self) -> Result<Option<&'a [ffi::AVSampleFormat]>> {
+    pub fn supported_sample_formats(&self) -> Result<Option<&'codec [ffi::AVSampleFormat]>> {
         // #[cfg(feature = "ffmpeg7")]
         // unsafe {
         //     self.get_supported_config(ffi::AV_CODEC_CONFIG_SAMPLE_FORMAT, ffi::AV_SAMPLE_FMT_NONE)
@@ -366,14 +366,5 @@ mod tests {
         println!("{:?}", config.supported_channel_layouts().unwrap());
         println!("{:?}", config.support_variable_frame_size());
         println!("=========================================");
-
-        #[cfg(target_os = "linux")]
-        {
-            let config = CodecConfig::new_with_name(c"libfdk_aac").unwrap();
-            println!("{:?}", config.supported_sample_rates().unwrap());
-            println!("{:?}", config.supported_sample_formats().unwrap());
-            println!("{:?}", config.supported_channel_layouts().unwrap());
-            println!("{:?}", config.support_variable_frame_size());
-        }
     }
 }

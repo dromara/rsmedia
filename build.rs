@@ -57,14 +57,30 @@ fn configure_linux(target_arch: &str) {
         println!("cargo:rustc-link-search=native={}", path);
     }
 
+    // 1. To link prebuilt libraries:
+    // Dynamic linking with pre-built dylib:
+    // Set `FFMPEG_DLL_PATH` to the path of dll or so files. (Windows: Put corresponding .lib file next to the .dll file.)
+    //
+    // Static linking with pre-built staticlib:
+    // Set `FFMPEG_LIBS_DIR` to the path of FFmpeg pre-built libs directory.
+    //
+    // 2. To generate bindings:
+    // Compile-time binding generation(requires the Clang dylib):
+    // Set `FFMPEG_INCLUDE_DIR` to the path of the header files for binding generation.
+    //
+    // Use your prebuilt binding:
+    // Set `FFMPEG_BINDING_PATH` to the pre-built binding file.
+    // The pre-built binding is usually copied from the OUT_DIR of the compile-time binding generation,
+    // using it will prevent the need to regenerate the same binding file repeatedly.
+    //
     // ffmpeg libs
+    let is_static = env::var("FFMPEG_LIBS_DIR").is_ok();
     for lib in FFMPEG_LIBS.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
-        // if is_static {
-        //     println!("cargo:rustc-link-lib=static={}", lib);
-        // } else {
-        //     println!("cargo:rustc-link-lib={}", lib);
-        // }
+        if is_static {
+            println!("cargo:rustc-link-lib=static={}", lib);
+        } else {
+            println!("cargo:rustc-link-lib={}", lib);
+        }
     }
 
     // common

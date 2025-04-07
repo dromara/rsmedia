@@ -203,7 +203,11 @@ mod tests {
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
         println!("=========================================");
+    }
 
+    #[test]
+    #[cfg(unix)]
+    fn test_supported_video_codec_name() {
         let config = CodecConfig::new_with_name(c"libx264").unwrap();
         println!("{:?}", config.supported_pixel_formats().unwrap());
         println!("{:?}", config.supported_frame_rates().unwrap());
@@ -276,7 +280,11 @@ mod tests {
         println!("{:?}", config.supported_channel_layouts().unwrap());
         println!("{:?}", config.support_variable_frame_size());
         println!("=========================================");
+    }
 
+    #[test]
+    #[cfg(unix)]
+    fn test_supported_audio_codec_name() {
         let config = CodecConfig::new_with_name(c"libmp3lame").unwrap();
         println!("{:?}", config.supported_sample_rates().unwrap());
         println!("{:?}", config.supported_sample_formats().unwrap());

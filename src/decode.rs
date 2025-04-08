@@ -1,3 +1,4 @@
+use crate::filter::FilterContext;
 use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{MediaFrame, MediaFrameType};
@@ -25,6 +26,7 @@ pub struct DecoderBuilder {
     resize: Option<Resize>,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
+    filter: Option<FilterContext>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -37,6 +39,7 @@ impl DecoderBuilder {
     pub fn new(media_type: MediaType) -> Self {
         Self {
             media_type,
+            filter: None,
             resize: None,
             codec_name: None,
             codec_opts: None,
@@ -91,6 +94,11 @@ impl DecoderBuilder {
     /// set the thread count.
     pub fn with_thread_count(mut self, thread_count: usize) -> Self {
         self.thread_count = thread_count;
+        self
+    }
+
+    pub fn with_filter(mut self, filter: Option<FilterContext>) -> Self {
+        self.filter = filter;
         self
     }
 
@@ -224,13 +232,14 @@ impl DecoderBuilder {
         };
 
         Ok(Decoder {
-            decode_ctx,
+            context: decode_ctx,
             hw_context,
             rescale,
             resample,
             time_base,
             media_type,
             stream_index,
+            filter: self.filter,
             state: DecoderState::Normal,
         })
     }
@@ -256,7 +265,8 @@ pub enum DecoderState {
 /// );
 /// ```
 pub struct Decoder {
-    decode_ctx: AVCodecContext,
+    context: AVCodecContext,
+    filter: Option<FilterContext>,
     hw_context: Option<Arc<HWContext>>,
     // video rescaling: (width, height, pixel_format)
     rescale: Option<(usize, usize, PixelFormat)>,
@@ -292,13 +302,13 @@ impl Decoder {
     /// Get the decoders input size width
     #[inline(always)]
     pub fn width(&self) -> usize {
-        self.decode_ctx.width as usize
+        self.context.width as usize
     }
 
     /// Get the decoders input size height
     #[inline(always)]
     pub fn height(&self) -> usize {
-        self.decode_ctx.height as usize
+        self.context.height as usize
     }
 
     /// Get decoder time base.
@@ -572,14 +582,14 @@ impl Decoder {
 
     fn flush(&mut self) {
         unsafe {
-            ffi::avcodec_flush_buffers(self.decode_ctx.as_mut_ptr());
+            ffi::avcodec_flush_buffers(self.context.as_mut_ptr());
         }
     }
 
     /// Send packet to decoder.
     /// Ensure rescaling timestamps accordingly before sending to decoder.
     fn send_packet_to_decoder(&mut self, packet: Option<&AVPacket>) -> Result<()> {
-        self.decode_ctx
+        self.context
             .send_packet(packet)
             .context("Failed to send packet to decoder")?;
         Ok(())
@@ -598,8 +608,21 @@ impl Decoder {
             MediaType::AUDIO => self.process_audio_frame(frame),
             _ => Ok(frame),
         };
+
         match res {
-            Ok(f) => Ok(Some(f)),
+            Ok(raw_frame) => {
+                if let Some(filter) = self.filter.as_mut() {
+                    match filter.process_frame(Some(raw_frame.clone()))? {
+                        Some(f) => Ok(Some(f)),
+                        None => {
+                            log::warn!("Filter returned None, keeping original frame.");
+                            Ok(Some(raw_frame))
+                        }
+                    }
+                } else {
+                    Ok(Some(raw_frame))
+                }
+            }
             Err(e) => Err(e),
         }
     }
@@ -607,7 +630,7 @@ impl Decoder {
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
     /// the decoder signals `EAGAIN` and `EOF`
     fn decoder_receive_frame(&mut self) -> Result<Option<RawFrame>> {
-        match self.decode_ctx.receive_frame() {
+        match self.context.receive_frame() {
             Ok(frame) => Ok(Some(frame)),
             Err(rsmpeg::error::RsmpegError::DecoderDrainError) => {
                 log::debug!("Decoder drained. try send new packet again.");
@@ -634,7 +657,7 @@ impl Decoder {
             .as_ref()
             .and_then(|hw_ctx| {
                 if hw_ctx.is_hw_frame(&hw_frame) {
-                    Some(hw_ctx.hw_download(&mut self.decode_ctx, &hw_frame))
+                    Some(hw_ctx.hw_download(&mut self.context, &hw_frame))
                 } else {
                     log::warn!("Hardware acceleration decoding not available!");
                     None
@@ -713,6 +736,11 @@ impl Decoder {
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
 impl Drop for Decoder {
     fn drop(&mut self) {
+        // flush filter before drop
+        if let Some(filter) = self.filter.as_mut() {
+            let _frames = filter.flush().context("Failed to flush filter").unwrap();
+        }
+
         // We need to drain the items still in the decoders queue.
         match self.send_packet_to_decoder(None) {
             Ok(_) => {
@@ -751,7 +779,7 @@ impl Drop for Decoder {
             // 3. free(): invalid pointer
             // 4. double free or corruption (!prev)
             // 5. corrupted double-linked list Aborted (core dumped)
-            let codec_ctx_ptr = self.decode_ctx.as_mut_ptr();
+            let codec_ctx_ptr = self.context.as_mut_ptr();
             if !codec_ctx_ptr.is_null() {
                 if !(*codec_ctx_ptr).hw_frames_ctx.is_null() {
                     let _hw_frames = (*codec_ctx_ptr).hw_frames_ctx;
@@ -773,6 +801,7 @@ unsafe impl Sync for Decoder {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filter::{self, AudioParams, FilterConfig, FilterParams, VideoParams};
     use crate::io::StreamReader;
 
     #[test]
@@ -780,8 +809,30 @@ mod tests {
     fn test_decode_video() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
 
+        let video_filter_params = FilterParams::Video(VideoParams {
+            width: 640,
+            height: 360,
+            format: PixelFormat::YUV420P,
+            time_base: ffi::AVRational { num: 1, den: 25 },
+            frame_rate: ffi::AVRational { num: 25, den: 1 },
+            pixel_aspect: ffi::AVRational { num: 1, den: 1 },
+        });
+
+        let filters = vec![
+            filter::video::scale(640, 360, PixelFormat::YUV420P),
+            filter::video::drawtext("Hello", 10, 10, 24, "white"),
+        ];
+
+        let video_filter_config = FilterConfig {
+            params: video_filter_params,
+            filters,
+        };
+
         let mut stream_reader = StreamReader::new(path)?;
-        let mut decoder = Decoder::new_video(&stream_reader).unwrap();
+        let mut decoder = DecoderBuilder::new_video()
+            .with_filter(Some(FilterContext::new(video_filter_config)?))
+            .build(&stream_reader)
+            .unwrap();
         loop {
             match decoder.decode_raw(&mut stream_reader) {
                 Ok(Some(frame)) => {
@@ -806,8 +857,25 @@ mod tests {
     fn test_decode_audio() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
 
+        let audio_filter_params = FilterParams::Audio(AudioParams {
+            nb_channels: 2,
+            sample_rate: 44100,
+            format: SampleFormat::FLTP,
+            time_base: ffi::AVRational { num: 1, den: 44100 },
+        });
+
+        let filters = vec![filter::audio::volume(1.5), filter::audio::loudnorm(-16.0)];
+
+        let audio_filter_config = FilterConfig {
+            params: audio_filter_params,
+            filters,
+        };
+
         let mut stream_reader = StreamReader::new(path)?;
-        let mut decoder = Decoder::new_audio(&stream_reader).unwrap();
+        let mut decoder = DecoderBuilder::new_audio()
+            .with_filter(Some(FilterContext::new(audio_filter_config)?))
+            .build(&stream_reader)
+            .unwrap();
         loop {
             match decoder.decode_raw(&mut stream_reader) {
                 Ok(Some(frame)) => {

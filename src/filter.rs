@@ -325,11 +325,15 @@ impl FilterFactory {
     }
 
     /// 桥接滤镜，避免阻塞
-    /// fifo 是通用的，不改变帧内容，只增加缓冲能力
+    /// `fifo`: 是通用的，不改变帧内容，只增加缓冲能力
+    /// `afifo`: 音频专用
     /// 若出现 filter 报错如 “frame dropped”，插入 fifo 常可解决
-    /// FFmpeg 还支持 afifo（音频专用）
     pub fn fifo(media_type: MediaType) -> Filter {
-        Filter::new("fifo", media_type, "fifo".to_string())
+        if media_type == MediaType::AUDIO {
+            Filter::new("afifo", media_type, "afifo".to_string())
+        } else {
+            Filter::new("fifo", media_type, "fifo".to_string())
+        }
     }
 
     /// 分支滤镜
@@ -509,8 +513,8 @@ impl FilterGraph {
             .context("Failed to create audio buffer sink")?;
 
         sink_ctx.opt_set_bin(c"sample_fmts", &(params.format as i32))?;
-        sink_ctx.opt_set_bin(c"channel_layouts", &channel_desc)?;
         sink_ctx.opt_set_bin(c"sample_rates", &params.sample_rate)?;
+        sink_ctx.opt_set(c"ch_layouts", &channel_desc)?;
 
         // Create endpoints
         let outputs = AVFilterInOut::new(c"in", &mut src_ctx, 0);

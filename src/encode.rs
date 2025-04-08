@@ -1,4 +1,5 @@
 use crate::codec::CodecConfig;
+use crate::filter::FilterContext;
 use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{MediaFrame, MediaFrameType};
@@ -39,6 +40,7 @@ pub struct EncoderBuilder {
     media_type: MediaType,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
+    filter: Option<FilterContext>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -197,6 +199,11 @@ impl EncoderBuilder {
         self
     }
 
+    pub fn with_filter(mut self, filter: Option<FilterContext>) -> Self {
+        self.filter = filter;
+        self
+    }
+
     /// Enable hardware acceleration with the specified device type.
     ///
     /// * `device_config` - Device to use for hardware acceleration.
@@ -322,9 +329,9 @@ impl EncoderBuilder {
             ))?
         };
 
-        let config = CodecConfig::new(codec.id);
         let mut encode_ctx = AVCodecContext::new(&codec);
         self.setup_codec_context(&mut encode_ctx)?;
+        let config = CodecConfig::new_with_ctx(&encode_ctx);
 
         let hw_context = self
             .hw_device_config
@@ -397,9 +404,10 @@ impl EncoderBuilder {
             config,
             rescale,
             resample,
-            encode_ctx,
             hw_context,
             media_type,
+            context: encode_ctx,
+            filter: self.filter,
             state: EncoderState::Normal,
             keyframe_interval: self.keyframe_interval,
         })
@@ -430,6 +438,7 @@ impl Default for EncoderBuilder {
             thread_count: num_cpus::get(),
             codec_name: None,
             codec_opts: None,
+            filter: None,
             hw_device_config: None,
         }
     }
@@ -464,7 +473,8 @@ enum EncoderState {
 /// ```
 pub struct Encoder {
     config: CodecConfig,
-    encode_ctx: AVCodecContext,
+    context: AVCodecContext,
+    filter: Option<FilterContext>,
     hw_context: Option<Arc<HWContext>>,
     // video rescaling: (width, height, pixel_format)
     rescale: Option<(usize, usize, PixelFormat)>,
@@ -556,7 +566,16 @@ impl Encoder {
             _ => return Err(Error::msg("Invalid media_type or frame.")),
         };
 
-        Ok(self.encode_ctx.send_frame(frame.as_ref())?)
+        //// filter
+        let filtered = if let Some(filter) = self.filter.as_mut() {
+            filter
+                .process_frame(frame)
+                .map_err(|e| Error::msg(format!("Filter failed: {}", e)))?
+        } else {
+            frame
+        };
+
+        Ok(self.context.send_frame(filtered.as_ref())?)
     }
 
     /// Internal: process a video frame (e.g., scale, convert, keyframe decision).
@@ -591,10 +610,10 @@ impl Encoder {
         // ensure frame rate matches encoder frame rate if supported rates are available
         if let Some(rates) = self.config.supported_frame_rates()? {
             assert!(
-                time::av_rational_contains(rates, &(self.encode_ctx.framerate)),
+                time::av_rational_contains(rates, &(self.context.framerate)),
                 "Unsupported frame rate - expected: {:?}, actual: {:?}",
                 rates,
-                self.encode_ctx.framerate
+                self.context.framerate
             );
         }
 
@@ -607,7 +626,7 @@ impl Encoder {
         // }
 
         // Video Producer key frame every once in a while
-        if self.encode_ctx.frame_num % self.keyframe_interval as i64 == 0 {
+        if self.context.frame_num % self.keyframe_interval as i64 == 0 {
             scaled.set_pict_type(ffi::AV_PICTURE_TYPE_I);
         }
 
@@ -616,7 +635,7 @@ impl Encoder {
             Some(hw_ctx) if hw_ctx.is_sw_frame(&scaled) => {
                 // sw_frame -> hw_frame
                 hw_ctx
-                    .hw_upload(&mut self.encode_ctx, &scaled)
+                    .hw_upload(&mut self.context, &scaled)
                     .map_err(|e| Error::msg(format!("HWContext failed to upload frame: {}", e)))?
             }
             _ => scaled.clone(),
@@ -687,7 +706,7 @@ impl Encoder {
         // encoding: set by libavcodec in avcodec_open2().
         // Each submitted frame except the last must contain exactly frame_size samples per channel.
         if !self.config.support_variable_frame_size() {
-            let expected = self.encode_ctx.frame_size;
+            let expected = self.context.frame_size;
             let actual = processed.nb_samples;
             assert_eq!(
                 expected, actual,
@@ -709,32 +728,32 @@ impl Encoder {
     /// Get encoder time base.
     #[inline]
     pub fn time_base(&self) -> ffi::AVRational {
-        self.encode_ctx.time_base
+        self.context.time_base
     }
 
     #[inline]
     pub fn frame_rate(&self) -> ffi::AVRational {
-        self.encode_ctx.framerate
+        self.context.framerate
     }
 
     #[inline]
     pub fn sample_rate(&self) -> i32 {
-        self.encode_ctx.sample_rate
+        self.context.sample_rate
     }
 
     #[inline]
     pub fn width(&self) -> i32 {
-        self.encode_ctx.width
+        self.context.width
     }
 
     #[inline]
     pub fn height(&self) -> i32 {
-        self.encode_ctx.height
+        self.context.height
     }
 
     #[inline]
     pub fn pix_fmt(&self) -> PixelFormat {
-        self.encode_ctx.pix_fmt.into()
+        self.context.pix_fmt.into()
     }
 
     #[inline]
@@ -744,12 +763,12 @@ impl Encoder {
 
     #[inline]
     pub fn codecpar(&self) -> AVCodecParameters {
-        self.encode_ctx.extract_codecpar()
+        self.context.extract_codecpar()
     }
 
     #[inline]
     pub fn ch_layout(&self) -> AVChannelLayoutRef {
-        self.encode_ctx.ch_layout()
+        self.context.ch_layout()
     }
 
     /// Internal: Pull an encoded packet from the decoder.
@@ -760,7 +779,7 @@ impl Encoder {
     ///
     /// `Some(packet)` if a packet is returned, `None` if waiting or end.
     fn receive_packet(&mut self) -> Result<Option<AVPacket>> {
-        match self.encode_ctx.receive_packet() {
+        match self.context.receive_packet() {
             Ok(pkt) => Ok(Some(pkt)),
             Err(rsmpeg::error::RsmpegError::EncoderDrainError) => {
                 log::debug!("Encoder drained, try send new frame again.");
@@ -803,8 +822,15 @@ impl Encoder {
         // 如果编码器不支持延迟，那么就没有必要进行 flush 操作，因为在这种情况下，编码器不会保留任何未处理的数据。
         // 如果编码器支持延迟（delay），则在结束编码之前发送 EOS 包是有必要的，
         // 因为编码器可能还在缓冲一些数据，直到接收到 EOS 信号才会处理完这些数据并输出剩余的包。
-        if self.encode_ctx.codec().capabilities & ffi::AV_CODEC_CAP_DELAY as i32 == 0 {
+        if !self.config.support_delayed_frame() {
             return Ok(());
+        }
+
+        if let Some(filter) = self.filter.as_mut() {
+            let frames = filter.flush()?;
+            for frame in frames {
+                self.send_frame_to_encoder(Some(frame))?;
+            }
         }
 
         // EOF: Notify the encoder that the last frame has been sent.

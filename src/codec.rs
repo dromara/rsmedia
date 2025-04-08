@@ -1,30 +1,44 @@
 use anyhow::{Error, Result};
-use rsmpeg::avcodec::{AVCodec, AVCodecRef};
+use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::ffi;
 use std::ffi::CStr;
+use std::ptr::NonNull;
 
 pub struct CodecConfig {
-    id: ffi::AVCodecID,
+    codec: NonNull<ffi::AVCodec>,
 }
 
 impl<'codec> CodecConfig {
     pub fn new(id: ffi::AVCodecID) -> Self {
-        CodecConfig { id }
+        let codec = unsafe {
+            let codec = AVCodec::find_encoder(id)
+                .or_else(|| AVCodec::find_decoder(id))
+                .ok_or_else(|| Error::msg(format!("Codec not found: {}", id)))
+                .unwrap();
+            NonNull::new_unchecked(codec.as_ptr() as *mut _)
+        };
+        CodecConfig { codec }
     }
 
     pub fn new_with_name(codec_name: &CStr) -> Result<Self> {
         let codec = AVCodec::find_encoder_by_name(codec_name)
             .or_else(|| AVCodec::find_decoder_by_name(codec_name))
             .ok_or_else(|| Error::msg(format!("Codec not found: '{:?}'", codec_name)))?;
-        Ok(CodecConfig { id: codec.id })
+        Ok(Self::new(codec.id))
+    }
+
+    pub fn new_with_ctx(ctx: &AVCodecContext) -> Self {
+        CodecConfig {
+            codec: unsafe { NonNull::new_unchecked(ctx.codec as *const _ as *mut _) },
+        }
     }
 
     pub fn is_encoder(&self) -> bool {
-        AVCodec::find_encoder(self.id).is_some()
+        unsafe { ffi::av_codec_is_encoder(self.codec.as_ptr()) != 0 }
     }
 
     pub fn is_decoder(&self) -> bool {
-        AVCodec::find_decoder(self.id).is_some()
+        unsafe { ffi::av_codec_is_decoder(self.codec.as_ptr()) != 0 }
     }
 
     unsafe fn probe_len<T>(mut ptr: *const T, tail: T) -> usize {
@@ -56,20 +70,14 @@ impl<'codec> CodecConfig {
         }
     }
 
-    fn find_codec(&self) -> Result<AVCodecRef> {
-        let codec = AVCodec::find_encoder(self.id)
-            .or_else(|| AVCodec::find_decoder(self.id))
-            .ok_or_else(|| Error::msg(format!("Codec not found: {}", self.id)))?;
-        Ok(codec)
-    }
-
     /// Retrieve a list of all supported values for a given configuration type.
     ///
     /// # Arguments
     /// * `config_type` - The type of configuration to retrieve.
     /// * `tail` - The value that marks the end of the list.
     ///
-    /// `avcodec_get_supported_config(avctx, codec, config, flags, out_configs, out_num_configs)`
+    /// See: <https://ffmpeg.org/pipermail/ffmpeg-cvslog/2024-September/145256.html>
+    /// [`avcodec_get_supported_config(avctx, codec, config, flags, out_configs, out_num_configs)`]
     ///
     /// * `avctx`    An optional context to use. Values such as strict_std_compliance may affect the result. If NULL, default values are used.
     /// * `codec`    The codec to query, or NULL to use avctx->codec.
@@ -86,11 +94,11 @@ impl<'codec> CodecConfig {
         let mut configs = std::ptr::null();
         let mut num_configs = 0;
 
-        let codec = self.find_codec()?;
+        let codec_ptr = self.codec.as_ptr() as *const _;
 
         let ret = ffi::avcodec_get_supported_config(
             std::ptr::null(),
-            codec.as_ptr(),
+            codec_ptr,
             config_type,
             0,
             &mut configs,
@@ -114,27 +122,23 @@ impl<'codec> CodecConfig {
         }
         #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
-            let codec = self.find_codec()?;
             // terminates with -1
-            Ok(Self::build_array(codec.pix_fmts, -1))
+            Ok(Self::build_array((*self.codec.as_ptr()).pix_fmts, -1))
         }
     }
 
     pub fn supported_frame_rates(&self) -> Result<Option<&'codec [ffi::AVRational]>> {
+        let tail = ffi::AVRational { num: 0, den: 0 };
         #[cfg(feature = "ffmpeg7")]
         unsafe {
-            self.get_supported_config(
-                ffi::AV_CODEC_CONFIG_FRAME_RATE,
-                ffi::AVRational { num: 0, den: 0 },
-            )
+            self.get_supported_config(ffi::AV_CODEC_CONFIG_FRAME_RATE, tail)
         }
         #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
-            let codec = self.find_codec()?;
             // terminates with AVRational{0, 0}
             Ok(Self::build_array(
-                codec.supported_framerates,
-                ffi::AVRational { den: 0, num: 0 },
+                (*self.codec.as_ptr()).supported_framerates,
+                tail,
             ))
         }
     }
@@ -146,9 +150,11 @@ impl<'codec> CodecConfig {
         }
         #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
-            let codec = self.find_codec()?;
             // terminates with 0
-            Ok(Self::build_array(codec.supported_samplerates, 0))
+            Ok(Self::build_array(
+                (*self.codec.as_ptr()).supported_samplerates,
+                0,
+            ))
         }
     }
 
@@ -159,9 +165,8 @@ impl<'codec> CodecConfig {
         }
         #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
-            let codec = self.find_codec()?;
             // terminates with -1
-            Ok(Self::build_array(codec.sample_fmts, -1))
+            Ok(Self::build_array((*self.codec.as_ptr()).sample_fmts, -1))
         }
     }
 
@@ -180,9 +185,8 @@ impl<'codec> CodecConfig {
         }
         #[cfg(not(feature = "ffmpeg7"))]
         unsafe {
-            let codec = self.find_codec()?;
             // terminates with {0}
-            Ok(Self::build_array(codec.ch_layouts, tail))
+            Ok(Self::build_array((*self.codec.as_ptr()).ch_layouts, tail))
         }
     }
 
@@ -213,8 +217,14 @@ impl<'codec> CodecConfig {
 
     /// for audio codec, check if it supports variable frame size
     pub fn support_variable_frame_size(&self) -> bool {
-        let codec = self.find_codec().unwrap();
-        codec.capabilities & ffi::AV_CODEC_CAP_VARIABLE_FRAME_SIZE as i32 != 0
+        unsafe {
+            (*self.codec.as_ptr()).capabilities & ffi::AV_CODEC_CAP_VARIABLE_FRAME_SIZE as i32 != 0
+        }
+    }
+
+    /// for codec, check if it supports delay
+    pub fn support_delayed_frame(&self) -> bool {
+        unsafe { (*self.codec.as_ptr()).capabilities & ffi::AV_CODEC_CAP_DELAY as i32 != 0 }
     }
 }
 

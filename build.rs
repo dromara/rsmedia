@@ -6,7 +6,7 @@ fn main() {
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
     match target_os.as_str() {
-        "macos" | "darwin" => configure_macos(),
+        "macos" => configure_macos(&target_arch),
         "linux" => configure_linux(&target_arch),
         "windows" => configure_windows(&target_arch),
         _ => panic!("Unsupported operating system"),
@@ -24,7 +24,7 @@ static FFMPEG_LIBS: [&str; 7] = [
     "swresample",
 ];
 
-fn configure_macos() {
+fn configure_macos(_target_arch: &str) {
     println!("cargo:rustc-link-lib=dylib=c");
     println!("cargo:rustc-link-lib=dylib=dl");
     println!("cargo:rustc-link-lib=dylib=pthread");
@@ -62,7 +62,7 @@ fn configure_linux(target_arch: &str) {
     // Dynamic linking with pre-built dylib:
     // Set `FFMPEG_DLL_PATH` to the path of dll or so files. (Windows: Put corresponding .lib file next to the .dll file.)
     //
-    // Static linking with pre-built staticlib:
+    // Static linking with pre-built static lib:
     // Set `FFMPEG_LIBS_DIR` to the path of FFmpeg pre-built libs directory.
     //
     // 2. To generate bindings:

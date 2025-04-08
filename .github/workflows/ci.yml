@@ -66,32 +66,32 @@ jobs:
             llvm-dev \
             libclang-dev \
             linux-libc-dev \
-            libgnutls28-dev \
-            zlib1g-dev \
-            libass-dev \
-            binutils \
-            libx264-dev \
-            libx265-dev \
-            libavcodec-dev \
-            libavformat-dev \
-            libavutil-dev \
-            libswscale-dev \
-            libswresample-dev \
-            libavdevice-dev \
-            libavfilter-dev \
-            libssl-dev \
-            librtmp-dev \
-            libva-dev \
-            libvpx-dev \
-            libaom-dev \
-            libsvtav1-dev \
-            libdav1d-dev \
-            libxvidcore-dev \
-            libmp3lame-dev \
-            libopus-dev \
-            libvorbis-dev \
-            libfdk-aac-dev \
-            libasound2-dev
+            libgnutls28-dev
+#            zlib1g-dev \
+#            libass-dev \
+#            binutils \
+#            libx264-dev \
+#            libx265-dev \
+#            libavcodec-dev \
+#            libavformat-dev \
+#            libavutil-dev \
+#            libswscale-dev \
+#            libswresample-dev \
+#            libavdevice-dev \
+#            libavfilter-dev \
+#            libssl-dev \
+#            librtmp-dev \
+#            libva-dev \
+#            libvpx-dev \
+#            libaom-dev \
+#            libsvtav1-dev \
+#            libdav1d-dev \
+#            libxvidcore-dev \
+#            libmp3lame-dev \
+#            libopus-dev \
+#            libvorbis-dev \
+#            libfdk-aac-dev \
+#            libasound2-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -291,32 +291,32 @@ jobs:
             llvm-dev \
             libclang-dev \
             linux-libc-dev \
-            libgnutls28-dev \
-            zlib1g-dev \
-            libass-dev \
-            binutils \
-            libx264-dev \
-            libx265-dev \
-            libavcodec-dev \
-            libavformat-dev \
-            libavutil-dev \
-            libswscale-dev \
-            libswresample-dev \
-            libavdevice-dev \
-            libavfilter-dev \
-            libssl-dev \
-            librtmp-dev \
-            libva-dev \
-            libvpx-dev \
-            libaom-dev \
-            libsvtav1-dev \
-            libdav1d-dev \
-            libxvidcore-dev \
-            libmp3lame-dev \
-            libopus-dev \
-            libvorbis-dev \
-            libfdk-aac-dev \
-            libasound2-dev
+            libgnutls28-dev
+#            zlib1g-dev \
+#            libass-dev \
+#            binutils \
+#            libx264-dev \
+#            libx265-dev \
+#            libavcodec-dev \
+#            libavformat-dev \
+#            libavutil-dev \
+#            libswscale-dev \
+#            libswresample-dev \
+#            libavdevice-dev \
+#            libavfilter-dev \
+#            libssl-dev \
+#            librtmp-dev \
+#            libva-dev \
+#            libvpx-dev \
+#            libaom-dev \
+#            libsvtav1-dev \
+#            libdav1d-dev \
+#            libxvidcore-dev \
+#            libmp3lame-dev \
+#            libopus-dev \
+#            libvorbis-dev \
+#            libfdk-aac-dev \
+#            libasound2-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

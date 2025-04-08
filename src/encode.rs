@@ -896,7 +896,7 @@ unsafe impl Sync for Encoder {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::filter::{FilterConfig, FilterFactory, FilterParams, VideoParams};
+    use crate::filter::{self, FilterConfig, FilterParams, VideoParams};
     use crate::io::private::{Output, Write};
     use crate::stream::StreamInfo;
     use crate::StreamWriterBuilder;
@@ -1138,10 +1138,9 @@ mod tests {
         });
 
         let filters = vec![
-            FilterFactory::new_scale_filter(1920, 1080, pix_fmt),
-            FilterFactory::new_drawtext_filter("Watermark", 50, 50, 24, "white@0.5"),
-            FilterFactory::new_denoise_filter(3.0),
-            FilterFactory::new_crop_filter(0, 0, 640, 360),
+            filter::video::scale(1920, 1080, pix_fmt),
+            filter::video::drawtext("Watermark", 50, 50, 24, "white@0.5"),
+            filter::video::crop(0, 0, 640, 360),
         ];
 
         let video_filter_config = FilterConfig {

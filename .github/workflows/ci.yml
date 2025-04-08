@@ -49,50 +49,99 @@ jobs:
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential \
-            ca-certificates \
-            pkg-config \
-            libtool \
-            autoconf \
-            automake \
-            cmake \
-            nasm \
-            yasm \
-            curl \
-            wget \
-            unzip \
-            gnupg \
-            clang \
-            llvm-dev \
-            libclang-dev \
-            linux-libc-dev \
-            libgnutls28-dev \
-            zlib1g-dev \
-            libass-dev \
-            binutils \
-            libx264-dev \
-            libx265-dev \
-            libssl-dev \
-            librtmp-dev \
-            libva-dev \
-            libvpx-dev \
-            libaom-dev \
-            libsvtav1-dev \
-            libdav1d-dev \
-            libxvidcore-dev \
-            libmp3lame-dev \
-            libopus-dev \
-            libvorbis-dev \
-            libfdk-aac-dev \
-            libasound2-dev
+## base
+          nasm \
+          yasm \
+          curl \
+          wget \
+          unzip \
+          gnupg \
+          clang \
+          cmake \
+          libtool \
+          autoconf \
+          automake \
+          binutils \
+          pkg-config \
+          llvm-dev \
+          libclang-dev \
+          linux-libc-dev \
+          build-essential \
+          ca-certificates \
+## video
+          libva-dev \
+          libvpx-dev \
+          libaom-dev \
+          libass-dev \
+          libdrm-dev \
+          libv4l-dev \
+          libx264-dev \
+          libx265-dev \
+          libzimg-dev \
+          libdav1d-dev \
+          libwebp-dev \
+          libbluray-dev \
+          libtheora-dev \
+          libvidstab-dev \
+          libsvtav1-dev \
+          libxvidcore-dev \
+          libopenjp2-7-dev \
+## audio
+          libgsm1-dev \
+          libsoxr-dev \
+          libopus-dev \
+          libpulse-dev \
+          libshine-dev \
+          libspeex-dev \
+          libbs2b-dev \
+          libvorbis-dev \
+          libfdk-aac-dev \
+          libasound2-dev \
+          libmp3lame-dev \
+          libtwolame-dev \
+          libjack-jackd2-dev \
+          libopencore-amrnb-dev \
+          libopencore-amrwb-dev \
+## hwaccel
+          libva-dev \
+          libmfx-dev \
+          libdrm-dev \
+          libnuma-dev \
+          libvdpau-dev \
+          ocl-icd-opencl-dev \
+## fonts
+          libass-dev \
+          libxml2-dev \
+          libfribidi-dev \
+          libfreetype6-dev \
+          libfontconfig1-dev \
+## network
+          libssh-dev \
+          libzmq3-dev \
+          libssl-dev \
+          librtmp-dev \
+          libiec61883-dev \
+          libgnutls28-dev \
+          libsmbclient-dev \
+## other
+          libtiff-dev \
+          libpng-dev \
+          libraw-dev \
+          libjpeg-dev \
+          zlib1g-dev \
+          libsdl2-dev \
+          liblzma-dev \
+          libzvbi-dev \
+          librubberband-dev \
+          libfrei0r-ocaml-dev
 ## ffmpeg
-#            libavutil-dev \
-#            libavcodec-dev \
-#            libavformat-dev \
-#            libavfilter-dev \
-#            libavdevice-dev \
-#            libswscale-dev \
-#            libswresample-dev
+## libavutil-dev \
+## libavcodec-dev \
+## libavformat-dev \
+## libavfilter-dev \
+## libavdevice-dev \
+## libswscale-dev \
+## libswresample-dev \
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -275,50 +324,99 @@ jobs:
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential \
-            ca-certificates \
-            pkg-config \
-            libtool \
-            autoconf \
-            automake \
-            cmake \
-            nasm \
-            yasm \
-            curl \
-            wget \
-            unzip \
-            gnupg \
-            clang \
-            llvm-dev \
-            libclang-dev \
-            linux-libc-dev \
-            libgnutls28-dev \
-            zlib1g-dev \
-            libass-dev \
-            binutils \
-            libx264-dev \
-            libx265-dev \
-            libssl-dev \
-            librtmp-dev \
-            libva-dev \
-            libvpx-dev \
-            libaom-dev \
-            libsvtav1-dev \
-            libdav1d-dev \
-            libxvidcore-dev \
-            libmp3lame-dev \
-            libopus-dev \
-            libvorbis-dev \
-            libfdk-aac-dev \
-            libasound2-dev
-      ## ffmpeg
-      #            libavutil-dev \
-      #            libavcodec-dev \
-      #            libavformat-dev \
-      #            libavfilter-dev \
-      #            libavdevice-dev \
-      #            libswscale-dev \
-      #            libswresample-dev
+## base
+          nasm \
+          yasm \
+          curl \
+          wget \
+          unzip \
+          gnupg \
+          clang \
+          cmake \
+          libtool \
+          autoconf \
+          automake \
+          binutils \
+          pkg-config \
+          llvm-dev \
+          libclang-dev \
+          linux-libc-dev \
+          build-essential \
+          ca-certificates \
+## video
+          libva-dev \
+          libvpx-dev \
+          libaom-dev \
+          libass-dev \
+          libdrm-dev \
+          libv4l-dev \
+          libx264-dev \
+          libx265-dev \
+          libzimg-dev \
+          libdav1d-dev \
+          libwebp-dev \
+          libbluray-dev \
+          libtheora-dev \
+          libvidstab-dev \
+          libsvtav1-dev \
+          libxvidcore-dev \
+          libopenjp2-7-dev \
+## audio
+          libgsm1-dev \
+          libsoxr-dev \
+          libopus-dev \
+          libpulse-dev \
+          libshine-dev \
+          libspeex-dev \
+          libbs2b-dev \
+          libvorbis-dev \
+          libfdk-aac-dev \
+          libasound2-dev \
+          libmp3lame-dev \
+          libtwolame-dev \
+          libjack-jackd2-dev \
+          libopencore-amrnb-dev \
+          libopencore-amrwb-dev \
+## hwaccel
+          libva-dev \
+          libmfx-dev \
+          libdrm-dev \
+          libnuma-dev \
+          libvdpau-dev \
+          ocl-icd-opencl-dev \
+## fonts
+          libass-dev \
+          libxml2-dev \
+          libfribidi-dev \
+          libfreetype6-dev \
+          libfontconfig1-dev \
+## network
+          libssh-dev \
+          libzmq3-dev \
+          libssl-dev \
+          librtmp-dev \
+          libiec61883-dev \
+          libgnutls28-dev \
+          libsmbclient-dev \
+## other
+          libtiff-dev \
+          libpng-dev \
+          libraw-dev \
+          libjpeg-dev \
+          zlib1g-dev \
+          libsdl2-dev \
+          liblzma-dev \
+          libzvbi-dev \
+          librubberband-dev \
+          libfrei0r-ocaml-dev
+## ffmpeg
+## libavutil-dev \
+## libavcodec-dev \
+## libavformat-dev \
+## libavfilter-dev \
+## libavdevice-dev \
+## libswscale-dev \
+## libswresample-dev \
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

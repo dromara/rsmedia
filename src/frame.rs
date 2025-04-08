@@ -1339,7 +1339,6 @@ mod tests {
     /// frame_size = nb_samples * bytes_per_sample
     /// 每个通道分别: 1024 * 4 = 4096 bytes
     #[test]
-    #[ignore = "CI linux ffmpeg 7: AVFrame buffer allocating with incorrect parameters. (-22)"]
     fn test_audio_planar_frame_conversion() -> Result<()> {
         let nb_channels = 2;
         let nb_samples = 1024;
@@ -1426,7 +1425,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CI linux ffmpeg 7: AVFrame buffer allocating with incorrect parameters. (-22)"]
     fn test_audio_interleaved_frame_conversion() -> Result<()> {
         let nb_channels = 2;
         let nb_samples = 1024;
@@ -1498,7 +1496,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "CI linux ffmpeg 7: AVFrame buffer allocating with incorrect parameters. (-22)"]
     fn test_get_audio_buffer() {
         let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).unwrap();
         println!("aac sample_fmts:{:#?}", encoder.sample_fmts());

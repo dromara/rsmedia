@@ -346,8 +346,8 @@ impl Decoder {
         T: MediaFrameType,
     {
         if self.is_flushed() {
-            return Err(anyhow::anyhow!(
-                "Decoder cannot decode after flushed. Call reset()."
+            return Err(Error::msg(
+                "Decoder cannot decode after flushed. Call reset().",
             ));
         }
 
@@ -409,8 +409,8 @@ impl Decoder {
         R: Reader,
     {
         if self.is_flushed() {
-            return Err(anyhow::anyhow!(
-                "Decoder cannot decode after flushed. Call reset()."
+            return Err(Error::msg(
+                "Decoder cannot decode after flushed. Call reset().",
             ));
         }
 

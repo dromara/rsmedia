@@ -274,11 +274,11 @@ where
 
     pub fn convert_rgb_to_yuv(&self) -> Result<Self> {
         if self.media_type != MediaType::VIDEO {
-            return Err(anyhow::anyhow!("只有视频帧可以进行颜色空间转换"));
+            return Err(Error::msg("Only video frames can be color space converted"));
         }
 
         if self.format != ffi::AV_PIX_FMT_RGB24 {
-            return Err(anyhow::anyhow!("仅支持RGB24格式的视频帧"));
+            return Err(Error::msg("Only RGB24 format video frames are supported"));
         }
 
         let height = self.height;
@@ -330,7 +330,7 @@ where
             matrix,
             YuvConversionMode::Professional,
         )
-        .map_err(|e| anyhow::anyhow!("YUV转换错误: {:?}", e))?;
+        .map_err(|e| Error::msg(format!("convert rgb24 to yuv420p error:{}", e)))?;
 
         // 6. 构建YUV数据
         let mut yuv_data = ndarray::Array3::<T>::zeros((height, width, 3));
@@ -373,11 +373,11 @@ where
 
     pub fn convert_yuv_to_rgb(&self) -> Result<Self> {
         if self.media_type != MediaType::VIDEO {
-            return Err(anyhow::anyhow!("只有视频帧可以进行颜色空间转换"));
+            return Err(Error::msg("Only video frames can be color space converted"));
         }
 
         if self.format != ffi::AV_PIX_FMT_YUV420P {
-            return Err(anyhow::anyhow!("仅支持YUV420P格式的视频帧"));
+            return Err(Error::msg("Only YUV420P format video frames are supported"));
         }
 
         let height = self.height;
@@ -437,7 +437,7 @@ where
             YuvRange::Full,
             matrix,
         )
-        .map_err(|e| anyhow::anyhow!("RGB转换错误: {:?}", e))?;
+        .map_err(|e| Error::msg(format!("convert yuv420p to rgb24 error:{}", e)))?;
 
         // 6. 构建RGB数据
         let mut rgb_data = ndarray::Array3::<T>::zeros((height, width, 3));

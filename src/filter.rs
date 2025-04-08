@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Debug, Clone)]
 pub struct Filter {
     name: &'static str,
-    spec: String,
     media_type: MediaType,
+    spec: String,
 }
 
 impl Filter {
@@ -76,6 +76,25 @@ impl FilterFactory {
         )
     }
 
+    /// 画矩形框
+    pub fn new_drawbox_filter(
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        color: &str,
+        thickness: i32,
+    ) -> Filter {
+        Filter::new(
+            "drawbox",
+            MediaType::VIDEO,
+            format!(
+                "drawbox=x={}:y={}:w={}:h={}:color={}:t={}",
+                x, y, w, h, color, thickness
+            ),
+        )
+    }
+
     /// 创建锐化过滤器
     pub fn new_denoise_filter(strength: f32) -> Filter {
         Filter::new(
@@ -99,7 +118,15 @@ impl FilterFactory {
         )
     }
 
-    /// 创建旋转过滤器
+    /// <https://ffmpeg.org/ffmpeg-filters.html#transpose-1>
+    /// transpose - 用于快速 90°/180°/270° 视频画面旋转、水平翻转或镜像翻转（无插值，高性能）
+    /// mode: 0=逆时针90度/垂直翻转, 1=顺时针90度, 2=逆时针90度, 3=顺时针90度/垂直翻转
+    pub fn new_transpose_filter(mode: i32) -> Filter {
+        Filter::new("transpose", MediaType::VIDEO, format!("transpose={}", mode))
+    }
+
+    /// rotate - 任意角度旋转滤镜（使用浮点弧度，支持动画）
+    /// 注意：性能较低，可能有插值模糊；用于精准旋转或动态旋转场景
     pub fn new_rotate_filter(angle: i32) -> Filter {
         // Ffmpeg 中的角度使用弧度而非度数，因此需要转换
         Filter::new(
@@ -107,6 +134,12 @@ impl FilterFactory {
             MediaType::VIDEO,
             format!("rotate={}*PI/180", angle),
         )
+    }
+
+    /// 修改时间戳表达式（加速、减速、对齐等）
+    /// 典型值：setpts=0.5*PTS（2倍速），1.5*PTS（慢放）
+    pub fn new_setpts_filter(expr: &str) -> Filter {
+        Filter::new("setpts", MediaType::VIDEO, format!("setpts={}", expr))
     }
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -243,8 +276,8 @@ impl FilterParams {
 /// 视频过滤器参数
 #[derive(Debug, Clone)]
 pub struct VideoParams {
-    pub width: u32,
-    pub height: u32,
+    pub width: i32,
+    pub height: i32,
     pub format: PixelFormat,
     pub time_base: ffi::AVRational,
     pub frame_rate: ffi::AVRational,
@@ -254,8 +287,8 @@ pub struct VideoParams {
 /// 音频过滤器参数
 #[derive(Debug, Clone)]
 pub struct AudioParams {
-    pub nb_channels: u32,
-    pub sample_rate: u32,
+    pub nb_channels: i32,
+    pub sample_rate: i32,
     pub format: SampleFormat,
     pub time_base: ffi::AVRational,
 }
@@ -319,7 +352,7 @@ impl FilterGraph {
                 "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}:frame_rate={}/{}",
                 params.width,
                 params.height,
-                params.format as i32,
+                ffi::AVPixelFormat::from(params.format),
                 params.time_base.num,
                 params.time_base.den,
                 params.pixel_aspect.num,
@@ -330,10 +363,10 @@ impl FilterGraph {
             CString::new(args)?
         };
 
-        let buffersrc = AVFilter::get_by_name(c"video_buffer_src")
-            .context("Failed to get video buffer source filter")?;
-        let buffersink = AVFilter::get_by_name(c"video_buffer_sink")
-            .context("Failed to get video buffer sink filter")?;
+        let buffersrc =
+            AVFilter::get_by_name(c"buffer").context("Failed to get video filter 'buffer'.")?;
+        let buffersink = AVFilter::get_by_name(c"buffersink")
+            .context("Failed to get video filter 'buffersink'.")?;
 
         let mut src_ctx = self
             .graph
@@ -346,7 +379,7 @@ impl FilterGraph {
             .context("Failed to create video buffer sink")?;
 
         sink_ctx
-            .opt_set_bin(c"pix_fmts", &(params.format as i32))
+            .opt_set_bin(c"pix_fmts", &(ffi::AVPixelFormat::from(params.format)))
             .context("Failed to set video sink filter context pixel format")?;
 
         // Create endpoints
@@ -365,8 +398,7 @@ impl FilterGraph {
 
     // Setup audio filters
     fn setup_audio_filters(&mut self, params: &AudioParams, spec: String) -> Result<()> {
-        let channel_desc =
-            AVChannelLayout::from_nb_channels(params.nb_channels as i32).describe()?;
+        let channel_desc = AVChannelLayout::from_nb_channels(params.nb_channels).describe()?;
 
         let args = {
             let args = format!(
@@ -380,10 +412,10 @@ impl FilterGraph {
             CString::new(args)?
         };
 
-        let buffersrc = AVFilter::get_by_name(c"audio_buffer_src")
-            .context("Failed to get audio buffer source filter")?;
-        let buffersink = AVFilter::get_by_name(c"audio_buffer_sink")
-            .context("Failed to get audio buffer sink filter")?;
+        let buffersrc = AVFilter::get_by_name(c"abuffer")
+            .context("Failed to get audio filter buffer 'abuffer'.")?;
+        let buffersink = AVFilter::get_by_name(c"abuffersink")
+            .context("Failed to get audio filter buffer 'abuffersink'.")?;
 
         let mut src_ctx = self
             .graph
@@ -491,8 +523,8 @@ impl std::fmt::Debug for FilterGraph {
 /// 流过滤器配置
 #[derive(Debug, Clone)]
 pub struct FilterConfig {
-    params: FilterParams,
-    filters: Vec<Filter>,
+    pub params: FilterParams,
+    pub filters: Vec<Filter>,
 }
 
 /// 流过滤器

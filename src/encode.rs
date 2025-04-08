@@ -896,9 +896,11 @@ unsafe impl Sync for Encoder {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filter::{FilterConfig, FilterFactory, FilterParams, VideoParams};
     use crate::io::private::{Output, Write};
     use crate::stream::StreamInfo;
     use crate::StreamWriterBuilder;
+
     use std::collections::HashMap;
     use std::path::Path;
 
@@ -1103,33 +1105,56 @@ mod tests {
         };
 
         let codec_name = utils::from_str(&codec_name.unwrap_or_else(|| "libx264".to_string()));
-        let codec = AVCodec::find_encoder_by_name(&codec_name).expect("Failed to find encoder");
-
-        let supported_frame_rates = codec.supported_framerates().map(|rates| rates.to_vec());
-        let supported_pix_fmts = codec
-            .pix_fmts()
-            .unwrap_or(&[])
-            .iter()
-            .filter(|&&fmt| fmt != ffi::AV_PIX_FMT_NONE)
-            .cloned()
-            .collect();
+        let codec_config = CodecConfig::new_with_name(&codec_name)?;
+        assert!(
+            codec_config.is_encoder(),
+            "Codec:'{:?}' is not an encoder.",
+            codec_name
+        );
 
         let config = VideoFormatParams {
             time_base,
-            codec_name: codec.name().to_str()?.to_string(),
-            supported_frame_rates,
-            supported_pix_fmts,
+            codec_name: codec_name.to_str()?.to_string(),
+            supported_frame_rates: codec_config
+                .supported_frame_rates()?
+                .map(|fps| fps.to_vec()),
+            supported_pix_fmts: codec_config.supported_pixel_formats()?.unwrap().to_vec(),
             codec_options,
             format_options,
         };
 
+        // 视频编码参数
+        let width = 1280;
+        let height = 720;
+        let pix_fmt = PixelFormat::YUV420P;
+
+        let video_params = FilterParams::Video(VideoParams {
+            width,
+            height,
+            format: pix_fmt,
+            time_base: ffi::AVRational { num: 1, den: 25 },
+            frame_rate: ffi::AVRational { num: 25, den: 1 },
+            pixel_aspect: ffi::AVRational { num: 1, den: 1 },
+        });
+
+        let filters = vec![
+            FilterFactory::new_scale_filter(1920, 1080, pix_fmt),
+            FilterFactory::new_drawtext_filter("Watermark", 50, 50, 24, "white@0.5"),
+            FilterFactory::new_denoise_filter(3.0),
+            FilterFactory::new_crop_filter(0, 0, 640, 360),
+        ];
+
+        let video_filter_config = FilterConfig {
+            params: video_params,
+            filters,
+        };
+
         // 创建编码器
-        let width = 1280_usize;
-        let height = 720_usize;
-        let mut encoder = EncoderBuilder::new_video(width, height)
+        let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)
             .with_time_base(time_base.0, time_base.1)
             .with_codec_name(Some(config.codec_name))
             .with_options(config.codec_options.map(|opts| opts.into()))
+            .with_filter(Some(FilterContext::new(video_filter_config)?))
             .build()?;
 
         // 确定输出路径和扩展名
@@ -1197,7 +1222,7 @@ mod tests {
 
         // 帧编码并写入文件
         for i in 0..10 {
-            let mut frame = rainbow_frame(width, height, i as f32 / 10.0);
+            let mut frame = rainbow_frame(width as usize, height as usize, i as f32 / 10.0);
             frame.set_pts(
                 position
                     .aligned_with_rational(encoder.time_base())

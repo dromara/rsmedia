@@ -49,7 +49,6 @@ jobs:
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-## base
           nasm \
           yasm \
           curl \
@@ -68,7 +67,6 @@ jobs:
           linux-libc-dev \
           build-essential \
           ca-certificates \
-## video
           libva-dev \
           libvpx-dev \
           libaom-dev \
@@ -86,7 +84,6 @@ jobs:
           libsvtav1-dev \
           libxvidcore-dev \
           libopenjp2-7-dev \
-## audio
           libgsm1-dev \
           libsoxr-dev \
           libopus-dev \
@@ -102,20 +99,17 @@ jobs:
           libjack-jackd2-dev \
           libopencore-amrnb-dev \
           libopencore-amrwb-dev \
-## hwaccel
           libva-dev \
           libmfx-dev \
           libdrm-dev \
           libnuma-dev \
           libvdpau-dev \
           ocl-icd-opencl-dev \
-## fonts
           libass-dev \
           libxml2-dev \
           libfribidi-dev \
           libfreetype6-dev \
           libfontconfig1-dev \
-## network
           libssh-dev \
           libzmq3-dev \
           libssl-dev \
@@ -123,7 +117,6 @@ jobs:
           libiec61883-dev \
           libgnutls28-dev \
           libsmbclient-dev \
-## other
           libtiff-dev \
           libpng-dev \
           libraw-dev \
@@ -324,7 +317,6 @@ jobs:
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-## base
           nasm \
           yasm \
           curl \
@@ -343,7 +335,6 @@ jobs:
           linux-libc-dev \
           build-essential \
           ca-certificates \
-## video
           libva-dev \
           libvpx-dev \
           libaom-dev \
@@ -361,7 +352,6 @@ jobs:
           libsvtav1-dev \
           libxvidcore-dev \
           libopenjp2-7-dev \
-## audio
           libgsm1-dev \
           libsoxr-dev \
           libopus-dev \
@@ -377,20 +367,17 @@ jobs:
           libjack-jackd2-dev \
           libopencore-amrnb-dev \
           libopencore-amrwb-dev \
-## hwaccel
           libva-dev \
           libmfx-dev \
           libdrm-dev \
           libnuma-dev \
           libvdpau-dev \
           ocl-icd-opencl-dev \
-## fonts
           libass-dev \
           libxml2-dev \
           libfribidi-dev \
           libfreetype6-dev \
           libfontconfig1-dev \
-## network
           libssh-dev \
           libzmq3-dev \
           libssl-dev \
@@ -398,7 +385,6 @@ jobs:
           libiec61883-dev \
           libgnutls28-dev \
           libsmbclient-dev \
-## other
           libtiff-dev \
           libpng-dev \
           libraw-dev \

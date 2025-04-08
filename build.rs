@@ -13,6 +13,7 @@ fn main() {
     }
 }
 
+#[allow(dead_code)]
 static FFMPEG_LIBS: [&str; 7] = [
     "avutil",
     "avcodec",
@@ -144,15 +145,16 @@ fn configure_windows(target_arch: &str) {
         println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
     }
 
-    // ffmpeg libs
-    for lib in FFMPEG_LIBS.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
-    }
-
     println!("Using vcpkg on Windows.");
     #[cfg(target_os = "windows")]
-    vcpkg::find_package("ffmpeg")
-        .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
+    {
+        for lib in FFMPEG_LIBS.iter() {
+            println!("cargo:rustc-link-lib={}", lib);
+        }
+
+        vcpkg::find_package("ffmpeg")
+            .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
+    }
 
     // Windows 系统库
     let system_libs = [

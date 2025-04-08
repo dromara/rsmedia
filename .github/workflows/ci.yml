@@ -27,6 +27,8 @@ jobs:
 
     env:
       DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
+      FFMPEG_INCLUDE_DIR: /usr/local/include
+      FFMPEG_PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
     strategy:
       fail-fast: false
@@ -250,6 +252,8 @@ jobs:
 
     env:
       DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
+      FFMPEG_INCLUDE_DIR: /usr/local/include
+      FFMPEG_PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
     strategy:
       fail-fast: false

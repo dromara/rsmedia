@@ -564,8 +564,8 @@ impl Stream<'_> {
         self.av_stream.discard
     }
 
-    pub fn side_data(&self) -> StreamSideDataIter {
-        StreamSideDataIter::new(self)
+    pub fn side_data(&self) -> SideDataIter<'_> {
+        SideDataIter::new(self)
     }
 
     pub fn r_frame_rate(&self) -> ffi::AVRational {
@@ -596,14 +596,14 @@ impl Eq for Stream<'_> {}
 /////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 
-pub struct StreamSideData<'a> {
+pub struct PacketSideData<'a> {
     ptr: *mut ffi::AVPacketSideData,
     _marker: PhantomData<&'a AVPacket>,
 }
 
-impl StreamSideData<'_> {
+impl PacketSideData<'_> {
     pub fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
-        StreamSideData {
+        PacketSideData {
             ptr,
             _marker: PhantomData,
         }
@@ -614,7 +614,7 @@ impl StreamSideData<'_> {
     }
 }
 
-impl StreamSideData<'_> {
+impl PacketSideData<'_> {
     pub fn kind(&self) -> ffi::AVPacketSideDataType {
         unsafe { ffi::AVPacketSideDataType::from((*self.as_ptr()).type_) }
     }
@@ -631,46 +631,43 @@ impl StreamSideData<'_> {
 /////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 
-pub struct StreamSideDataIter<'a> {
+pub struct SideDataIter<'a> {
     stream: &'a Stream<'a>,
-    current: i32,
+    index: usize,
+    len: usize,
 }
 
-impl StreamSideDataIter<'_> {
-    pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> StreamSideDataIter<'sd> {
-        StreamSideDataIter { stream, current: 0 }
+impl SideDataIter<'_> {
+    pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> SideDataIter<'sd> {
+        let len = stream.av_stream.nb_side_data as usize;
+        SideDataIter { stream, index: 0 , len}
     }
 }
 
-impl<'a> Iterator for StreamSideDataIter<'a> {
-    type Item = StreamSideData<'a>;
+impl<'a> Iterator for SideDataIter<'a> {
+    type Item = PacketSideData<'a>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         unsafe {
-            if self.current >= self.stream.av_stream.nb_side_data
-                || self.stream.av_stream.side_data.is_null()
-            {
+            if self.index >= self.len {
                 return None;
             }
 
-            self.current += 1;
+            self.index += 1;
 
-            Some(StreamSideData::wrap(
+            Some(PacketSideData::wrap(
                 self.stream
                     .av_stream
                     .side_data
-                    .offset((self.current - 1) as isize),
+                    .offset((self.index - 1) as isize),
             ))
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let length = self.stream.av_stream.nb_side_data as usize;
-        (
-            length - self.current as usize,
-            Some(length - self.current as usize),
-        )
+        let hint = self.len - self.index;
+        (hint, Some(hint))
     }
 }
 
-impl ExactSizeIterator for StreamSideDataIter<'_> {}
+impl ExactSizeIterator for SideDataIter<'_> {}

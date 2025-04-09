@@ -351,6 +351,9 @@ impl<R: Reader> Iterator for Demuxer<R> {
     }
 }
 
+unsafe impl<R: Reader> Send for Demuxer<R> {}
+unsafe impl<R: Reader> Sync for Demuxer<R> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -777,7 +780,7 @@ mod tests {
     /// ```rust,ignore
     /// transcode("input.mp4", "output.mov").unwrap();
     /// ```
-    pub fn transcode(input_path: &str, output_path: &str) -> Result<()> {
+    fn transcode(input_path: &str, output_path: &str) -> Result<()> {
         let mut input_reader = StreamReader::new(Path::new(input_path))?;
         let input = input_reader.input();
 

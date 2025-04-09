@@ -16,6 +16,7 @@ pub trait MediaFrameType:
     + Copy
     + Send
     + Sync
+    + Default
     + PartialOrd
     + num_traits::Zero
     + num_traits::NumCast
@@ -315,10 +316,17 @@ where
         };
 
         // 4. 选择转换参数
-        let matrix = if width >= 1280 || height >= 720 {
-            YuvStandardMatrix::Bt709
-        } else {
-            YuvStandardMatrix::Bt601
+        let colorspace = {
+            if height < 720 {
+                // SD color space
+                YuvStandardMatrix::Bt601
+            } else if height < 1080 {
+                // HD color space
+                YuvStandardMatrix::Bt709
+            } else {
+                // UHD color space
+                YuvStandardMatrix::Bt2020
+            }
         };
 
         // 5. 使用Full Range进行转换
@@ -327,7 +335,7 @@ where
             &rgb_bytes,
             (width * 3) as u32,
             YuvRange::Full,
-            matrix,
+            colorspace,
             YuvConversionMode::Professional,
         )
         .map_err(|e| Error::msg(format!("convert rgb24 to yuv420p error:{}", e)))?;
@@ -422,11 +430,18 @@ where
         // 3. 准备RGB输出
         let mut rgb_bytes = vec![0u8; width * height * 3];
 
-        // 4. 选择相同的转换参数
-        let matrix = if width >= 1280 || height >= 720 {
-            YuvStandardMatrix::Bt709
-        } else {
-            YuvStandardMatrix::Bt601
+        // 4. 选择转换参数
+        let colorspace = {
+            if height < 720 {
+                // SD color space
+                YuvStandardMatrix::Bt601
+            } else if height < 1080 {
+                // HD color space
+                YuvStandardMatrix::Bt709
+            } else {
+                // UHD color space
+                YuvStandardMatrix::Bt2020
+            }
         };
 
         // 5. 使用Full Range进行转换
@@ -435,7 +450,7 @@ where
             &mut rgb_bytes,
             (width * 3) as u32,
             YuvRange::Full,
-            matrix,
+            colorspace,
         )
         .map_err(|e| Error::msg(format!("convert yuv420p to rgb24 error:{}", e)))?;
 
@@ -472,7 +487,7 @@ fn validate_format_type_size<T>(format: i32, expected_size: usize) -> Result<()>
 /// 填充视频数据到AVFrame
 fn fill_video_data<T>(frame: &mut AVFrame, data: &ndarray::Array3<T>) -> Result<()>
 where
-    T: Clone + Copy + 'static,
+    T: MediaFrameType,
 {
     let (height, width, channel) = data.dim();
 
@@ -540,7 +555,7 @@ where
 /// 填充音频数据到AVFrame
 fn fill_audio_data<T>(frame: &mut AVFrame, data: &ndarray::Array3<T>) -> Result<()>
 where
-    T: Clone + Copy + 'static,
+    T: MediaFrameType,
 {
     let (frames, samples, channels) = data.dim();
     if frames != 1 {
@@ -577,7 +592,7 @@ where
 /// 视频数据处理
 fn video_data<T>(frame: &AVFrame) -> Result<ndarray::Array3<T>>
 where
-    T: Clone + Copy + 'static,
+    T: MediaFrameType,
 {
     let (height, width) = (frame.height as usize, frame.width as usize);
 
@@ -586,8 +601,7 @@ where
             validate_format_type_size::<T>(frame.format, 1)?;
 
             let line_size = frame.linesize[0] as usize;
-            let default_value = unsafe { std::mem::zeroed() };
-            let mut array = ndarray::Array3::<T>::from_elem((height, width, 3), default_value);
+            let mut array = ndarray::Array3::<T>::default((height, width, 3));
 
             unsafe {
                 for y in 0..height {
@@ -607,8 +621,7 @@ where
 
             let y_line_size = frame.linesize[0] as usize;
             let uv_line_size = frame.linesize[1] as usize;
-            let default_value = unsafe { std::mem::zeroed() };
-            let mut array = ndarray::Array3::<T>::from_elem((height, width, 3), default_value);
+            let mut array = ndarray::Array3::<T>::default((height, width, 3));
 
             unsafe {
                 // 复制 Y 平面
@@ -647,7 +660,7 @@ where
 /// 音频数据处理
 fn audio_data<T>(frame: &AVFrame) -> Result<ndarray::Array3<T>>
 where
-    T: Clone + Copy + 'static,
+    T: MediaFrameType,
 {
     // 类型大小验证
     let sample_size = match frame.format {

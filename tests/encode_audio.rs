@@ -1,14 +1,14 @@
 //! RIIR: https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/encode_audio.c
 
-use anyhow::{Context, Result};
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
+    avformat::AVFormatContextOutput,
     avutil::{self, AVChannelLayout, AVFrame},
+    error::RsmpegError,
     ffi,
 };
 
-use rsmpeg::avformat::AVFormatContextOutput;
-use rsmpeg::error::RsmpegError;
+use anyhow::{Context, Result};
 use std::ffi::CStr;
 
 /// 编码器能力描述结构体

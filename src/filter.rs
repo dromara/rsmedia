@@ -327,25 +327,24 @@ pub struct FilterFactory;
 
 impl FilterFactory {
     /// format 转换
+    /// `format`: <https://ffmpeg.org/ffmpeg-filters.html#format>
+    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1.
     pub fn format(media_type: MediaType, fmt: &str) -> Filter {
-        Filter::new("format", media_type, format!("format={}", fmt))
-    }
-
-    /// 桥接滤镜，避免阻塞
-    /// `fifo`: 是通用的，不改变帧内容，只增加缓冲能力
-    /// `afifo`: 音频专用
-    /// 若出现 filter 报错如 “frame dropped”，插入 fifo 常可解决
-    pub fn fifo(media_type: MediaType) -> Filter {
         if media_type == MediaType::AUDIO {
-            Filter::new("afifo", media_type, "afifo".to_string())
+            Filter::new("format", media_type, format!("aformat={}", fmt))
         } else {
-            Filter::new("fifo", media_type, "fifo".to_string())
+            Filter::new("format", media_type, format!("format={}", fmt))
         }
     }
 
     /// 分支滤镜
+    /// <https://ffmpeg.org/ffmpeg-filters.html#split_002c-asplit>
     pub fn split(media_type: MediaType, n: i32) -> Filter {
-        Filter::new("split", media_type, format!("outputs={}", n))
+        if media_type == MediaType::AUDIO {
+            Filter::new("split", media_type, format!("asplit={}", n))
+        } else {
+            Filter::new("split", media_type, format!("split={}", n))
+        }
     }
 }
 

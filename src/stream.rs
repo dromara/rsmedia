@@ -640,7 +640,11 @@ pub struct SideDataIter<'a> {
 impl SideDataIter<'_> {
     pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> SideDataIter<'sd> {
         let len = stream.av_stream.nb_side_data as usize;
-        SideDataIter { stream, index: 0 , len}
+        SideDataIter {
+            stream,
+            index: 0,
+            len,
+        }
     }
 }
 
@@ -656,10 +660,7 @@ impl<'a> Iterator for SideDataIter<'a> {
             self.index += 1;
 
             Some(PacketSideData::wrap(
-                self.stream
-                    .av_stream
-                    .side_data
-                    .offset((self.index - 1) as isize),
+                self.stream.av_stream.side_data.add(self.index - 1),
             ))
         }
     }

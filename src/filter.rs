@@ -29,7 +29,7 @@ use rsmpeg::avfilter::{AVFilter, AVFilterContextMut, AVFilterGraph, AVFilterInOu
 use rsmpeg::avutil::{AVChannelLayout, AVFrame};
 use rsmpeg::ffi;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -191,12 +191,19 @@ pub mod audio {
     use super::*;
 
     /// 创建音频重采样过滤器
-    pub fn resample(sample_rate: i32) -> Filter {
-        Filter::new(
-            "resample",
-            MediaType::AUDIO,
-            format!("aresample=osr={}:async=0", sample_rate),
-        )
+    pub fn resample(nb_channels: i32, sample_rate: i32, format: SampleFormat) -> Filter {
+        let channel_desc = AVChannelLayout::from_nb_channels(nb_channels)
+            .describe()
+            .unwrap();
+
+        let spec_str = format!(
+            "aresample=osr={}:async=0:ochl={}:osf={}",
+            sample_rate,
+            channel_desc.to_string_lossy(),
+            format as i32,
+        );
+
+        Filter::new("resample", MediaType::AUDIO, spec_str)
     }
 
     /// 音量调整
@@ -397,17 +404,17 @@ impl FilterGraph {
     /// 初始化过滤器图表
     pub fn init(&mut self, params: &FilterParams, filters: &[Filter]) -> Result<()> {
         if self.initialized.load(DEFAULT_ORDERING) {
-            return Err(anyhow::anyhow!("Filter graph already initialized"));
+            return Err(Error::msg("Filter graph already initialized"));
         }
 
         // 验证过滤器类型匹配
         for filter in filters {
             if filter.media_type() != params.media_type() {
-                return Err(anyhow::anyhow!(
+                return Err(Error::msg(format!(
                     "Filter media type mismatch: expected {:?}, got {:?}",
                     params.media_type(),
                     filter.media_type()
-                ));
+                )));
             }
         }
 
@@ -430,20 +437,22 @@ impl FilterGraph {
         Ok(())
     }
 
-    // Setup video filters
+    /// Setup video filters
+    /// `buffer`: <https://ffmpeg.org/ffmpeg-filters.html#buffer>
+    /// `buffersink`: <https://ffmpeg.org/ffmpeg-filters.html#buffersink>
     fn setup_video_filters(&mut self, params: &VideoParams, spec: String) -> Result<()> {
         let args = {
             let args = format!(
-                "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}:frame_rate={}/{}",
+                "width={}:height={}:pix_fmt={}:time_base={}/{}:frame_rate={}/{}:pixel_aspect={}/{}",
                 params.width,
                 params.height,
-                ffi::AVPixelFormat::from(params.format),
+                params.format.get_pix_fmt_name(),
                 params.time_base.num,
                 params.time_base.den,
-                params.pixel_aspect.num,
-                params.pixel_aspect.den,
                 params.frame_rate.num,
                 params.frame_rate.den,
+                params.pixel_aspect.num,
+                params.pixel_aspect.den,
             );
             CString::new(args)?
         };
@@ -481,7 +490,9 @@ impl FilterGraph {
         Ok(())
     }
 
-    // Setup audio filters
+    /// Setup audio filters
+    /// `abuffer`: <https://ffmpeg.org/ffmpeg-filters.html#abuffer>
+    /// `abuffersink`: <https://ffmpeg.org/ffmpeg-filters.html#abuffersink>
     fn setup_audio_filters(&mut self, params: &AudioParams, spec: String) -> Result<()> {
         let channel_desc = AVChannelLayout::from_nb_channels(params.nb_channels).describe()?;
 
@@ -533,13 +544,15 @@ impl FilterGraph {
     /// 处理单帧
     pub fn process_frame(&mut self, frame: Option<AVFrame>) -> Result<Option<AVFrame>> {
         if !self.initialized.load(DEFAULT_ORDERING) {
-            return Err(anyhow::anyhow!("Filter graph not initialized"));
+            return Err(Error::msg("Filter graph not initialized"));
         }
 
         {
             // Get source context and send the frame
             let mut src_ctx = self.get_src_context()?;
-            src_ctx.buffersrc_add_frame(frame, None)?;
+            src_ctx
+                .buffersrc_add_frame(frame, None)
+                .context("Error submitting the frame to the filter graph:")?;
         } // src_ctx is dropped here, releasing the mutable borrow
 
         // safely get a new mutable borrow for sink_ctx
@@ -548,16 +561,25 @@ impl FilterGraph {
         // 获取处理后的帧
         match sink_ctx.buffersink_get_frame(None) {
             Ok(frame) => Ok(Some(frame)),
-            Err(rsmpeg::error::RsmpegError::BufferSinkDrainError)
-            | Err(rsmpeg::error::RsmpegError::BufferSinkEofError) => Ok(None),
-            Err(e) => Err(anyhow::anyhow!("Failed to get frame from filter: {}", e)),
+            Err(rsmpeg::error::RsmpegError::BufferSinkDrainError) => {
+                log::debug!("filter graph: buffer sink drain error");
+                Ok(None)
+            }
+            Err(rsmpeg::error::RsmpegError::BufferSinkEofError) => {
+                log::debug!("filter graph: buffer sink eof error");
+                Ok(None)
+            }
+            Err(e) => Err(Error::msg(format!(
+                "Get frame from buffer sink Error: {}",
+                e
+            ))),
         }
     }
 
     /// 刷新过滤器链
     pub fn flush(&mut self) -> Result<Vec<AVFrame>> {
         if !self.initialized.load(DEFAULT_ORDERING) {
-            return Err(anyhow::anyhow!("Filter graph not initialized"));
+            return Err(Error::msg("Filter graph not initialized"));
         }
 
         let mut frames = Vec::new();

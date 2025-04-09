@@ -819,7 +819,7 @@ mod tests {
         });
 
         let filters = vec![
-            filter::video::scale(640, 360, PixelFormat::YUV420P),
+            filter::video::scale(1280, 720, PixelFormat::RGB24),
             filter::video::drawtext("Hello", 10, 10, 24, "white"),
         ];
 
@@ -864,7 +864,11 @@ mod tests {
             time_base: ffi::AVRational { num: 1, den: 44100 },
         });
 
-        let filters = vec![filter::audio::volume(1.5), filter::audio::loudnorm(-16.0)];
+        let filters = vec![
+            filter::audio::resample(2, 48000, SampleFormat::FLTP),
+            filter::audio::volume(1.5),
+            filter::audio::loudnorm(-16.0),
+        ];
 
         let audio_filter_config = FilterConfig {
             params: audio_filter_params,

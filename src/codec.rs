@@ -239,6 +239,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new(ffi::AV_CODEC_ID_MPEG4);
@@ -246,6 +247,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new(ffi::AV_CODEC_ID_VP8);
@@ -253,6 +255,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new(ffi::AV_CODEC_ID_VP9);
@@ -260,6 +263,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new(ffi::AV_CODEC_ID_HEVC);
@@ -267,6 +271,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new(ffi::AV_CODEC_ID_AV1);
@@ -274,6 +279,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
     }
 
@@ -285,6 +291,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new_with_name(c"libx265").unwrap();
@@ -292,6 +299,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new_with_name(c"mpeg4").unwrap();
@@ -299,6 +307,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new_with_name(c"mpeg1video").unwrap();
@@ -306,6 +315,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
 
         let config = CodecConfig::new_with_name(c"mpeg2video").unwrap();
@@ -313,6 +323,7 @@ mod tests {
         println!("{:?}", config.supported_frame_rates().unwrap());
         println!("{:?}", config.supported_color_ranges().unwrap());
         println!("{:?}", config.supported_color_spaces().unwrap());
+        println!("{:?}", config.support_delayed_frame());
         println!("=========================================");
     }
 

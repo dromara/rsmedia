@@ -421,10 +421,9 @@ where
         // 复制UV平面数据
         for h in 0..height / 2 {
             for w in 0..width / 2 {
-                u_plane[h * uv_stride + w] =
-                    num_traits::cast(self.data[[h * 2, w * 2, 1]]).unwrap_or(128);
-                v_plane[h * uv_stride + w] =
-                    num_traits::cast(self.data[[h * 2, w * 2, 2]]).unwrap_or(128);
+                let pos = h * uv_stride + w;
+                u_plane[pos] = num_traits::cast(self.data[[h * 2, w * 2, 1]]).unwrap_or(128);
+                v_plane[pos] = num_traits::cast(self.data[[h * 2, w * 2, 2]]).unwrap_or(128);
             }
         }
 

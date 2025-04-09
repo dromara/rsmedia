@@ -285,14 +285,23 @@ where
         let height = self.height;
         let width = self.width;
 
-        // 1. 优化的RGB数据准备，保持完整的色彩范围
+        // 1. RGB数据准备，保持完整的色彩范围
         let mut rgb_bytes = Vec::with_capacity(width * height * 3);
-        for h in 0..height {
-            for w in 0..width {
-                let r: u8 = num_traits::cast(self.data[[h, w, 0]]).unwrap_or(0);
-                let g: u8 = num_traits::cast(self.data[[h, w, 1]]).unwrap_or(0);
-                let b: u8 = num_traits::cast(self.data[[h, w, 2]]).unwrap_or(0);
-                rgb_bytes.extend_from_slice(&[r, g, b]);
+        if let Some(slice) = self.data.as_standard_layout().as_slice() {
+            // 数据连续时，可直接转换
+            rgb_bytes = slice
+                .iter()
+                .map(|&val| num_traits::cast::<T, u8>(val).unwrap_or(0))
+                .collect();
+        } else {
+            // 数据不连续时需逐元素访问
+            for h in 0..height {
+                for w in 0..width {
+                    let r: u8 = num_traits::cast(self.data[[h, w, 0]]).unwrap_or(0);
+                    let g: u8 = num_traits::cast(self.data[[h, w, 1]]).unwrap_or(0);
+                    let b: u8 = num_traits::cast(self.data[[h, w, 2]]).unwrap_or(0);
+                    rgb_bytes.extend_from_slice(&[r, g, b]);
+                }
             }
         }
 
@@ -345,29 +354,33 @@ where
 
         // 复制Y平面
         for h in 0..height {
+            let y_offset = h * y_stride;
             for w in 0..width {
-                yuv_data[[h, w, 0]] =
-                    num_traits::cast(y_plane[h * y_stride + w]).unwrap_or(T::zero());
+                yuv_data[[h, w, 0]] = num_traits::cast(y_plane[y_offset + w]).unwrap_or(T::zero());
             }
         }
 
         // 复制UV平面
-        for h in 0..height / 2 {
-            for w in 0..width / 2 {
-                let u_val = u_plane[h * uv_stride + w];
-                let v_val = v_plane[h * uv_stride + w];
+        for h_uv in 0..height / 2 {
+            let u_offset = h_uv * uv_stride;
+            // 对应的Y平面高度起始位置
+            let h_y = h_uv * 2;
 
-                // 2x2块填充
-                for i in 0..2 {
-                    for j in 0..2 {
-                        let h_pos = h * 2 + i;
-                        let w_pos = w * 2 + j;
-                        if h_pos < height && w_pos < width {
-                            yuv_data[[h_pos, w_pos, 1]] =
-                                num_traits::cast(u_val).unwrap_or(T::zero());
-                            yuv_data[[h_pos, w_pos, 2]] =
-                                num_traits::cast(v_val).unwrap_or(T::zero());
-                        }
+            for w_uv in 0..width / 2 {
+                let u_val = u_plane[u_offset + w_uv];
+                let v_val = v_plane[u_offset + w_uv];
+                // 对应的Y平面宽度起始位置
+                let w_y = w_uv * 2;
+
+                // 为2x2块中的每个像素设置相同的UV值
+                // 优化: 先计算边界条件，避免内层循环中的重复检查
+                let max_h = (h_y + 2).min(height);
+                let max_w = (w_y + 2).min(width);
+
+                for h_pos in h_y..max_h {
+                    for w_pos in w_y..max_w {
+                        yuv_data[[h_pos, w_pos, 1]] = num_traits::cast(u_val).unwrap_or(T::zero());
+                        yuv_data[[h_pos, w_pos, 2]] = num_traits::cast(v_val).unwrap_or(T::zero());
                     }
                 }
             }
@@ -458,10 +471,10 @@ where
         let mut rgb_data = ndarray::Array3::<T>::zeros((height, width, 3));
         for h in 0..height {
             for w in 0..width {
-                for c in 0..3 {
-                    let idx = (h * width + w) * 3 + c;
-                    rgb_data[[h, w, c]] = num_traits::cast(rgb_bytes[idx]).unwrap_or(T::zero());
-                }
+                let idx = (h * width + w) * 3;
+                rgb_data[[h, w, 0]] = num_traits::cast(rgb_bytes[idx]).unwrap_or(T::zero());
+                rgb_data[[h, w, 1]] = num_traits::cast(rgb_bytes[idx + 1]).unwrap_or(T::zero());
+                rgb_data[[h, w, 2]] = num_traits::cast(rgb_bytes[idx + 2]).unwrap_or(T::zero());
             }
         }
 
@@ -607,9 +620,10 @@ where
                 for y in 0..height {
                     let src_line = frame.data[0].add(y * line_size) as *const T;
                     for x in 0..width {
-                        for c in 0..3 {
-                            array[[y, x, c]] = *src_line.add(x * 3 + c);
-                        }
+                        let idx = x * 3;
+                        array[[y, x, 0]] = *src_line.add(idx);
+                        array[[y, x, 1]] = *src_line.add(idx + 1);
+                        array[[y, x, 2]] = *src_line.add(idx + 2);
                     }
                 }
             }

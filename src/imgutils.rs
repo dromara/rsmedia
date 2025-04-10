@@ -117,7 +117,7 @@ pub fn get_buffer_size(frame: &AVFrame, align: i32) -> Result<usize> {
 }
 
 /// frame => Vec<u8>
-pub fn copy_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
+pub fn copy_frame_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
     let frame_width: i32 = frame.width;
     let frame_height: i32 = frame.height;
     if frame_width * frame_height <= 0 {
@@ -144,6 +144,28 @@ pub fn copy_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
         } else {
             Err(Error::msg(format!("Failed to copy image:{}", bytes)))
         }
+    }
+}
+
+/// 完整复制 AVFrame（包括数据和属性）
+pub fn copy_frame(src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
+    // 目标 AVFrame 需已分配内存
+    assert!(dst.is_allocated(), "destination frame is not allocated");
+
+    unsafe {
+        // 复制数据
+        let ret = ffi::av_frame_copy(dst.as_mut_ptr(), src.as_ptr());
+        if ret < 0 {
+            return Err(anyhow::anyhow!("Failed to copy frame data: {}", ret));
+        }
+
+        // 复制属性
+        let ret = ffi::av_frame_copy_props(dst.as_mut_ptr(), src.as_ptr());
+        if ret < 0 {
+            return Err(anyhow::anyhow!("Failed to copy frame properties: {}", ret));
+        }
+
+        Ok(())
     }
 }
 
@@ -226,24 +248,6 @@ pub fn fill_plane_from_buffer(
         Ok(())
     }
 }
-/// 完整复制frame（包括数据和属性）
-pub fn copy_frame(src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
-    unsafe {
-        // 复制数据
-        let ret = ffi::av_frame_copy(dst.as_mut_ptr(), src.as_ptr());
-        if ret < 0 {
-            return Err(anyhow::anyhow!("Failed to copy frame data: {}", ret));
-        }
-
-        // 复制属性
-        let ret = ffi::av_frame_copy_props(dst.as_mut_ptr(), src.as_ptr());
-        if ret < 0 {
-            return Err(anyhow::anyhow!("Failed to copy frame properties: {}", ret));
-        }
-
-        Ok(())
-    }
-}
 
 /// 将buffer数据填充到frame中
 pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: &[u8]) -> Result<()> {
@@ -269,59 +273,55 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: &[u8]) -> Result<()> 
     }
 }
 
-/// 将frame转换为ndarray`
+/// 将 AVFrame 转换为 ndarray::Array3
 pub fn to_ndarray(frame: &AVFrame) -> Result<ndarray::Array3<u8>> {
+    let (height, width) = (frame.height as usize, frame.width as usize);
+
     match frame.format {
         f if f == ffi::AV_PIX_FMT_RGB24 => {
-            // RGB24格式：直接复制并重塑
-            let buffer = copy_to_buffer(frame)?;
-            ndarray::Array3::from_shape_vec(
-                (frame.height as usize, frame.width as usize, 3),
-                buffer,
-            )
-            .map_err(|e| anyhow::anyhow!("Failed to convert RGB ndarray: {}", e))
+            // RGB24 格式：直接将帧数据转化为 (height, width, 3) 布局
+            let buffer = copy_frame_to_buffer(frame)?;
+            ndarray::Array3::from_shape_vec((height, width, 3), buffer)
+                .map_err(|e| anyhow::anyhow!("Failed to convert RGB ndarray: {}", e))
         }
         f if f == ffi::AV_PIX_FMT_YUV420P => {
-            let height = frame.height as usize;
-            let width = frame.width as usize;
-            let mut array = ndarray::Array3::zeros((3, height, width));
+            // YUV420P 格式：需要处理 Y、U、V 平面并上采样
+            let mut array = ndarray::Array3::zeros((height, width, 3));
 
             unsafe {
-                // 复制Y平面
-                for y in 0..height {
-                    let src_ptr = frame.data[0].add(y * frame.linesize[0] as usize);
-                    for x in 0..width {
-                        array[[0, y, x]] = *src_ptr.add(x);
-                    }
+                // 复制 Y 平面到通道 0
+                let y_plane =
+                    std::slice::from_raw_parts(frame.data[0], height * frame.linesize[0] as usize);
+                for (y, src_row) in y_plane
+                    .chunks(frame.linesize[0] as usize)
+                    .take(height)
+                    .enumerate()
+                {
+                    array
+                        .slice_mut(ndarray::s![y, .., 0])
+                        .assign(&ndarray::ArrayView1::from(&src_row[..width]));
                 }
 
-                // 复制U平面并上采样
-                let uv_height = height / 2;
-                let uv_width = width / 2;
-                for y in 0..uv_height {
-                    let src_ptr = frame.data[1].add(y * frame.linesize[1] as usize);
-                    for x in 0..uv_width {
-                        let u_value = *src_ptr.add(x);
-                        let y2 = y * 2;
-                        let x2 = x * 2;
-                        array[[1, y2, x2]] = u_value;
-                        array[[1, y2, x2 + 1]] = u_value;
-                        array[[1, y2 + 1, x2]] = u_value;
-                        array[[1, y2 + 1, x2 + 1]] = u_value;
-                    }
-                }
-
-                // 复制V平面并上采样
-                for y in 0..uv_height {
-                    let src_ptr = frame.data[2].add(y * frame.linesize[2] as usize);
-                    for x in 0..uv_width {
-                        let v_value = *src_ptr.add(x);
-                        let y2 = y * 2;
-                        let x2 = x * 2;
-                        array[[2, y2, x2]] = v_value;
-                        array[[2, y2, x2 + 1]] = v_value;
-                        array[[2, y2 + 1, x2]] = v_value;
-                        array[[2, y2 + 1, x2 + 1]] = v_value;
+                // 复制 U 和 V 平面到通道 1 和 2，并进行上采样
+                for (plane_idx, &plane_ptr) in [frame.data[1], frame.data[2]].iter().enumerate() {
+                    let uv_plane = std::slice::from_raw_parts(
+                        plane_ptr,
+                        (height / 2) * frame.linesize[1] as usize,
+                    );
+                    for (y, src_row) in uv_plane
+                        .chunks(frame.linesize[1] as usize)
+                        .take(height / 2)
+                        .enumerate()
+                    {
+                        for (x, &val) in src_row.iter().take(width / 2).enumerate() {
+                            let c = plane_idx + 1; // 通道索引：U=1, V=2
+                            let y2 = y * 2;
+                            let x2 = x * 2;
+                            array[[y2, x2, c]] = val;
+                            array[[y2, x2 + 1, c]] = val;
+                            array[[y2 + 1, x2, c]] = val;
+                            array[[y2 + 1, x2 + 1, c]] = val;
+                        }
                     }
                 }
             }
@@ -600,7 +600,7 @@ mod tests {
         let rgb_data = vec![128u8; 320 * 240 * 3];
         fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
 
-        let buffer = copy_to_buffer(&frame).unwrap();
+        let buffer = copy_frame_to_buffer(&frame).unwrap();
         assert_eq!(buffer.len(), 320 * 240 * 3);
         assert_eq!(buffer[0], 128);
 
@@ -616,7 +616,7 @@ mod tests {
         fill_plane_from_buffer(&mut frame, 1, &u_data, 160).unwrap();
         fill_plane_from_buffer(&mut frame, 2, &v_data, 160).unwrap();
 
-        let buffer = copy_to_buffer(&frame).unwrap();
+        let buffer = copy_frame_to_buffer(&frame).unwrap();
         assert_eq!(buffer.len(), 320 * 240 * 3 / 2);
     }
 
@@ -653,7 +653,7 @@ mod tests {
         copy_frame(&src_frame, &mut dst_frame)?;
 
         // 验证数据是否正确复制
-        let dst_buffer = copy_to_buffer(&dst_frame)?;
+        let dst_buffer = copy_frame_to_buffer(&dst_frame)?;
         assert_eq!(dst_buffer[0], 128);
 
         Ok(())
@@ -671,44 +671,70 @@ mod tests {
         fill_frame_from_buffer(&mut frame, &buffer)?;
 
         // 验证数据是否正确填充
-        let result_buffer = copy_to_buffer(&frame)?;
+        let result_buffer = copy_frame_to_buffer(&frame)?;
         assert_eq!(result_buffer[0], 128);
 
         Ok(())
     }
 
     #[test]
-    fn test_to_ndarray() -> Result<()> {
-        // 测试RGB24格式
-        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
+    fn test_to_ndarray() {
+        let width = 320_usize;
+        let height = 240_usize;
+
+        // 测试 RGB24 格式
+        let mut frame =
+            create_test_frame(width as i32, height as i32, ffi::AV_PIX_FMT_RGB24).unwrap();
 
         // 使用 fill_frame_from_buffer 填充测试数据
-        let rgb_data = vec![128u8; 320 * 240 * 3];
-        fill_frame_from_buffer(&mut frame, &rgb_data)?;
+        let rgb_data = vec![128u8; width * height * 3];
+        fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
 
-        let array = to_ndarray(&frame)?;
-        assert_eq!(array.shape(), &[240, 320, 3]);
+        let array = to_ndarray(&frame).unwrap();
+        assert_eq!(array.shape(), &[height, width, 3]);
         assert_eq!(array[[0, 0, 0]], 128);
 
-        // 测试YUV420P格式
-        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_YUV420P)?;
+        // 测试 YUV420P 格式
+        let mut frame =
+            create_test_frame(width as i32, height as i32, ffi::AV_PIX_FMT_YUV420P).unwrap();
 
-        // 使用 copy_plane 分别填充 Y、U、V 平面
-        let y_data = vec![128_u8; 320 * 240];
-        let u_data = vec![64_u8; 160 * 120];
-        let v_data = vec![32_u8; 160 * 120];
+        // 填充测试数据
+        let y_data = vec![128u8; width * height];
+        let u_data = vec![64u8; (width / 2) * (height / 2)];
+        let v_data = vec![32u8; (width / 2) * (height / 2)];
+        fill_plane_from_buffer(&mut frame, 0, &y_data, width as i32).unwrap();
+        fill_plane_from_buffer(&mut frame, 1, &u_data, (width / 2) as i32).unwrap();
+        fill_plane_from_buffer(&mut frame, 2, &v_data, (width / 2) as i32).unwrap();
 
-        fill_plane_from_buffer(&mut frame, 0, &y_data, 320)?;
-        fill_plane_from_buffer(&mut frame, 1, &u_data, 160)?;
-        fill_plane_from_buffer(&mut frame, 2, &v_data, 160)?;
+        // 转换为 ndarray
+        let array = to_ndarray(&frame).unwrap();
 
-        let array = to_ndarray(&frame)?;
-        assert_eq!(array.shape(), &[3, 240, 320]);
-        assert_eq!(array[[0, 0, 0]], 128); // Y
-        assert_eq!(array[[1, 0, 0]], 64); // U
-        assert_eq!(array[[2, 0, 0]], 32); // V
+        // 验证 Y 平面
+        for y in 0..height {
+            for x in 0..width {
+                assert_eq!(array[[y, x, 0]], 128);
+            }
+        }
 
-        Ok(())
+        // 验证 U 平面
+        for y in (0..height).step_by(2) {
+            for x in (0..width).step_by(2) {
+                assert_eq!(array[[y, x, 1]], 64);
+                assert_eq!(array[[y + 1, x, 1]], 64);
+                assert_eq!(array[[y, x + 1, 1]], 64);
+                assert_eq!(array[[y + 1, x + 1, 1]], 64);
+            }
+        }
+
+        // 验证 V 平面
+        for y in (0..height).step_by(2) {
+            for x in (0..width).step_by(2) {
+                assert_eq!(array[[y, x, 2]], 32);
+                assert_eq!(array[[y + 1, x, 2]], 32);
+                assert_eq!(array[[y, x + 1, 2]], 32);
+                assert_eq!(array[[y + 1, x + 1, 2]], 32);
+            }
+        }
     }
 
     #[test]
@@ -721,7 +747,7 @@ mod tests {
         fill_frame_from_buffer(&mut src_frame, &test_data).unwrap();
 
         // 2. 复制到buffer
-        let buffer = copy_to_buffer(&src_frame).unwrap();
+        let buffer = copy_frame_to_buffer(&src_frame).unwrap();
 
         // 3. 从buffer创建新frame
         let mut dst_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();

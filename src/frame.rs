@@ -639,10 +639,12 @@ where
             unsafe {
                 // 复制 Y 平面
                 let y_src = frame.data[0] as *const T;
+                assert!(!y_src.is_null(), "frame data is null");
+
                 for y in 0..height {
-                    let src_line = y_src.add(y * y_line_size);
-                    for x in 0..width {
-                        *array.uget_mut((y, x, 0)) = *src_line.add(x);
+                    let src_row = std::slice::from_raw_parts(y_src.add(y * y_line_size), width);
+                    for (x, &val) in src_row.iter().enumerate() {
+                        array[[y, x, 0]] = val;
                     }
                 }
 
@@ -650,14 +652,15 @@ where
                 for (plane_idx, &plane_src) in [frame.data[1], frame.data[2]].iter().enumerate() {
                     let uv_src = plane_src as *const T;
                     for y in 0..height / 2 {
-                        let src_line = uv_src.add(y * uv_line_size);
+                        let src_row =
+                            std::slice::from_raw_parts(uv_src.add(y * uv_line_size), width / 2);
                         for x in 0..width / 2 {
-                            let val = *src_line.add(x);
-                            let c = plane_idx + 1;
-                            *array.uget_mut((y * 2, x * 2, c)) = val;
-                            *array.uget_mut((y * 2 + 1, x * 2, c)) = val;
-                            *array.uget_mut((y * 2, x * 2 + 1, c)) = val;
-                            *array.uget_mut((y * 2 + 1, x * 2 + 1, c)) = val;
+                            let val = src_row[x];
+                            let ch = plane_idx + 1; // U 平面为 1，V 平面为 2
+                            array[[y * 2, x * 2, ch]] = val;
+                            array[[y * 2 + 1, x * 2, ch]] = val;
+                            array[[y * 2, x * 2 + 1, ch]] = val;
+                            array[[y * 2 + 1, x * 2 + 1, ch]] = val;
                         }
                     }
                 }

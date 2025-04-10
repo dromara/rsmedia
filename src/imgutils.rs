@@ -382,7 +382,6 @@ pub fn resize(input: impl Into<FullImage>, width: usize, height: usize) -> FullI
                     for w in 0..2 {
                         for y_segment in intersected_y.0[h].iter() {
                             for x_segment in intersected_x.0[w].iter() {
-
                                 #[allow(clippy::identity_op)]
                                 let result = bilinear_interpolation(
                                     area.get(0 + w, 0 + h),

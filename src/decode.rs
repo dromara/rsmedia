@@ -7,11 +7,11 @@ use crate::io::Reader;
 use crate::options::Options;
 use crate::resize::Resize;
 use crate::stream::StreamInfo;
-use crate::{swctx, utils, MediaType, PixelFormat, RawFrame, SampleFormat};
+use crate::{swctx, utils, MediaType, PixelFormat, RawFrame, SampleFormat, Time};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::avformat::AVStream;
-use rsmpeg::avutil::AVChannelLayout;
+use rsmpeg::avutil::{self, AVChannelLayout};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -159,10 +159,16 @@ impl DecoderBuilder {
             ))?
         };
 
+        let duration = Time::new(Some(input_stream.duration), input_stream.time_base);
+        let nb_frames = input_stream.nb_frames;
+        let frame_rate = (
+            avutil::av_q2d(input_stream.r_frame_rate) as f32,
+            avutil::av_q2d(input_stream.avg_frame_rate) as f32,
+        );
+
         let mut decode_ctx = AVCodecContext::new(&codec);
         self.setup_codec_context(&mut decode_ctx, input_stream)?;
 
-        let time_base = input_stream.time_base;
         let (width, height) = (decode_ctx.width, decode_ctx.height);
         let hw_context = self
             .hw_device_config
@@ -232,13 +238,15 @@ impl DecoderBuilder {
         };
 
         Ok(Decoder {
-            context: decode_ctx,
-            hw_context,
             rescale,
             resample,
-            time_base,
             media_type,
             stream_index,
+            duration,
+            nb_frames,
+            frame_rate,
+            hw_context,
+            context: decode_ctx,
             filter: self.filter,
             state: DecoderState::Normal,
         })
@@ -272,9 +280,12 @@ pub struct Decoder {
     rescale: Option<(usize, usize, PixelFormat)>,
     // audio resampling: (nb_channels, sample_rate, sample_format)
     resample: Option<(usize, usize, SampleFormat)>,
-    time_base: ffi::AVRational,
-    media_type: MediaType,
+    // (r_frame_rate, avg_frame_rate)
+    frame_rate: (f32, f32),
+    nb_frames: i64,
+    duration: Time,
     stream_index: usize,
+    media_type: MediaType,
     state: DecoderState,
 }
 
@@ -311,10 +322,35 @@ impl Decoder {
         self.context.height as usize
     }
 
+    /// Get the decoders input duration
+    #[inline(always)]
+    pub fn duration(&self) -> Time {
+        self.duration
+    }
+
     /// Get decoder time base.
     #[inline(always)]
     pub fn time_base(&self) -> ffi::AVRational {
-        self.time_base
+        self.duration.time_base
+    }
+
+    /// Get the decoders input stream number of frames
+    #[inline(always)]
+    pub fn frames(&self) -> i64 {
+        self.nb_frames
+    }
+
+    /// Get the decoders input frame rate
+    ///
+    /// # Return
+    /// A tuple of the frame rate of float values
+    ///
+    /// `0`: r_frame_rate
+    /// `1`: avg_frame_rate
+    ///
+    #[inline(always)]
+    pub fn frame_rate(&self) -> (f32, f32) {
+        self.frame_rate
     }
 
     #[inline(always)]

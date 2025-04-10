@@ -16,8 +16,8 @@ use std::time::Duration;
 /// object, on which arithmetic operations can be performed.
 #[derive(Debug, Copy, Clone)]
 pub struct Time {
-    time: Option<i64>,
-    time_base: AVRational,
+    pub time: Option<i64>,
+    pub time_base: AVRational,
 }
 
 impl Time {

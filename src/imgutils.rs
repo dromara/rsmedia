@@ -1,413 +1,10 @@
-use crate::colors;
 use crate::PixelFormat;
 
-use anyhow::Error;
-use image::DynamicImage;
+use anyhow::{Error, Result};
+use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 
-/// Processing-friendly image structure
-/// with separate channels in ARGB or RGB order
-/// in linear color space with alpha premultiplied.
-///
-/// If you are not using the [image] library,
-/// you will have to implement the conversion
-/// to this structure and back to your image
-/// format yourself.
-#[derive(Clone, Debug)]
-pub struct FullImage {
-    pub width: usize,
-    pub height: usize,
-    pub has_alpha: bool,
-    pub channels: Vec<ImageChannel>,
-}
-
-impl FullImage {
-    pub fn new(width: usize, height: usize, channel_count: usize, has_alpha: bool) -> Self {
-        Self {
-            width,
-            height,
-            has_alpha,
-            channels: vec![ImageChannel::new(width, height); channel_count],
-        }
-    }
-}
-
-#[allow(clippy::identity_op)]
-impl From<&DynamicImage> for FullImage {
-    fn from(input: &DynamicImage) -> Self {
-        let (width, height) = (input.width() as usize, input.height() as usize);
-        let has_alpha = input.color().has_alpha();
-        let channel_count = if has_alpha { 4 } else { 3 };
-        let mut output = FullImage::new(width, height, channel_count, has_alpha);
-        if has_alpha {
-            let data = input.to_rgba32f().into_vec();
-            for i in 0..width * height {
-                let r = data[i * 4 + 0];
-                let g = data[i * 4 + 1];
-                let b = data[i * 4 + 2];
-                let a = data[i * 4 + 3];
-                output.channels[0].data[i] = a;
-                output.channels[1].data[i] = colors::srgb_to_lrgb(r) * a;
-                output.channels[2].data[i] = colors::srgb_to_lrgb(g) * a;
-                output.channels[3].data[i] = colors::srgb_to_lrgb(b) * a;
-            }
-        } else {
-            let data = input.to_rgb32f().into_vec();
-            for i in 0..width * height {
-                let r = data[i * 3 + 0];
-                let g = data[i * 3 + 1];
-                let b = data[i * 3 + 2];
-                output.channels[0].data[i] = colors::srgb_to_lrgb(r);
-                output.channels[1].data[i] = colors::srgb_to_lrgb(g);
-                output.channels[2].data[i] = colors::srgb_to_lrgb(b);
-            }
-        }
-        output
-    }
-}
-
-#[allow(clippy::identity_op)]
-impl From<&FullImage> for DynamicImage {
-    fn from(input: &FullImage) -> Self {
-        if input.channels.len() == 3 && !input.has_alpha {
-            let mut buf = vec![0; input.width * input.height * 3];
-            for i in 0..input.width * input.height {
-                buf[i * 3 + 0] = colors::lrgb_to_srgb8(input.channels[0].data[i]);
-                buf[i * 3 + 1] = colors::lrgb_to_srgb8(input.channels[1].data[i]);
-                buf[i * 3 + 2] = colors::lrgb_to_srgb8(input.channels[2].data[i]);
-            }
-            DynamicImage::ImageRgb8(
-                image::RgbImage::from_raw(input.width as u32, input.height as u32, buf).unwrap(),
-            )
-        } else if input.channels.len() == 4 && input.has_alpha {
-            let mut buf = vec![0; input.width * input.height * 4];
-            for i in 0..input.width * input.height {
-                let a = input.channels[0].data[i] + f32::EPSILON;
-                let r = input.channels[1].data[i];
-                let g = input.channels[2].data[i];
-                let b = input.channels[3].data[i];
-                buf[i * 4 + 0] = colors::lrgb_to_srgb8(r / a);
-                buf[i * 4 + 1] = colors::lrgb_to_srgb8(g / a);
-                buf[i * 4 + 2] = colors::lrgb_to_srgb8(b / a);
-                buf[i * 4 + 3] = (a * 255.0 + 0.5) as u8;
-            }
-            DynamicImage::ImageRgba8(
-                image::RgbaImage::from_raw(input.width as u32, input.height as u32, buf).unwrap(),
-            )
-        } else {
-            panic!("This is not ARGB or RGB image");
-        }
-    }
-}
-
-impl From<FullImage> for DynamicImage {
-    fn from(input: FullImage) -> Self {
-        (&input).into()
-    }
-}
-
-/// Separate color channel, dimensions must match the entire image
-#[derive(Clone, Debug)]
-pub struct ImageChannel {
-    pub width: usize,
-    pub height: usize,
-    pub data: Vec<f32>,
-}
-
-#[derive(Copy, Clone, Default)]
-struct Area([f32; 9]);
-
-impl Area {
-    fn map<F: FnMut(f32) -> f32>(&self, f: &mut F) -> Self {
-        let mut out = Self::default();
-        for i in 0..9 {
-            out.0[i] = f(self.0[i]);
-        }
-        out
-    }
-    fn zip_map<F: FnMut(f32, f32) -> f32>(&self, other: &Self, f: &mut F) -> Self {
-        let mut out = Self::default();
-        for i in 0..9 {
-            out.0[i] = f(self.0[i], other.0[i]);
-        }
-        out
-    }
-    fn center(&self) -> f32 {
-        self.0[4]
-    }
-    fn borders(&self) -> f32 {
-        self.0[1] + self.0[3] + self.0[5] + self.0[7]
-    }
-    fn corners(&self) -> f32 {
-        self.0[0] + self.0[2] + self.0[6] + self.0[8]
-    }
-    fn integral(&self) -> f32 {
-        (self.center() * 36.0 + self.borders() * 6.0 + self.corners()) / 64.0
-    }
-    fn get(&self, x: usize, y: usize) -> f32 {
-        self.0[y * 3 + x]
-    }
-}
-
-impl ImageChannel {
-    pub fn new(width: usize, height: usize) -> Self {
-        ImageChannel {
-            width,
-            height,
-            data: vec![0.0; width * height],
-        }
-    }
-    pub fn get(&self, x: usize, y: usize) -> f32 {
-        self.data[y * self.width + x]
-    }
-    fn get_area(&self, x: usize, y: usize) -> Area {
-        let x = [x.saturating_sub(1), x, (x + 1).min(self.width - 1)];
-        let y = [y.saturating_sub(1), y, (y + 1).min(self.height - 1)];
-
-        Area([
-            self.get(x[0], y[0]),
-            self.get(x[1], y[0]),
-            self.get(x[2], y[0]),
-            self.get(x[0], y[1]),
-            self.get(x[1], y[1]),
-            self.get(x[2], y[1]),
-            self.get(x[0], y[2]),
-            self.get(x[1], y[2]),
-            self.get(x[2], y[2]),
-        ])
-    }
-    pub fn set(&mut self, x: usize, y: usize, value: f32) {
-        self.data[y * self.width + x] = value
-    }
-}
-
-fn sharp(
-    input_channel: &ImageChannel,
-    target: &ImageChannel,
-    alpha_channel: Option<&ImageChannel>,
-    output_channel: &mut ImageChannel,
-) {
-    for y in 0..input_channel.height {
-        for x in 0..input_channel.width {
-            let area = input_channel.get_area(x, y);
-
-            let target = target.get(x, y);
-            let borders = area.borders();
-            let corners = area.corners();
-            let result = (target * 64.0 - borders * 6.0 - corners) / 36.0;
-
-            let max = if let Some(alpha_channel) = alpha_channel {
-                alpha_channel.get(x, y)
-            } else {
-                1.0
-            };
-            let result = result.clamp(0.0, max);
-
-            output_channel.set(x, y, result);
-        }
-    }
-}
-
-fn adjust_3x3(target: f32, area: Area, alpha: Area) -> Area {
-    let current = area.integral();
-    if current > target {
-        let k = target / current;
-        return area.map(&mut |v| v * k);
-    }
-
-    let max = alpha.integral();
-    if max > current {
-        let k = (target - current) / (max - current);
-        return area.zip_map(&alpha, &mut |v, a| v * (1.0 - k) + a * k);
-    }
-
-    area
-}
-
-#[derive(Clone, Debug)]
-struct Segment {
-    output_index: usize,
-    interpolation_factor: f32,
-    size: f32,
-}
-
-#[derive(Clone, Debug)]
-struct IntersectedPixels([Vec<Segment>; 2]);
-
-impl IntersectedPixels {
-    fn new(old: usize, new: usize, inp_idx: usize) -> Self {
-        let old_div_new = old as f32 / new as f32;
-        let new_div_old = 1.0 / old_div_new;
-
-        let before_center = {
-            // (idx * new / old).floor()
-            let start = (inp_idx * new) / old;
-            // ((idx + 0.5) * new / old).ceil()
-            // ((idx + 1) * new / (old * 2)).ceil()
-            let end = ((inp_idx * 2 + 1) * new).div_ceil(old * 2);
-
-            (start..end)
-                .map(|out_idx| {
-                    let segment_start = out_idx as f32 * old_div_new;
-                    let segment_end = segment_start + old_div_new;
-
-                    let segment_start = segment_start.max(inp_idx as f32);
-                    let segment_end = segment_end.min(inp_idx as f32 + 0.5);
-
-                    let size = (segment_end - segment_start) * new_div_old;
-
-                    let center = (segment_start + segment_end) * 0.5;
-                    let interpolation_factor = center + 0.5 - inp_idx as f32;
-
-                    Segment {
-                        output_index: out_idx,
-                        interpolation_factor,
-                        size,
-                    }
-                })
-                .collect()
-        };
-
-        let after_center = {
-            // ((idx + 0.5) * new / old).floor()
-            // ((idx + 1) * new / (old * 2)).floor()
-            let start = ((inp_idx * 2 + 1) * new) / (old * 2);
-            // ((idx + 1) * new / old).ceil()
-            let end = ((inp_idx + 1) * new).div_ceil(old);
-
-            (start..end)
-                .map(|out_idx| {
-                    let segment_start = out_idx as f32 * old_div_new; // 0
-                    let segment_end = segment_start + old_div_new; // 2
-
-                    let segment_start = segment_start.max(inp_idx as f32 + 0.5);
-                    let segment_end = segment_end.min(inp_idx as f32 + 1.0);
-
-                    let size = (segment_end - segment_start) * new_div_old;
-
-                    let center = (segment_start + segment_end) * 0.5;
-                    let lerp_k = center - 0.5 - inp_idx as f32;
-
-                    Segment {
-                        output_index: out_idx,
-                        interpolation_factor: lerp_k,
-                        size,
-                    }
-                })
-                .collect()
-        };
-
-        IntersectedPixels([before_center, after_center])
-    }
-}
-
-fn bilinear_interpolation(a: f32, b: f32, c: f32, d: f32, tx: f32, ty: f32) -> f32 {
-    let ab = (b - a) * tx + a;
-    let cd = (d - c) * tx + c;
-    (cd - ab) * ty + ab
-}
-
-/// Performs image resampling.
-///
-/// `input` - something implementing the [Into]<[FullImage]> trait,
-/// this trait is implemented for [image::DynamicImage];
-///
-/// `width` and `height` are the dimensions of the output image, must not be zero;
-///
-/// the output type is [FullImage], so the `into()` method must be called to convert it to [image::DynamicImage].
-///
-/// Usage:
-/// ```rust,ignore
-/// # let (width, height) = (1, 1);
-/// let input_image = image::open("input.png").unwrap();
-/// let resized_image: image::DynamicImage = imgutils::resize(&input_image, width, height).into();
-/// resized_image.save("output.png").unwrap();
-/// ```
-pub fn resize(input: impl Into<FullImage>, width: usize, height: usize) -> FullImage {
-    assert!(width > 0, "image width must > 0");
-    assert!(height > 0, "image height muse > 0");
-
-    let input = input.into();
-    let mut sharpened_image = input.clone();
-    let mut temp_channel = sharpened_image.channels[0].clone();
-
-    let steps = 8;
-    // independed channels
-    for z in 0..input.channels.len() {
-        if input.has_alpha && z != 0 {
-            continue;
-        }
-        for _ in 0..steps {
-            let target = &input.channels[z];
-            let current_channel = &mut sharpened_image.channels[z];
-            sharp(current_channel, target, None, &mut temp_channel);
-            sharp(&temp_channel, target, None, current_channel);
-        }
-    }
-    // alpha depended channels
-    if input.has_alpha {
-        for z in 1..input.channels.len() {
-            for _ in 0..steps {
-                let target = &input.channels[z];
-                let current_channel = &mut sharpened_image.channels[z];
-                let max = Some(&input.channels[0]);
-                sharp(current_channel, target, max, &mut temp_channel);
-                sharp(&temp_channel, target, max, current_channel);
-            }
-        }
-    }
-
-    let intersected_by_x: Vec<_> = (0..input.width)
-        .map(|inp_idx| IntersectedPixels::new(input.width, width, inp_idx))
-        .collect();
-
-    let intersected_by_y: Vec<_> = (0..input.height)
-        .map(|inp_idx| IntersectedPixels::new(input.height, height, inp_idx))
-        .collect();
-
-    let mut output_image = FullImage::new(width, height, input.channels.len(), input.has_alpha);
-
-    for (y, intersected_y) in intersected_by_y.iter().enumerate().take(input.height) {
-        for (x, intersected_x) in intersected_by_x.iter().enumerate().take(input.width) {
-            let mut alpha_area = Area([1.0; 9]);
-
-            for z in 0..input.channels.len() {
-                let area = sharpened_image.channels[z].get_area(x, y);
-                let target = input.channels[z].get(x, y);
-                let area = adjust_3x3(target, area, alpha_area);
-                if input.has_alpha && z == 0 {
-                    alpha_area = area;
-                }
-                for h in 0..2 {
-                    for w in 0..2 {
-                        for y_segment in intersected_y.0[h].iter() {
-                            for x_segment in intersected_x.0[w].iter() {
-                                #[allow(clippy::identity_op)]
-                                let result = bilinear_interpolation(
-                                    area.get(0 + w, 0 + h),
-                                    area.get(1 + w, 0 + h),
-                                    area.get(0 + w, 1 + h),
-                                    area.get(1 + w, 1 + h),
-                                    x_segment.interpolation_factor,
-                                    y_segment.interpolation_factor,
-                                ) * y_segment.size
-                                    * x_segment.size;
-                                let x = x_segment.output_index;
-                                let y = y_segment.output_index;
-                                let old = output_image.channels[z].get(x, y);
-                                output_image.channels[z].set(x, y, old + result);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    output_image
-}
-
-/// Fill plane linesizes for an image with pixel format pix_fmt and width width.
+/// Fill plane linesizes for an image with pixel format pix_fmt and width.
 ///
 /// # Arguments
 ///
@@ -415,7 +12,7 @@ pub fn resize(input: impl Into<FullImage>, width: usize, height: usize) -> FullI
 /// * `width` - The width of the image in pixels.
 ///
 /// Returns an array of four integers representing the linesizes for each plane of the image.
-pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 4]> {
+pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> Result<[i32; 4]> {
     let mut linesizes = [0; 4];
     let ret =
         unsafe { ffi::av_image_fill_linesizes(linesizes.as_mut_ptr(), pix_fmt.into(), width) };
@@ -428,7 +25,7 @@ pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 
     Ok(linesizes)
 }
 
-/// Compute the size of an image line with format pix_fmt and width width for the plane plane.
+/// Compute the size of an image line with format pix_fmt and width
 ///
 /// # Arguments
 /// * `pix_fmt` - The pixel format of the image.
@@ -436,7 +33,7 @@ pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> anyhow::Result<[i32; 
 /// * `plane` - The index of the plane to compute the size for.
 ///
 /// Returns The size of the image line in bytes for the specified plane.
-pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> anyhow::Result<usize> {
+pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> Result<usize> {
     // Safe because format is a valid format and this function is pure computation.
     let ret = unsafe { ffi::av_image_get_linesize(pix_fmt.into(), width as _, plane as _) };
 
@@ -448,7 +45,7 @@ pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> anyhow::R
     Ok(ret as usize)
 }
 
-/// Fill plane sizes for an image with pixel format pix_fmt and height height.
+/// Fill plane sizes for an image with pixel format pix_fmt, linesizes and height.
 ///
 /// # Arguments
 ///
@@ -461,7 +58,7 @@ pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
     format: PixelFormat,
     linesizes: I,
     height: u32,
-) -> anyhow::Result<Vec<usize>> {
+) -> Result<Vec<usize>> {
     const MAX_FFMPEG_PLANES: usize = 4;
 
     let mut linesizes_buf = [0; MAX_FFMPEG_PLANES];
@@ -498,10 +95,309 @@ pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
         .collect())
 }
 
+pub fn get_buffer_size(frame: &AVFrame, align: i32) -> Result<usize> {
+    if align <= 0 {
+        return Err(anyhow::anyhow!("Invalid alignment"));
+    }
+
+    unsafe {
+        let size = ffi::av_image_get_buffer_size(
+            frame.format,
+            frame.width,
+            frame.height,
+            align, // alignment
+        );
+
+        if size <= 0 {
+            Err(anyhow::anyhow!("Failed to get buffer size: {}", size))
+        } else {
+            Ok(size as usize)
+        }
+    }
+}
+
+/// frame => Vec<u8>
+pub fn copy_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
+    let frame_width: i32 = frame.width;
+    let frame_height: i32 = frame.height;
+    if frame_width * frame_height <= 0 {
+        return Err(anyhow::anyhow!("Invalid frame dimensions"));
+    }
+
+    unsafe {
+        let buf_size = get_buffer_size(frame, 1)?;
+        let mut buffer = vec![0u8; buf_size as usize];
+        let bytes = ffi::av_image_copy_to_buffer(
+            buffer.as_mut_ptr(),
+            buf_size as i32,
+            (*frame.as_ptr()).data.as_ptr() as *const *const u8,
+            (*frame.as_ptr()).linesize.as_ptr(),
+            frame.format,
+            frame.width,
+            frame.height,
+            1,
+        );
+
+        if bytes > 0 {
+            buffer.truncate(bytes as usize);
+            Ok(buffer)
+        } else {
+            Err(Error::msg(format!("Failed to copy image:{}", bytes)))
+        }
+    }
+}
+
+/// 将数据复制到指定的帧平面中
+///
+/// # Arguments
+///
+/// * `frame` - 目标 AVFrame
+/// * `plane_idx` - 平面索引 (例如 YUV420P 格式中：0=Y, 1=U, 2=V)
+/// * `src` - 源数据
+/// * `src_linesize` - 源数据每行的字节数
+///
+/// # Safety
+///
+/// 调用者需要确保：
+/// 1. plane_idx 是有效的（小于平面总数）
+/// 2. src 包含足够的数据
+/// 3. src_linesize 是正确的
+pub fn fill_plane_from_buffer(
+    frame: &mut AVFrame,
+    plane_idx: usize,
+    src: &[u8],
+    src_linesize: i32,
+) -> Result<()> {
+    unsafe {
+        // 检查帧是否有效
+        if frame.width * frame.height <= 0 {
+            return Err(Error::msg("Invalid frame dimensions"));
+        }
+
+        // 获取该格式的平面数
+        let planes = ffi::av_pix_fmt_count_planes(frame.format);
+        if planes < 0 {
+            return Err(Error::msg("Invalid pixel format"));
+        }
+
+        // 检查平面索引是否有效
+        if plane_idx >= planes as usize {
+            return Err(Error::msg(format!(
+                "Invalid plane index: {}, max planes: {}",
+                plane_idx, planes
+            )));
+        }
+
+        // 检查目标平面指针是否有效
+        if frame.data[plane_idx].is_null() {
+            return Err(Error::msg(format!(
+                "Null plane data pointer for plane {}",
+                plane_idx
+            )));
+        }
+
+        if src_linesize <= 0 {
+            return Err(anyhow::anyhow!("Invalid source linesize"));
+        }
+
+        // 计算这个平面的实际高度
+        // 对于YUV420P格式，U和V平面的高度是Y平面的一半
+        let plane_height = if frame.format == ffi::AV_PIX_FMT_YUV420P && plane_idx > 0 {
+            frame.height / 2
+        } else {
+            frame.height
+        };
+
+        // 确保帧是可写的
+        if !frame.is_writable()? {
+            return Err(Error::msg("Frame is not writable"));
+        }
+
+        // 复制平面数据
+        ffi::av_image_copy_plane(
+            frame.data[plane_idx],                       // 目标数据指针
+            frame.linesize[plane_idx],                   // 目标行大小
+            src.as_ptr(),                                // 源数据指针
+            src_linesize,                                // 源数据行大小
+            frame.linesize[plane_idx].min(src_linesize), // 使用较小的行大小
+            plane_height,                                // 平面高度
+        );
+
+        Ok(())
+    }
+}
+/// 完整复制frame（包括数据和属性）
+pub fn copy_frame(src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
+    unsafe {
+        // 复制数据
+        let ret = ffi::av_frame_copy(dst.as_mut_ptr(), src.as_ptr());
+        if ret < 0 {
+            return Err(anyhow::anyhow!("Failed to copy frame data: {}", ret));
+        }
+
+        // 复制属性
+        let ret = ffi::av_frame_copy_props(dst.as_mut_ptr(), src.as_ptr());
+        if ret < 0 {
+            return Err(anyhow::anyhow!("Failed to copy frame properties: {}", ret));
+        }
+
+        Ok(())
+    }
+}
+
+/// 将buffer数据填充到frame中
+pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: &[u8]) -> Result<()> {
+    unsafe {
+        let data_ptr = frame.data_mut().as_mut_ptr();
+        let linesize_ptr = frame.linesize_mut().as_mut_ptr();
+
+        let ret = ffi::av_image_fill_arrays(
+            data_ptr,
+            linesize_ptr,
+            buffer.as_ptr(),
+            frame.format,
+            frame.width,
+            frame.height,
+            1,
+        );
+
+        if ret < 0 {
+            Err(anyhow::anyhow!("Failed to fill frame from buffer: {}", ret))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// 将frame转换为ndarray`
+pub fn to_ndarray(frame: &AVFrame) -> Result<ndarray::Array3<u8>> {
+    match frame.format {
+        f if f == ffi::AV_PIX_FMT_RGB24 => {
+            // RGB24格式：直接复制并重塑
+            let buffer = copy_to_buffer(frame)?;
+            ndarray::Array3::from_shape_vec(
+                (frame.height as usize, frame.width as usize, 3),
+                buffer,
+            )
+            .map_err(|e| anyhow::anyhow!("Failed to convert RGB ndarray: {}", e))
+        }
+        f if f == ffi::AV_PIX_FMT_YUV420P => {
+            let height = frame.height as usize;
+            let width = frame.width as usize;
+            let mut array = ndarray::Array3::zeros((3, height, width));
+
+            unsafe {
+                // 复制Y平面
+                for y in 0..height {
+                    let src_ptr = frame.data[0].add(y * frame.linesize[0] as usize);
+                    for x in 0..width {
+                        array[[0, y, x]] = *src_ptr.add(x);
+                    }
+                }
+
+                // 复制U平面并上采样
+                let uv_height = height / 2;
+                let uv_width = width / 2;
+                for y in 0..uv_height {
+                    let src_ptr = frame.data[1].add(y * frame.linesize[1] as usize);
+                    for x in 0..uv_width {
+                        let u_value = *src_ptr.add(x);
+                        let y2 = y * 2;
+                        let x2 = x * 2;
+                        array[[1, y2, x2]] = u_value;
+                        array[[1, y2, x2 + 1]] = u_value;
+                        array[[1, y2 + 1, x2]] = u_value;
+                        array[[1, y2 + 1, x2 + 1]] = u_value;
+                    }
+                }
+
+                // 复制V平面并上采样
+                for y in 0..uv_height {
+                    let src_ptr = frame.data[2].add(y * frame.linesize[2] as usize);
+                    for x in 0..uv_width {
+                        let v_value = *src_ptr.add(x);
+                        let y2 = y * 2;
+                        let x2 = x * 2;
+                        array[[2, y2, x2]] = v_value;
+                        array[[2, y2, x2 + 1]] = v_value;
+                        array[[2, y2 + 1, x2]] = v_value;
+                        array[[2, y2 + 1, x2 + 1]] = v_value;
+                    }
+                }
+            }
+
+            Ok(array)
+        }
+
+        _ => Err(anyhow::anyhow!(
+            "Unsupported pixel format: {}",
+            frame.format
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
+    use ab_glyph::PxScale;
+    use anyhow::Context;
+    use image::{ImageBuffer, Rgb};
+
+    const OUTPUT_DIR: &str = "output";
+
+    /// Create an image with the given text and a gradient color.
+    fn create_image_with_text(
+        width: u32,
+        height: u32,
+        text: &str,
+    ) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
+        let mut img = ImageBuffer::new(width, height);
+
+        use palette::IntoColor;
+
+        // create a gradient color
+        for y in 0..height {
+            let hue = (y as f32 / height as f32) * 360.0;
+            let color = palette::Hsl::new(hue, 0.8, 0.5);
+            let rgb: palette::Srgb = color.into_color();
+
+            for x in 0..width {
+                img.put_pixel(
+                    x,
+                    y,
+                    Rgb([
+                        (rgb.red * 255.0) as u8,
+                        (rgb.green * 255.0) as u8,
+                        (rgb.blue * 255.0) as u8,
+                    ]),
+                );
+            }
+        }
+
+        let font = ab_glyph::FontArc::try_from_slice(include_bytes!("../fonts/Arial.ttf"))
+            .map_err(|e| format!("Failed to load font: {}", e))
+            .unwrap();
+
+        // add text to the image
+        imageproc::drawing::draw_text_mut(
+            &mut img,
+            Rgb([255, 255, 255]),
+            10,
+            10,
+            PxScale::from(24.0),
+            &font,
+            text,
+        );
+
+        img
+    }
+
+    #[test]
+    fn test_image_text() -> Result<()> {
+        let rgb = create_image_with_text(640, 480, "Hello, world!");
+        rgb.save(format!("{}/image_with_text.png", OUTPUT_DIR))?;
+        Ok(())
+    }
 
     #[test]
     fn test_image_linesize_planar() -> Result<()> {
@@ -665,13 +561,174 @@ mod tests {
         Ok(())
     }
 
+    /// 创建测试用的AVFrame
+    fn create_test_frame(width: i32, height: i32, format: i32) -> Result<AVFrame> {
+        let mut frame = AVFrame::new();
+        frame.set_width(width);
+        frame.set_height(height);
+        frame.set_format(format);
+
+        // 分配帧缓冲区
+        frame
+            .alloc_buffer()
+            .context("Failed to allocate frame buffer")?;
+
+        Ok(frame)
+    }
+
     #[test]
-    #[ignore = "need an image file"]
-    fn test_image_resize() -> Result<()> {
-        let input_image = image::open("assets/cat.jpg")?;
-        let resized_image = resize(&input_image, 640, 640);
-        let resized_image: DynamicImage = resized_image.into();
-        resized_image.save("/tmp/output.png")?;
+    fn test_get_buffer_size() -> Result<()> {
+        // 正确的尺寸和格式
+        let frame = create_test_frame(640, 480, ffi::AV_PIX_FMT_RGB24)?;
+        let size = get_buffer_size(&frame, 1)?;
+        assert_eq!(size, 640 * 480 * 3);
+
+        // 测试YUV420P格式
+        let frame = create_test_frame(640, 480, ffi::AV_PIX_FMT_YUV420P)?;
+        let size = get_buffer_size(&frame, 1)?;
+        assert_eq!(size, 640 * 480 * 3 / 2); // YUV420P 大小是 RGB24 的3/2
+
         Ok(())
+    }
+
+    #[test]
+    fn test_copy_to_buffer() {
+        // 测试RGB24格式
+        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();
+
+        // 使用 fill_frame_from_buffer 填充测试数据
+        let rgb_data = vec![128u8; 320 * 240 * 3];
+        fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
+
+        let buffer = copy_to_buffer(&frame).unwrap();
+        assert_eq!(buffer.len(), 320 * 240 * 3);
+        assert_eq!(buffer[0], 128);
+
+        // 测试YUV420P格式
+        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_YUV420P).unwrap();
+
+        // 使用 copy_plane 分别填充 Y、U、V 平面
+        let y_data = vec![128u8; 320 * 240];
+        let u_data = vec![128u8; 160 * 120];
+        let v_data = vec![128u8; 160 * 120];
+
+        fill_plane_from_buffer(&mut frame, 0, &y_data, 320).unwrap();
+        fill_plane_from_buffer(&mut frame, 1, &u_data, 160).unwrap();
+        fill_plane_from_buffer(&mut frame, 2, &v_data, 160).unwrap();
+
+        let buffer = copy_to_buffer(&frame).unwrap();
+        assert_eq!(buffer.len(), 320 * 240 * 3 / 2);
+    }
+
+    #[test]
+    fn test_copy_plane() {
+        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_YUV420P).unwrap();
+
+        // 测试Y平面
+        let y_data = vec![128u8; 320 * 240];
+        assert!(fill_plane_from_buffer(&mut frame, 0, &y_data, 320).is_ok());
+
+        // 测试U平面
+        let u_data = vec![128u8; 160 * 120];
+        assert!(fill_plane_from_buffer(&mut frame, 1, &u_data, 160).is_ok());
+
+        //? 测试无效平面索引
+        assert!(fill_plane_from_buffer(&mut frame, 4, &y_data, 320).is_err());
+
+        //? 测试无效的src_linesize
+        assert!(fill_plane_from_buffer(&mut frame, 0, &y_data, -1).is_err());
+    }
+
+    #[test]
+    fn test_frame_copy() -> Result<()> {
+        // 创建源frame和目标frame
+        let mut src_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
+        let mut dst_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
+
+        // 使用 fill_frame_from_buffer 填充源frame
+        let test_data = vec![128u8; 320 * 240 * 3];
+        fill_frame_from_buffer(&mut src_frame, &test_data)?;
+
+        // 测试复制
+        copy_frame(&src_frame, &mut dst_frame)?;
+
+        // 验证数据是否正确复制
+        let dst_buffer = copy_to_buffer(&dst_frame)?;
+        assert_eq!(dst_buffer[0], 128);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_fill_frame_from_buffer() -> Result<()> {
+        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
+
+        // 创建正确大小的buffer
+        let buffer_size = get_buffer_size(&frame, 1)?;
+        let buffer = vec![128u8; buffer_size];
+
+        // 测试正常填充
+        fill_frame_from_buffer(&mut frame, &buffer)?;
+
+        // 验证数据是否正确填充
+        let result_buffer = copy_to_buffer(&frame)?;
+        assert_eq!(result_buffer[0], 128);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_ndarray() -> Result<()> {
+        // 测试RGB24格式
+        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
+
+        // 使用 fill_frame_from_buffer 填充测试数据
+        let rgb_data = vec![128u8; 320 * 240 * 3];
+        fill_frame_from_buffer(&mut frame, &rgb_data)?;
+
+        let array = to_ndarray(&frame)?;
+        assert_eq!(array.shape(), &[240, 320, 3]);
+        assert_eq!(array[[0, 0, 0]], 128);
+
+        // 测试YUV420P格式
+        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_YUV420P)?;
+
+        // 使用 copy_plane 分别填充 Y、U、V 平面
+        let y_data = vec![128_u8; 320 * 240];
+        let u_data = vec![64_u8; 160 * 120];
+        let v_data = vec![32_u8; 160 * 120];
+
+        fill_plane_from_buffer(&mut frame, 0, &y_data, 320)?;
+        fill_plane_from_buffer(&mut frame, 1, &u_data, 160)?;
+        fill_plane_from_buffer(&mut frame, 2, &v_data, 160)?;
+
+        let array = to_ndarray(&frame)?;
+        assert_eq!(array.shape(), &[3, 240, 320]);
+        assert_eq!(array[[0, 0, 0]], 128); // Y
+        assert_eq!(array[[1, 0, 0]], 64); // U
+        assert_eq!(array[[2, 0, 0]], 32); // V
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_frame_integration() {
+        // 测试完整的操作流程
+        let mut src_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();
+
+        // 1. 填充原始数据
+        let test_data = vec![128u8; 320 * 240 * 3];
+        fill_frame_from_buffer(&mut src_frame, &test_data).unwrap();
+
+        // 2. 复制到buffer
+        let buffer = copy_to_buffer(&src_frame).unwrap();
+
+        // 3. 从buffer创建新frame
+        let mut dst_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();
+        assert!(fill_frame_from_buffer(&mut dst_frame, &buffer).is_ok());
+
+        // 4. 转换为ndarray
+        let array = to_ndarray(&dst_frame).unwrap();
+        assert_eq!(array.shape(), &[240, 320, 3]);
     }
 }

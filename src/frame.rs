@@ -1,5 +1,5 @@
 use crate::pixel::PixelFormat;
-use crate::{time, MediaType, SampleFormat};
+use crate::{imgutils, time, MediaType, SampleFormat};
 
 use rsmpeg::avutil::{AVChannelLayout, AVFrame};
 use rsmpeg::ffi;
@@ -496,7 +496,10 @@ fn validate_format_type_size<T>(format: i32, expected_size: usize) -> Result<()>
     Ok(())
 }
 
-/// 填充视频数据到AVFrame
+/// ndarray => AVFrame:
+/// 对 U 和 V 进行下采样，恢复到 YUV420P 格式所需的较低分辨率
+/// 减少数据的采样率，降低分辨率或数据量。
+/// 在 YUV 视频格式中，通常对色度信息（U 和 V 分量）进行下采样，因为人眼对亮度信息比色度信息更敏感。
 fn fill_video_data<T>(frame: &mut AVFrame, data: &ndarray::Array3<T>) -> Result<()>
 where
     T: MediaFrameType,
@@ -514,6 +517,7 @@ where
 
     match frame.format {
         ffi::AV_PIX_FMT_RGB24 => {
+            // 对于RGB格式，尝试直接使用连续内存
             if let Some(buffer) = data.as_standard_layout().as_slice() {
                 unsafe {
                     let dst_ptr = frame.data[0] as *mut T;
@@ -525,38 +529,32 @@ where
             }
         }
         ffi::AV_PIX_FMT_YUV420P => {
-            // 复制 Y 平面
-            let y_linesize = frame.linesize[0] as usize;
+            // 提取 Y 平面数据
+            let mut y_data = Vec::with_capacity(width * height);
             for y in 0..height {
                 for x in 0..width {
-                    unsafe {
-                        let dst = frame.data[0].add(y * y_linesize + x) as *mut T;
-                        *dst = data[[y, x, 0]];
-                    }
+                    y_data.push(data[[y, x, 0]].to_u8().unwrap());
                 }
             }
 
-            // 复制 U 平面
-            let u_linesize = frame.linesize[1] as usize;
-            for y in 0..height / 2 {
-                for x in 0..width / 2 {
-                    unsafe {
-                        let dst = frame.data[1].add(y * u_linesize + x) as *mut T;
-                        *dst = data[[y * 2, x * 2, 1]];
-                    }
+            // U和V平面 - 从上采样数据中提取
+            let uv_height = height / 2;
+            let uv_width = width / 2;
+            let mut u_data = Vec::with_capacity(uv_width * uv_height);
+            let mut v_data = Vec::with_capacity(uv_width * uv_height);
+
+            for y in 0..uv_height {
+                for x in 0..uv_width {
+                    // 注意： U 和 V 数据已经是下采样后的尺寸
+                    u_data.push(data[[y * 2, x * 2, 1]].to_u8().unwrap());
+                    v_data.push(data[[y * 2, x * 2, 2]].to_u8().unwrap());
                 }
             }
 
-            // 复制 V 平面
-            let v_linesize = frame.linesize[2] as usize;
-            for y in 0..height / 2 {
-                for x in 0..width / 2 {
-                    unsafe {
-                        let dst = frame.data[2].add(y * v_linesize + x) as *mut T;
-                        *dst = data[[y * 2, x * 2, 2]];
-                    }
-                }
-            }
+            // 填充 Y、U、V 平面
+            imgutils::fill_plane_from_buffer(frame, 0, &y_data, width as i32)?;
+            imgutils::fill_plane_from_buffer(frame, 1, &u_data, uv_width as i32)?;
+            imgutils::fill_plane_from_buffer(frame, 2, &v_data, uv_width as i32)?;
 
             Ok(())
         }
@@ -601,7 +599,10 @@ where
     }
 }
 
-/// 视频数据处理
+/// AVFrame => ndarray
+/// 对 U 和 V 进行上采样，使其与 Y 具有相同分辨率
+/// 增加数据的采样率，提高分辨率。
+/// 在处理已经下采样的数据时，有时需要将其恢复到原始分辨率。
 fn video_data<T>(frame: &AVFrame) -> Result<ndarray::Array3<T>>
 where
     T: MediaFrameType,
@@ -616,13 +617,17 @@ where
             let mut array = ndarray::Array3::<T>::default((height, width, 3));
 
             unsafe {
+                let data_ptr = frame.data[0] as *const T;
+                assert!(!data_ptr.is_null(), "frame data is null");
+
+                // 逐行复制RGB数据
                 for y in 0..height {
-                    let src_line = frame.data[0].add(y * line_size) as *const T;
+                    let src_row =
+                        std::slice::from_raw_parts(data_ptr.add(y * line_size), width * 3);
                     for x in 0..width {
-                        let idx = x * 3;
-                        array[[y, x, 0]] = *src_line.add(idx);
-                        array[[y, x, 1]] = *src_line.add(idx + 1);
-                        array[[y, x, 2]] = *src_line.add(idx + 2);
+                        array[[y, x, 0]] = src_row[x * 3]; // R
+                        array[[y, x, 1]] = src_row[x * 3 + 1]; // G
+                        array[[y, x, 2]] = src_row[x * 3 + 2]; // B
                     }
                 }
             }
@@ -651,12 +656,14 @@ where
                 // 复制 UV 平面
                 for (plane_idx, &plane_src) in [frame.data[1], frame.data[2]].iter().enumerate() {
                     let uv_src = plane_src as *const T;
+                    assert!(!uv_src.is_null(), "UV plane data is null");
+
+                    let ch = plane_idx + 1; // U 平面为 1，V 平面为 2
                     for y in 0..height / 2 {
                         let src_row =
                             std::slice::from_raw_parts(uv_src.add(y * uv_line_size), width / 2);
                         for x in 0..width / 2 {
                             let val = src_row[x];
-                            let ch = plane_idx + 1; // U 平面为 1，V 平面为 2
                             array[[y * 2, x * 2, ch]] = val;
                             array[[y * 2 + 1, x * 2, ch]] = val;
                             array[[y * 2, x * 2 + 1, ch]] = val;

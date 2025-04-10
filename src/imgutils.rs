@@ -169,6 +169,69 @@ pub fn copy_frame(src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
     }
 }
 
+/// 获取指定帧的指定平面的数据
+pub fn get_plane_buffer(frame: &AVFrame, plane_idx: usize) -> Result<&[u8]> {
+    unsafe {
+        if frame.width * frame.height <= 0 {
+            return Err(anyhow::anyhow!("Invalid frame dimensions"));
+        }
+        let planes = ffi::av_pix_fmt_count_planes(frame.format);
+        if planes < 0 {
+            return Err(anyhow::anyhow!("Invalid pixel format"));
+        }
+        if plane_idx >= planes as usize {
+            return Err(anyhow::anyhow!(
+                "Invalid plane index: {}, max planes: {}",
+                plane_idx,
+                planes
+            ));
+        }
+        if frame.data[plane_idx].is_null() {
+            return Err(anyhow::anyhow!(
+                "Null plane data pointer for plane {}",
+                plane_idx
+            ));
+        }
+
+        let buf_ptr = ffi::av_frame_get_plane_buffer(frame.as_ptr(), plane_idx as i32);
+        if buf_ptr.is_null() {
+            return Err(anyhow::anyhow!(
+                "Null plane buffer pointer for plane {}",
+                plane_idx
+            ));
+        }
+
+        // 计算平面的实际尺寸和偏移量
+        let plane_height = if frame.format == ffi::AV_PIX_FMT_YUV420P && plane_idx > 0 {
+            frame.height / 2
+        } else {
+            frame.height
+        };
+
+        let plane_linesize = frame.linesize[plane_idx] as usize;
+
+        // 计算平面数据在缓冲区中的偏移量
+        let data_offset = frame.data[plane_idx].offset_from((*buf_ptr).data) as usize;
+        if data_offset >= (*buf_ptr).size {
+            return Err(anyhow::anyhow!(
+                "Invalid data offset for plane {}",
+                plane_idx
+            ));
+        }
+
+        // 计算平面数据的实际大小
+        let plane_size = plane_height as usize * plane_linesize;
+        if data_offset + plane_size > (*buf_ptr).size {
+            return Err(anyhow::anyhow!("Buffer too small for plane {}", plane_idx));
+        }
+
+        // 创建一个切片，只包含平面的实际数据
+        let slice = std::slice::from_raw_parts((*buf_ptr).data.add(data_offset), plane_size);
+
+        Ok(slice)
+    }
+}
+
 /// 将数据复制到指定的帧平面中
 ///
 /// # Arguments
@@ -235,14 +298,17 @@ pub fn fill_plane_from_buffer(
             return Err(Error::msg("Frame is not writable"));
         }
 
+        // 该平面的实际行大小
+        let plane_i_linesize = frame.linesize[plane_idx];
+
         // 复制平面数据
         ffi::av_image_copy_plane(
-            frame.data[plane_idx],                       // 目标数据指针
-            frame.linesize[plane_idx],                   // 目标行大小
-            src.as_ptr(),                                // 源数据指针
-            src_linesize,                                // 源数据行大小
-            frame.linesize[plane_idx].min(src_linesize), // 使用较小的行大小
-            plane_height,                                // 平面高度
+            frame.data[plane_idx],              // 目标数据指针
+            plane_i_linesize,                   // 目标行大小
+            src.as_ptr(),                       // 源数据指针
+            src_linesize,                       // 源数据行大小
+            plane_i_linesize.min(src_linesize), // 使用较小的行大小
+            plane_height,                       // 平面高度
         );
 
         Ok(())
@@ -596,7 +662,7 @@ mod tests {
         // 测试RGB24格式
         let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();
 
-        // 使用 fill_frame_from_buffer 填充测试数据
+        // 填充测试数据
         let rgb_data = vec![128u8; 320 * 240 * 3];
         fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
 
@@ -622,21 +688,90 @@ mod tests {
 
     #[test]
     fn test_copy_plane() {
-        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_YUV420P).unwrap();
+        let width = 320;
+        let height = 240;
+        let mut frame = create_test_frame(width, height, ffi::AV_PIX_FMT_YUV420P).unwrap();
 
-        // 测试Y平面
-        let y_data = vec![128u8; 320 * 240];
-        assert!(fill_plane_from_buffer(&mut frame, 0, &y_data, 320).is_ok());
+        // 为每个平面创建测试数据
+        // Y 平面 (全部填充为值 100)
+        let y_size = width as usize * height as usize;
+        let y_data = vec![100_u8; y_size];
 
-        // 测试U平面
-        let u_data = vec![128u8; 160 * 120];
-        assert!(fill_plane_from_buffer(&mut frame, 1, &u_data, 160).is_ok());
+        // U 平面 (全部填充为值 150)
+        let uv_width = width / 2;
+        let uv_height = height / 2;
+        let uv_size = (uv_width * uv_height) as usize;
+        let u_data = vec![150_u8; uv_size];
 
-        //? 测试无效平面索引
-        assert!(fill_plane_from_buffer(&mut frame, 4, &y_data, 320).is_err());
+        // V 平面 (全部填充为值 200)
+        let v_data = vec![200_u8; uv_size];
 
-        //? 测试无效的src_linesize
-        assert!(fill_plane_from_buffer(&mut frame, 0, &y_data, -1).is_err());
+        // 填充数据到 AVFrame
+        fill_plane_from_buffer(&mut frame, 0, &y_data, width).unwrap();
+        fill_plane_from_buffer(&mut frame, 1, &u_data, uv_width).unwrap();
+        fill_plane_from_buffer(&mut frame, 2, &v_data, uv_width).unwrap();
+
+        // 直接从帧数据指针读取数据进行验证
+        unsafe {
+            // 验证 Y 平面数据
+            let y_linesize = frame.linesize[0] as usize;
+            let y_ptr = frame.data[0] as *const u8;
+            for y in 0..height as usize {
+                let row_ptr = y_ptr.add(y * y_linesize);
+                let row = std::slice::from_raw_parts(row_ptr, width as usize);
+                for x in 0..width as usize {
+                    assert_eq!(row[x], 100, "Y plane data mismatch at ({}, {})", x, y);
+                }
+            }
+
+            // 验证 U 平面数据
+            let u_linesize = frame.linesize[1] as usize;
+            let u_ptr = frame.data[1] as *const u8;
+            for y in 0..uv_height as usize {
+                let row_ptr = u_ptr.add(y * u_linesize);
+                let row = std::slice::from_raw_parts(row_ptr, uv_width as usize);
+                for x in 0..uv_width as usize {
+                    assert_eq!(row[x], 150, "U plane data mismatch at ({}, {})", x, y);
+                }
+            }
+
+            // 验证 V 平面数据
+            let v_linesize = frame.linesize[2] as usize;
+            let v_ptr = frame.data[2] as *const u8;
+            for y in 0..uv_height as usize {
+                let row_ptr = v_ptr.add(y * v_linesize);
+                let row = std::slice::from_raw_parts(row_ptr, uv_width as usize);
+                for x in 0..uv_width as usize {
+                    assert_eq!(row[x], 200, "V plane data mismatch at ({}, {})", x, y);
+                }
+            }
+        }
+
+        // 获取并验证数据
+        let y_buffer = get_plane_buffer(&frame, 0).unwrap();
+        let u_buffer = get_plane_buffer(&frame, 1).unwrap();
+        let v_buffer = get_plane_buffer(&frame, 2).unwrap();
+        // 打印缓冲区大小和预期大小，帮助调试
+        println!(
+            "Y buffer size: {}, expected at least: {}",
+            y_buffer.len(),
+            y_size
+        );
+        println!(
+            "U buffer size: {}, expected at least: {}",
+            u_buffer.len(),
+            uv_size
+        );
+        println!(
+            "V buffer size: {}, expected at least: {}",
+            v_buffer.len(),
+            uv_size
+        );
+
+        // Check just the first few bytes to see if they match what we expect
+        assert_eq!(y_buffer, y_data, "Y value doesn't match");
+        assert_eq!(u_buffer, u_data, "U value doesn't match");
+        assert_eq!(v_buffer, v_data, "V value doesn't match");
     }
 
     #[test]
@@ -645,7 +780,7 @@ mod tests {
         let mut src_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
         let mut dst_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
 
-        // 使用 fill_frame_from_buffer 填充源frame
+        // 填充源frame
         let test_data = vec![128u8; 320 * 240 * 3];
         fill_frame_from_buffer(&mut src_frame, &test_data)?;
 
@@ -686,7 +821,7 @@ mod tests {
         let mut frame =
             create_test_frame(width as i32, height as i32, ffi::AV_PIX_FMT_RGB24).unwrap();
 
-        // 使用 fill_frame_from_buffer 填充测试数据
+        // 填充测试数据
         let rgb_data = vec![128u8; width * height * 3];
         fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
 

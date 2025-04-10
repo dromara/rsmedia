@@ -306,6 +306,31 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
     ]
 }
 
+pub fn srgb_to_lrgb(v: f32) -> f32 {
+    if v <= 0.0 {
+        0.0
+    } else if v <= 0.04045 {
+        v / 12.92
+    } else if v < 1.0 {
+        ((v + 0.055) / 1.055).powf(2.4)
+    } else {
+        1.0
+    }
+}
+
+pub fn lrgb_to_srgb8(v: f32) -> u8 {
+    let v = if v <= 0.0 {
+        0.0
+    } else if v <= 0.0031308 {
+        12.92 * v
+    } else if v < 1.0 {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    } else {
+        1.0
+    };
+    (v * 255.0 + 0.5) as u8
+}
+
 /// Calculate the distance between two colors in RGB space.
 pub fn color_distance(c1: &Rgb<u8>, c2: &Rgb<u8>) -> u8 {
     ((c1[0] as i16 - c2[0] as i16).abs()

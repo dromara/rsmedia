@@ -226,13 +226,17 @@ pub fn get_plane_buffer(frame: &AVFrame, plane_idx: usize) -> Result<Vec<u8>> {
     let linesize = frame.linesize[plane_idx] as usize;
 
     // 创建一个新的缓冲区，只包含实际的像素数据（不包括填充）
-    let mut result = Vec::with_capacity(plane_height as usize * plane_width as usize * bytes_per_pixel as usize);
+    let mut result =
+        Vec::with_capacity(plane_height as usize * plane_width as usize * bytes_per_pixel as usize);
 
     unsafe {
         let src_ptr = frame.data[plane_idx];
         for y in 0..plane_height as usize {
             let row_ptr = src_ptr.add(y * linesize);
-            let row_data = std::slice::from_raw_parts(row_ptr, plane_width as usize * bytes_per_pixel as usize);
+            let row_data = std::slice::from_raw_parts(
+                row_ptr,
+                plane_width as usize * bytes_per_pixel as usize,
+            );
             result.extend_from_slice(row_data);
         }
     }

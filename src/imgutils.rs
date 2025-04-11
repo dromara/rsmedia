@@ -170,80 +170,101 @@ pub fn copy_frame(src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
 }
 
 /// 获取指定帧的指定平面的数据
-pub fn get_plane_buffer(frame: &AVFrame, plane_idx: usize) -> Result<&[u8]> {
-    unsafe {
-        if frame.width * frame.height <= 0 {
-            return Err(anyhow::anyhow!("Invalid frame dimensions"));
-        }
-
-        // count planes of format
-        let planes = PixelFormat::from(frame.format).count_planes()?;
-        if plane_idx >= planes as usize {
-            return Err(anyhow::anyhow!(
-                "Invalid plane index: {}, max planes: {}",
-                plane_idx,
-                planes
-            ));
-        }
-        if frame.data[plane_idx].is_null() {
-            return Err(anyhow::anyhow!(
-                "Null plane data pointer for plane {}",
-                plane_idx
-            ));
-        }
-
-        let buf_ptr = ffi::av_frame_get_plane_buffer(frame.as_ptr(), plane_idx as i32);
-        if buf_ptr.is_null() {
-            return Err(anyhow::anyhow!(
-                "Null plane buffer pointer for plane {}",
-                plane_idx
-            ));
-        }
-
-        // 获取像素格式的描述信息
-        let desc = PixelFormat::from(frame.format).descriptor();
-
-        // 计算平面的实际尺寸
-        let plane_height = if desc.log2_chroma_h > 0 && plane_idx > 0 {
-            frame.height >> desc.log2_chroma_h
-        } else {
-            frame.height
-        };
-
-        let plane_width = if desc.log2_chroma_w > 0 && plane_idx > 0 {
-            frame.width >> desc.log2_chroma_w
-        } else {
-            frame.width
-        };
-
-        // 计算每个像素的字节数
-        let bytes_per_pixel = if desc.comp[plane_idx].step > 0 {
-            desc.comp[plane_idx].step
-        } else {
-            1
-        };
-
-        // 计算平面数据的实际大小
-        let plane_size = plane_height as usize * plane_width as usize * bytes_per_pixel as usize;
-
-        // 计算平面数据在缓冲区中的偏移量
-        let data_offset = frame.data[plane_idx].offset_from((*buf_ptr).data) as usize;
-        if data_offset >= (*buf_ptr).size {
-            return Err(anyhow::anyhow!(
-                "Invalid data offset for plane {}",
-                plane_idx
-            ));
-        }
-
-        if data_offset + plane_size > (*buf_ptr).size {
-            return Err(anyhow::anyhow!("Buffer too small for plane {}", plane_idx));
-        }
-
-        // 创建一个切片，只包含平面的实际数据
-        let slice = std::slice::from_raw_parts((*buf_ptr).data.add(data_offset), plane_size);
-
-        Ok(slice)
+pub fn get_plane_buffer(frame: &AVFrame, plane_idx: usize) -> Result<Vec<u8>> {
+    if frame.width * frame.height <= 0 {
+        return Err(anyhow::anyhow!("Invalid frame dimensions"));
     }
+
+    // count planes of format
+    let planes = PixelFormat::from(frame.format).count_planes()?;
+    if plane_idx >= planes as usize {
+        return Err(anyhow::anyhow!(
+            "Invalid plane index: {}, max planes: {}",
+            plane_idx,
+            planes
+        ));
+    }
+    if frame.data[plane_idx].is_null() {
+        return Err(anyhow::anyhow!(
+            "Null plane data pointer for plane {}",
+            plane_idx
+        ));
+    }
+
+    let buf_ptr = unsafe { ffi::av_frame_get_plane_buffer(frame.as_ptr(), plane_idx as i32) };
+    if buf_ptr.is_null() {
+        return Err(anyhow::anyhow!(
+            "Null plane buffer pointer for plane {}",
+            plane_idx
+        ));
+    }
+
+    // 获取像素格式的描述信息
+    let desc = PixelFormat::from(frame.format).descriptor();
+
+    // 计算平面的实际尺寸
+    let plane_height = if desc.log2_chroma_h > 0 && plane_idx > 0 {
+        frame.height >> desc.log2_chroma_h
+    } else {
+        frame.height
+    };
+
+    let plane_width = if desc.log2_chroma_w > 0 && plane_idx > 0 {
+        frame.width >> desc.log2_chroma_w
+    } else {
+        frame.width
+    };
+
+    // 计算每个像素的字节数
+    let bytes_per_pixel = if desc.comp[plane_idx].step > 0 {
+        desc.comp[plane_idx].step
+    } else {
+        1
+    };
+
+    // 获取行步长
+    let linesize = frame.linesize[plane_idx] as usize;
+
+    // 创建一个新的缓冲区，只包含实际的像素数据（不包括填充）
+    let mut result = Vec::with_capacity(plane_height as usize * plane_width as usize * bytes_per_pixel as usize);
+
+    unsafe {
+        let src_ptr = frame.data[plane_idx];
+        for y in 0..plane_height as usize {
+            let row_ptr = src_ptr.add(y * linesize);
+            let row_data = std::slice::from_raw_parts(row_ptr, plane_width as usize * bytes_per_pixel as usize);
+            result.extend_from_slice(row_data);
+        }
+    }
+
+    Ok(result)
+
+    // 计算平面数据的实际大小
+    // 这种计算方式假设平面数据是连续存储的，没有考虑 FFmpeg 中的 linesize （行步长）。
+    // 在 FFmpeg 中，每行数据可能会有额外的填充字节用于内存对齐，
+    // 这意味着实际的行大小（ frame.linesize[plane_idx] ）可能大于计算出的行大小（ plane_width * bytes_per_pixel ）
+    // 正确的做法是考虑 linesize 并计算实际的行大小
+    // let plane_size = plane_height as usize * plane_width as usize * bytes_per_pixel as usize;
+    //
+    // let slice = unsafe {
+    //     //? 计算平面数据在缓冲区中的偏移量
+    //     let data_offset = frame.data[plane_idx].offset_from((*buf_ptr).data) as usize;
+    //     if data_offset >= (*buf_ptr).size {
+    //         return Err(anyhow::anyhow!(
+    //             "Invalid data offset for plane {}",
+    //             plane_idx
+    //         ));
+    //     }
+    //
+    //     if data_offset + plane_size > (*buf_ptr).size {
+    //         return Err(anyhow::anyhow!("Buffer too small for plane {}", plane_idx));
+    //     }
+    //
+    //     //? 创建一个切片，只包含平面的实际数据
+    //     std::slice::from_raw_parts((*buf_ptr).data.add(data_offset), plane_size)
+    // };
+    //
+    // Ok(slice)
 }
 
 /// 将数据复制到指定的帧平面中

@@ -1262,8 +1262,8 @@ impl PixelFormat {
     }
 
     /// get number of planes in pix_fmt
-    pub fn pix_fmt_count_planes(pix_fmt: PixelFormat) -> Result<i32> {
-        let cnt = unsafe { ffi::av_pix_fmt_count_planes(pix_fmt as _) };
+    pub fn count_planes(&self) -> Result<i32> {
+        let cnt = unsafe { ffi::av_pix_fmt_count_planes((*self).into()) };
         if cnt < 0 {
             return Err(Error::msg(format!("Failed to get plane count:{}", cnt)));
         }

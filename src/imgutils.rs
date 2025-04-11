@@ -295,15 +295,6 @@ pub fn fill_plane_from_buffer(
         )));
     }
 
-    // 获取目标平面缓冲区
-    let dst_buf = unsafe { ffi::av_frame_get_plane_buffer(frame.as_ptr(), plane_idx as i32) };
-    if dst_buf.is_null() {
-        return Err(anyhow::anyhow!(
-            "Failed to get plane buffer for plane {}",
-            plane_idx
-        ));
-    }
-
     // 计算平面尺寸
     let plane_height = if desc.log2_chroma_h > 0 && plane_idx > 0 {
         frame.height >> desc.log2_chroma_h
@@ -328,10 +319,6 @@ pub fn fill_plane_from_buffer(
     let byte_width = plane_width * bytes_per_pixel;
     let dst_linesize = frame.linesize[plane_idx];
 
-    // 打印调试信息
-    println!("Debug: plane={}, width={}, height={}, byte_width={}, dst_linesize={}, src_linesize={}, bytes_per_pixel={}", 
-        plane_idx, plane_width, plane_height, byte_width, dst_linesize, src_linesize, bytes_per_pixel);
-
     // 验证行大小
     if src_linesize < byte_width as usize {
         return Err(anyhow::anyhow!(
@@ -355,18 +342,9 @@ pub fn fill_plane_from_buffer(
     let required_size = (plane_height as usize) * src_linesize;
     if src.len() < required_size {
         return Err(anyhow::anyhow!(
-            "Insufficient source data size: got {}, need {}",
+            "Incorrect source data size: got {}, need {}",
             src.len(),
             required_size
-        ));
-    }
-
-    // 确保目标缓冲区足够大
-    let dst_size = (plane_height as usize) * (dst_linesize as usize);
-    if dst_size > unsafe { (*dst_buf).size } {
-        return Err(anyhow::anyhow!(
-            "Destination buffer too small for plane {}",
-            plane_idx
         ));
     }
 

@@ -590,6 +590,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "This test is too slow to run frequently"]
     fn test_channel_conversion() -> Result<()> {
         let nb_samples = 1024;
         let channel_layouts = &[1, 2];

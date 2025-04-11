@@ -795,6 +795,7 @@ mod tests {
         let y_buffer = get_plane_buffer(&frame, 0).unwrap();
         let u_buffer = get_plane_buffer(&frame, 1).unwrap();
         let v_buffer = get_plane_buffer(&frame, 2).unwrap();
+
         // 打印缓冲区大小和预期大小，帮助调试
         println!(
             "Y buffer size: {}, expected at least: {}",
@@ -812,10 +813,10 @@ mod tests {
             uv_size
         );
 
-        // Check just the first few bytes to see if they match what we expect
-        assert_eq!(y_buffer, y_data, "Y value doesn't match");
-        assert_eq!(u_buffer, u_data, "U value doesn't match");
-        assert_eq!(v_buffer, v_data, "V value doesn't match");
+        // 验证数据 - 只检查实际数据部分，忽略可能的填充
+        assert_eq!(&y_buffer[..y_size], &y_data[..], "Y value doesn't match");
+        assert_eq!(&u_buffer[..uv_size], &u_data[..], "U value doesn't match");
+        assert_eq!(&v_buffer[..uv_size], &v_data[..], "V value doesn't match");
     }
 
     #[test]
@@ -828,12 +829,39 @@ mod tests {
         let test_data = vec![128u8; 320 * 240 * 3];
         fill_frame_from_buffer(&mut src_frame, &test_data)?;
 
+        // 验证源frame数据
+        let src_buffer = copy_frame_to_buffer(&src_frame)?;
+        assert_eq!(src_buffer.len(), 320 * 240 * 3, "Source frame buffer size mismatch");
+        assert!(src_buffer.iter().all(|&x| x == 128), "Source frame data mismatch");
+
         // 测试复制
         copy_frame(&src_frame, &mut dst_frame)?;
 
+        // 验证目标frame属性
+        assert_eq!(dst_frame.width, 320, "Frame width mismatch");
+        assert_eq!(dst_frame.height, 240, "Frame height mismatch");
+        assert_eq!(dst_frame.format, ffi::AV_PIX_FMT_RGB24, "Frame format mismatch");
+
         // 验证数据是否正确复制
         let dst_buffer = copy_frame_to_buffer(&dst_frame)?;
-        assert_eq!(dst_buffer[0], 128);
+        assert_eq!(dst_buffer.len(), 320 * 240 * 3, "Destination frame buffer size mismatch");
+        assert!(dst_buffer.iter().all(|&x| x == 128), "Destination frame data mismatch");
+
+        // 直接比较源和目标数据
+        assert_eq!(src_buffer, dst_buffer, "Source and destination frame data mismatch");
+
+        // 验证每个平面的数据
+        unsafe {
+            let src_ptr = src_frame.data[0] as *const u8;
+            let dst_ptr = dst_frame.data[0] as *const u8;
+            let linesize = src_frame.linesize[0] as usize;
+
+            for y in 0..240 {
+                let src_row = std::slice::from_raw_parts(src_ptr.add(y * linesize), 320 * 3);
+                let dst_row = std::slice::from_raw_parts(dst_ptr.add(y * linesize), 320 * 3);
+                assert_eq!(src_row, dst_row, "Row {} data mismatch", y);
+            }
+        }
 
         Ok(())
     }
@@ -967,9 +995,10 @@ mod tests {
         let u_buffer = get_plane_buffer(&frame, 1)?;
         let v_buffer = get_plane_buffer(&frame, 2)?;
 
-        assert_eq!(y_buffer, y_data, "Y plane data mismatch");
-        assert_eq!(u_buffer, u_data, "U plane data mismatch");
-        assert_eq!(v_buffer, v_data, "V plane data mismatch");
+        // 只比较实际数据部分，忽略可能的填充
+        assert_eq!(&y_buffer[..y_size], &y_data[..], "Y plane data mismatch");
+        assert_eq!(&u_buffer[..uv_size], &u_data[..], "U plane data mismatch");
+        assert_eq!(&v_buffer[..uv_size], &v_data[..], "V plane data mismatch");
 
         // 验证数据 - 方法2：直接访问帧数据
         unsafe {

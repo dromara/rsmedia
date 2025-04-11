@@ -38,28 +38,28 @@ Supported Platforms:
 
 Hardware acceleration:
 
-| API        | Platform  | Arch    | Hardware Requirements          | Support            | Notes                   |
-|------------|-----------|---------|--------------------------------|--------------------|-------------------------|
-| VDPAU      | Linux     | x86_64  | NVIDIA GPU                     | ⚠️ Full            | `nvidia-vdpau-driver`   |
-|            | Linux     | aarch64 | NVIDIA GPU                     | ⚠️ Full            | Jetson AGX support      |
-| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             | Container-ready         |
-|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             | Jetson/Orin             |
-|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             |                         |
-|            | Windows   | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ⚠️ Partial         | Limited driver support  |
-| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU       | ⚠️ Full            | `intel-media-driver`    |
-|            | Linux     | aarch64 | Mali/AMD GPU                   | ⚠️ Partial         | Kernel 5.15+ required   |
-| DXVA2      | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full            | WDDM 2.0+               |
-| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full            | `intel-media-va-driver` |
-|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full            | Intel Media SDK         |
-| TOOLBOX    | macOS     | x86_64  | Intel GPU                      | ✅ Native           | macOS 10.13+            |
-|            | macOS     | aarch64 | Apple Silicon GPU (M series)   | ✅ Native           |                         |
-| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full            |                         |
-|            | Windows   | aarch64 | DX11-compatible GPU            | ⚠️ Partial         | ARM64 Windows 11        |
-| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU                 | ⚠️ Partial         | `libdrm` + KMS          |
-|            | Linux     | aarch64 | Mali GPU                       | ⚠️ Partial         |                         |
-| MEDIACODEC | Android   | arm64   | Hardware decoder               | ⚠️ Full            | Android 12+             |
-| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU            | ⚠️ Experimental    | FFmpeg 7.0+             |
-|            | Windows   | aarch64 | DX12-compatible GPU            | ⚠️ Experimental    | FFmpeg 7.0+             |
+| API        | Platform  | Arch    | Hardware Requirements          | Support            | Notes                     |
+|------------|-----------|---------|--------------------------------|--------------------|---------------------------|
+| VDPAU      | Linux     | x86_64  | NVIDIA GPU                     | ⚠️ Full            | `nvidia-vdpau-driver`     |
+|            | Linux     | aarch64 | NVIDIA GPU                     | ⚠️ Full            | Jetson AGX support        |
+| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             | Container-ready           |
+|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             | Jetson/Orin               |
+|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             |                           |
+|            | Windows   | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ⚠️ Partial         | Limited driver support    |
+| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU       | ⚠️ Full            | `intel-media-driver`      |
+|            | Linux     | aarch64 | Mali/AMD GPU                   | ⚠️ Partial         | Kernel 5.15+ required     |
+| DXVA2      | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full            | WDDM 2.0+                 |
+| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full            | `intel-media-va-driver`   |
+|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full            | Intel Media SDK           |
+| TOOLBOX    | macOS     | x86_64  | Intel GPU                      | ✅ Native           | macOS 10.13+              |
+|            | macOS     | aarch64 | Apple Silicon GPU (M series)   | ✅ Native           |                           |
+| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full            |                           |
+|            | Windows   | aarch64 | DX11-compatible GPU            | ⚠️ Partial         | ARM64 Windows 11          |
+| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU                 | ⚠️ Partial         | `libdrm` + KMS            |
+|            | Linux     | aarch64 | Mali GPU                       | ⚠️ Partial         |                           |
+| MEDIACODEC | Android   | arm64   | Hardware decoder               | ⚠️ Full            | Android 12+               |
+| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU            | ⚠️ Experimental    | FFmpeg 7.0+               |
+|            | Windows   | aarch64 | DX12-compatible GPU            | ⚠️ Experimental    | FFmpeg 7.0+               |
 
 > **Note:**
 - ✅ Full support / Successful
@@ -104,22 +104,28 @@ Hardware acceleration:
 
 ## ⚙️ Setup
 
-dynamic linking with pkg-config(unix) or vcpkg(windows):
+- (1) static linking with pkg-config(unix) or vcpkg(windows):
 ```bash
-export FFMPEG_DIR=/path/to/ffmpeg
-export FFMPEG_LIBS_DIR=$FFMPEG_DIR/lib
-export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
 ## (unix recommended):
+export FFMPEG_DIR=/path/to/ffmpeg
+export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
 export FFMPEG_PKG_CONFIG_PATH=$FFMPEG_DIR/lib/pkgconfig
 ## (windows recommended):
 ## notes: if you install ffmpeg with vcpkg, you can add `$FFMPEG_DIR/bin` to system PATH.
-## manually set dylib path:
+export VCPKG_ROOT=/path/to/vcpkg
+```
+
+- (2) dynamic linking
+```bash
+export FFMPEG_DIR=/path/to/ffmpeg
+export FFMPEG_INCLUDE_DIR=$FFMPEG_DIR/include
+## manually set dylib path
 ## dynamic linking for linux:
 export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.so
 ## dynamic linking for macos:
 export FFMPEG_DLL_PATH=$FFMPEG_LIBS_DIR/libffmpeg.dylib
 ## dynamic linking for windows:
-export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
+export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll 
 ```
 
 ## Features

@@ -274,9 +274,6 @@ pub fn fill_plane_from_buffer(
     if !frame.is_writable()? {
         return Err(Error::msg("Frame is not writable"));
     }
-    if src_linesize <= 0 {
-        return Err(anyhow::anyhow!("Invalid source linesize"));
-    }
 
     // 获取格式描述符
     let desc = PixelFormat::from(frame.format).descriptor();
@@ -331,12 +328,26 @@ pub fn fill_plane_from_buffer(
     let byte_width = plane_width * bytes_per_pixel;
     let dst_linesize = frame.linesize[plane_idx];
 
+    // 打印调试信息
+    println!("Debug: plane={}, width={}, height={}, byte_width={}, dst_linesize={}, src_linesize={}, bytes_per_pixel={}", 
+        plane_idx, plane_width, plane_height, byte_width, dst_linesize, src_linesize, bytes_per_pixel);
+
     // 验证行大小
     if src_linesize < byte_width as usize {
         return Err(anyhow::anyhow!(
             "Source linesize {} is less than required byte width {}",
             src_linesize,
             byte_width
+        ));
+    }
+
+    // 验证 byte_width 是否满足 FFmpeg 的要求
+    if byte_width > dst_linesize.abs() || byte_width > src_linesize as i32 {
+        return Err(anyhow::anyhow!(
+            "byte_width {} exceeds linesize limits (dst: {}, src: {})",
+            byte_width,
+            dst_linesize,
+            src_linesize
         ));
     }
 
@@ -1200,7 +1211,7 @@ mod tests {
         // 错误4: 空数据
         let empty_data = vec![];
         assert!(
-            fill_plane_from_buffer(&mut frame, 0, &empty_data, width  as usize).is_err(),
+            fill_plane_from_buffer(&mut frame, 0, &empty_data, width as usize).is_err(),
             "Should fail for empty data"
         );
 

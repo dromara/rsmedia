@@ -267,100 +267,109 @@ pub fn fill_plane_from_buffer(
     src: &[u8],
     src_linesize: i32,
 ) -> Result<()> {
+    // 检查帧是否有效
+    if frame.width * frame.height <= 0 {
+        return Err(Error::msg("Invalid frame dimensions"));
+    }
+
+    // 确保帧是可写的
+    if !frame.is_writable()? {
+        return Err(Error::msg("Frame is not writable"));
+    }
+
+    // 获取该格式的平面数
+    let planes = PixelFormat::from(frame.format).count_planes()?;
+
+    // 检查平面索引是否有效
+    if plane_idx >= planes as usize {
+        return Err(Error::msg(format!(
+            "Invalid plane index: {}, max planes: {}",
+            plane_idx, planes
+        )));
+    }
+
+    // 检查目标平面指针是否有效
+    if frame.data[plane_idx].is_null() {
+        return Err(Error::msg(format!(
+            "Null plane data pointer for plane {}",
+            plane_idx
+        )));
+    }
+
+    if src_linesize <= 0 {
+        return Err(anyhow::anyhow!("Invalid source linesize"));
+    }
+
+    // 获取像素格式的描述信息
+    let desc = PixelFormat::from(frame.format).descriptor();
+
+    // 计算平面的实际尺寸
+    let plane_height = if desc.log2_chroma_h > 0 && plane_idx > 0 {
+        frame.height >> desc.log2_chroma_h
+    } else {
+        frame.height
+    };
+
+    let plane_width = if desc.log2_chroma_w > 0 && plane_idx > 0 {
+        frame.width >> desc.log2_chroma_w
+    } else {
+        frame.width
+    };
+
+    // 计算每个像素的字节数
+    let bytes_per_pixel = if desc.comp[plane_idx].step > 0 {
+        desc.comp[plane_idx].step
+    } else {
+        1
+    };
+
+    // 计算实际数据宽度（字节数）
+    let byte_width = plane_width * bytes_per_pixel;
+
+    // 获取目标平面的缓冲区，防止对无效内存的写入操作
+    let dst_buf = unsafe { ffi::av_frame_get_plane_buffer(frame.as_ptr(), plane_idx as i32) };
+    if dst_buf.is_null() {
+        return Err(anyhow::anyhow!(
+            "Failed to get plane buffer for plane {}",
+            plane_idx
+        ));
+    }
+
+    // 获取目标平面的行大小
+    let dst_linesize = frame.linesize[plane_idx];
+
+    // 验证源数据行大小是否足够
+    if src_linesize < byte_width {
+        return Err(anyhow::anyhow!(
+            "Source linesize {} is less than required byte width {}",
+            src_linesize,
+            byte_width
+        ));
+    }
+
+    // 计算所需的最小源数据大小（考虑行填充）
+    let required_size = (plane_height as usize) * (src_linesize as usize);
+    if src.len() < required_size {
+        return Err(anyhow::anyhow!(
+            "Insufficient source data size: got {}, need {}",
+            src.len(),
+            required_size
+        ));
+    }
+
+    // 复制平面数据
     unsafe {
-        // 检查帧是否有效
-        if frame.width * frame.height <= 0 {
-            return Err(Error::msg("Invalid frame dimensions"));
-        }
-
-        // 获取该格式的平面数
-        let planes = PixelFormat::from(frame.format).count_planes()?;
-
-        // 检查平面索引是否有效
-        if plane_idx >= planes as usize {
-            return Err(Error::msg(format!(
-                "Invalid plane index: {}, max planes: {}",
-                plane_idx, planes
-            )));
-        }
-
-        // 检查目标平面指针是否有效
-        if frame.data[plane_idx].is_null() {
-            return Err(Error::msg(format!(
-                "Null plane data pointer for plane {}",
-                plane_idx
-            )));
-        }
-
-        if src_linesize <= 0 {
-            return Err(anyhow::anyhow!("Invalid source linesize"));
-        }
-
-        // 获取像素格式的描述信息
-        let desc = PixelFormat::from(frame.format).descriptor();
-
-        // 计算平面的实际尺寸
-        let plane_height = if desc.log2_chroma_h > 0 && plane_idx > 0 {
-            frame.height >> desc.log2_chroma_h
-        } else {
-            frame.height
-        };
-
-        let plane_width = if desc.log2_chroma_w > 0 && plane_idx > 0 {
-            frame.width >> desc.log2_chroma_w
-        } else {
-            frame.width
-        };
-
-        // 计算每个像素的字节数
-        let bytes_per_pixel = if desc.comp[plane_idx].step > 0 {
-            desc.comp[plane_idx].step
-        } else {
-            1
-        };
-
-        // 计算实际数据宽度（字节数）
-        let byte_width = plane_width * bytes_per_pixel;
-
-        // 验证源数据行大小是否足够
-        if src_linesize < byte_width {
-            return Err(anyhow::anyhow!(
-                "Source linesize {} is less than required byte width {}",
-                src_linesize,
-                byte_width
-            ));
-        }
-
-        // 计算所需的最小源数据大小（考虑行填充）
-        let required_size = (plane_height as usize) * (src_linesize as usize);
-        if src.len() < required_size {
-            return Err(anyhow::anyhow!(
-                "Insufficient source data size: got {}, need {}",
-                src.len(),
-                required_size
-            ));
-        }
-
-        // 确保帧是可写的
-        if !frame.is_writable()? {
-            return Err(Error::msg("Frame is not writable"));
-        }
-
-        // 该平面的实际行大小
-        let plane_i_linesize = frame.linesize[plane_idx];
-
-        // 复制平面数据
         ffi::av_image_copy_plane(
             frame.data[plane_idx], // 目标数据指针
-            plane_i_linesize,      // 目标行大小
+            dst_linesize,          // 目标行大小
             src.as_ptr(),          // 源数据指针
             src_linesize,          // 源数据行大小
             byte_width,            // 要复制的宽度（字节数）
             plane_height,          // 平面高度
         );
-
-        Ok(())
     }
+
+    Ok(())
 }
 
 /// 将buffer数据填充到frame中

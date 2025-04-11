@@ -299,7 +299,7 @@ pub fn fill_plane_from_buffer(
         // 获取像素格式的描述信息
         let desc = PixelFormat::from(frame.format).descriptor();
 
-        // 计算这个平面的实际高度和宽度
+        // 计算平面的实际尺寸
         let plane_height = if desc.log2_chroma_h > 0 && plane_idx > 0 {
             frame.height >> desc.log2_chroma_h
         } else {
@@ -319,8 +319,10 @@ pub fn fill_plane_from_buffer(
             1
         };
 
-        // 计算需要的源数据大小和字节宽度
+        // 计算实际数据宽度（字节数）
         let byte_width = plane_width * bytes_per_pixel;
+
+        // 验证源数据行大小是否足够
         if src_linesize < byte_width {
             return Err(anyhow::anyhow!(
                 "Source linesize {} is less than required byte width {}",
@@ -329,6 +331,7 @@ pub fn fill_plane_from_buffer(
             ));
         }
 
+        // 计算所需的最小源数据大小（考虑行填充）
         let required_size = (plane_height as usize) * (src_linesize as usize);
         if src.len() < required_size {
             return Err(anyhow::anyhow!(
@@ -831,8 +834,15 @@ mod tests {
 
         // 验证源frame数据
         let src_buffer = copy_frame_to_buffer(&src_frame)?;
-        assert_eq!(src_buffer.len(), 320 * 240 * 3, "Source frame buffer size mismatch");
-        assert!(src_buffer.iter().all(|&x| x == 128), "Source frame data mismatch");
+        assert_eq!(
+            src_buffer.len(),
+            320 * 240 * 3,
+            "Source frame buffer size mismatch"
+        );
+        assert!(
+            src_buffer.iter().all(|&x| x == 128),
+            "Source frame data mismatch"
+        );
 
         // 测试复制
         copy_frame(&src_frame, &mut dst_frame)?;
@@ -840,15 +850,29 @@ mod tests {
         // 验证目标frame属性
         assert_eq!(dst_frame.width, 320, "Frame width mismatch");
         assert_eq!(dst_frame.height, 240, "Frame height mismatch");
-        assert_eq!(dst_frame.format, ffi::AV_PIX_FMT_RGB24, "Frame format mismatch");
+        assert_eq!(
+            dst_frame.format,
+            ffi::AV_PIX_FMT_RGB24,
+            "Frame format mismatch"
+        );
 
         // 验证数据是否正确复制
         let dst_buffer = copy_frame_to_buffer(&dst_frame)?;
-        assert_eq!(dst_buffer.len(), 320 * 240 * 3, "Destination frame buffer size mismatch");
-        assert!(dst_buffer.iter().all(|&x| x == 128), "Destination frame data mismatch");
+        assert_eq!(
+            dst_buffer.len(),
+            320 * 240 * 3,
+            "Destination frame buffer size mismatch"
+        );
+        assert!(
+            dst_buffer.iter().all(|&x| x == 128),
+            "Destination frame data mismatch"
+        );
 
         // 直接比较源和目标数据
-        assert_eq!(src_buffer, dst_buffer, "Source and destination frame data mismatch");
+        assert_eq!(
+            src_buffer, dst_buffer,
+            "Source and destination frame data mismatch"
+        );
 
         // 验证每个平面的数据
         unsafe {

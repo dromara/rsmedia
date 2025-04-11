@@ -520,7 +520,6 @@ mod tests {
                 .with_context(|| format!("Failed to create source frame for {:?}", in_fmt))?;
 
             for out_fmt in AUDIO_FORMATS {
-                println!("  Converting to format: {:?}", out_fmt);
 
                 let ch_layout = AVChannelLayout::from_nb_channels(nb_channels).into_inner();
 

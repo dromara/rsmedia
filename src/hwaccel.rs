@@ -161,7 +161,7 @@ static HW_CTX_CACHE: Lazy<Mutex<HashMap<HWDeviceConfig, Arc<HWContext>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub struct HWContext {
-    config: HWDeviceConfig,
+    pub config: HWDeviceConfig,
     device_ctx: UnsafeCell<AVHWDeviceContext>,
 }
 

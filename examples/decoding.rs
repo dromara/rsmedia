@@ -1,6 +1,6 @@
 use image::{ImageBuffer, Rgb};
 
-use rsmedia::{DecoderBuilder, MediaFrame, MediaType, Resize, StreamReader};
+use rsmedia::{filter, DecoderBuilder, MediaFrame, MediaType, StreamReader};
 
 use anyhow::{Context, Result};
 use futures::future::join_all;
@@ -26,19 +26,21 @@ async fn main() -> Result<()> {
 
     rsmedia::init().unwrap();
 
-    // let source = std::path::Path::new("/tmp/bear.mp4");
+    let source = std::path::Path::new("/tmp/bear.mp4");
 
     // 640x360 mp4
-    let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
-        .parse::<url::Url>()
-        .unwrap();
+    // let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
+    //     .parse::<url::Url>()
+    //     .unwrap();
+
+    let filters = vec![filter::video::scale(640, 640, None)];
 
     let mut stream_reader = StreamReader::new(source)?;
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
-        .with_resize(Some(Resize::Fit(1280, 720)))
         // decoder with CUDA acceleration
         // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
         // .with_codec_name(Some("h264_cuvid".to_string()))
+        .with_filters(Some(filters))
         .build(&stream_reader)
         .context("failed to create decoder")?;
 
@@ -47,7 +49,10 @@ async fn main() -> Result<()> {
     loop {
         match decoder.decode::<u8>(&mut stream_reader) {
             Ok(Some(yuv_frame)) => {
-                println!("decoded frame:{:?}", yuv_frame);
+                println!(
+                    "decoded frame pts: {}, type: {:?}, format:{:?}",
+                    yuv_frame.pts, yuv_frame.media_type, yuv_frame.format
+                );
                 let (width, height) = (decoder.width(), decoder.height());
                 process_frame(yuv_frame, width as u32, height as u32)?;
             }

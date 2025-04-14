@@ -1,5 +1,5 @@
 use rsmedia::{
-    colors,
+    colors, filter,
     frame::MediaFrame,
     io::private::{Output, Write},
     stream::StreamInfo,
@@ -22,14 +22,20 @@ fn main() {
 
     rsmedia::init().unwrap();
 
+    let filters = vec![
+        filter::video::scale(1920, 1080, None),
+        filter::video::drawtext("Watermark", 50, 50, 24, "white@0.5"),
+    ];
+
     let width = 1280;
     let height = 720;
-    let mut encoder = EncoderBuilder::new_video(width, height)
+    let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)
         // encoder with CUDA acceleration
         // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
         // libx264, libx265, h264_nvenc, h264_vaapi
         // .with_codec_name(Some("h264_nvenc".to_string()))
         // .with_options(Some(Options::preset_h264_nvenc()))
+        .with_filters(Some(filters))
         .build()
         .expect("failed to create encoder");
 
@@ -44,9 +50,9 @@ fn main() {
     let duration: Time = Time::from_nth_of_a_second(24);
     let mut position = Time::zero();
 
-    for i in 0..256 {
+    for i in 0..100 {
         // This will create a smooth rainbow animation video!
-        let mut frame = rainbow_frame(width, height, i as f32 / 256.0);
+        let mut frame = rainbow_frame(width as usize, height as usize, i as f32 / 256.0);
         frame.set_pts(
             position
                 .aligned_with_rational(encoder.time_base())

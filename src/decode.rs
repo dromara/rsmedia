@@ -1,17 +1,16 @@
-use crate::filter::FilterContext;
+use crate::filter::{AudioParams, Filter, FilterGraph, FilterParams, VideoParams};
 use crate::flags::AvCodecFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{MediaFrame, MediaFrameType};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
-use crate::resize::Resize;
 use crate::stream::StreamInfo;
-use crate::{swctx, utils, MediaType, PixelFormat, RawFrame, SampleFormat, Time};
+use crate::{utils, MediaType, PixelFormat, RawFrame, SampleFormat, Time};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::avformat::AVStream;
-use rsmpeg::avutil::{self, AVChannelLayout};
+use rsmpeg::avutil;
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -23,10 +22,9 @@ pub struct DecoderBuilder {
     flags: AvCodecFlags,
     thread_count: usize,
     media_type: MediaType,
-    resize: Option<Resize>,
     codec_name: Option<String>,
     codec_opts: Option<Options>,
-    filter: Option<FilterContext>,
+    filters: Option<Vec<Filter>>,
     hw_device_config: Option<HWDeviceConfig>,
 }
 
@@ -39,8 +37,7 @@ impl DecoderBuilder {
     pub fn new(media_type: MediaType) -> Self {
         Self {
             media_type,
-            filter: None,
-            resize: None,
+            filters: None,
             codec_name: None,
             codec_opts: None,
             hw_device_config: None,
@@ -65,19 +62,6 @@ impl DecoderBuilder {
         self
     }
 
-    /// Set resizing to apply to frames.
-    ///
-    /// * `resize` - Resizing to apply.
-    pub fn with_resize(mut self, resize: Option<Resize>) -> Self {
-        assert_eq!(
-            self.media_type,
-            MediaType::VIDEO,
-            "Resizing is only supported for video"
-        );
-        self.resize = resize;
-        self
-    }
-
     /// Set the codec name to use for decoding.
     /// If not set, the decoder will try to guess the codec based on the input.
     pub fn with_codec_name(mut self, codec_name: Option<String>) -> Self {
@@ -97,8 +81,9 @@ impl DecoderBuilder {
         self
     }
 
-    pub fn with_filter(mut self, filter: Option<FilterContext>) -> Self {
-        self.filter = filter;
+    /// set the filters to apply to decoded frames.
+    pub fn with_filters(mut self, filters: Option<Vec<Filter>>) -> Self {
+        self.filters = filters;
         self
     }
 
@@ -169,7 +154,16 @@ impl DecoderBuilder {
         let mut decode_ctx = AVCodecContext::new(&codec);
         self.setup_codec_context(&mut decode_ctx, input_stream)?;
 
-        let (width, height) = (decode_ctx.width, decode_ctx.height);
+        // video
+        let init_width = decode_ctx.width;
+        let init_height = decode_ctx.height;
+        let mut init_pix_fmt = PixelFormat::from(decode_ctx.pix_fmt);
+        // audio
+        let init_sample_rate = decode_ctx.sample_rate;
+        let init_time_base = decode_ctx.time_base;
+        let init_ch_layout = decode_ctx.ch_layout;
+        let init_sample_fmt = SampleFormat::from(decode_ctx.sample_fmt);
+
         let hw_context = self
             .hw_device_config
             .filter(|_cfg| {
@@ -198,7 +192,10 @@ impl DecoderBuilder {
                 // create hardware context
                 HWContext::new(cfg)
                     .and_then(|ctx| {
-                        ctx.setup_hw_frames(true, &mut decode_ctx, width, height)?;
+                        // *注意*：setup_hw_frames 可能会改变 decode_ctx.pix_fmt
+                        ctx.setup_hw_frames(true, &mut decode_ctx, init_width, init_height)?;
+                        // *重要*: 更新 filter 输入参数中的 pix_fmt (因为 HW 下载后格式会变)
+                        init_pix_fmt = ctx.config.sw_pixel_format;
                         Ok(ctx)
                     })
                     .context("Hardware acceleration context initialization failed")
@@ -213,41 +210,53 @@ impl DecoderBuilder {
         let stream_info = StreamInfo::from_stream(input_stream)?;
         log::info!("{}", stream_info);
 
-        let rescale = if let Some(resize) = self.resize {
-            let (resize_width, resize_height) = resize
-                .compute_for((width as u32, height as u32))
-                .ok_or(Error::msg("Invalid resize parameters"))?;
-            Some((
-                resize_width as usize,
-                resize_height as usize,
-                PixelFormat::from(decode_ctx.pix_fmt),
-            ))
-        } else {
-            None
-        };
+        let filter_graph = if let Some(filters) = self.filters {
+            let filter_params = match media_type {
+                MediaType::VIDEO => {
+                    FilterParams::Video(VideoParams {
+                        width: init_width,
+                        height: init_height,
+                        format: init_pix_fmt, // 使用解码器（或HW下载后）的格式
+                        time_base: init_time_base,
+                        frame_rate: decode_ctx.framerate, // 使用解码器帧率
+                        pixel_aspect: decode_ctx.sample_aspect_ratio,
+                    })
+                }
+                MediaType::AUDIO => FilterParams::Audio(AudioParams {
+                    nb_channels: init_ch_layout.nb_channels,
+                    sample_rate: init_sample_rate,
+                    format: init_sample_fmt,
+                    time_base: init_time_base,
+                }),
+                _ => panic!("Unsupported filter for media type: {:?}", media_type),
+            };
 
-        // audio resampling is not supported external settings available for now.
-        let resample = if media_type == MediaType::AUDIO {
-            Some((
-                decode_ctx.ch_layout.nb_channels as usize,
-                decode_ctx.sample_rate as usize,
-                SampleFormat::from(decode_ctx.sample_fmt),
-            ))
+            let mut graph = FilterGraph::new();
+            // 验证 Filter 链的媒体类型是否与当前流匹配
+            if !filters.iter().all(|f| f.media_type() == media_type) {
+                return Err(Error::msg(format!(
+                    "Filter media type mismatch for stream type {:?}",
+                    media_type
+                )));
+            }
+            graph
+                .init(&filter_params, filters.as_slice())
+                .context("Failed to initialize filter graph")?;
+
+            Some(graph)
         } else {
             None
         };
 
         Ok(Decoder {
-            rescale,
-            resample,
             media_type,
             stream_index,
             duration,
             nb_frames,
             frame_rate,
             hw_context,
+            filter_graph,
             context: decode_ctx,
-            filter: self.filter,
             state: DecoderState::Normal,
         })
     }
@@ -274,13 +283,9 @@ pub enum DecoderState {
 /// ```
 pub struct Decoder {
     context: AVCodecContext,
-    filter: Option<FilterContext>,
+    filter_graph: Option<FilterGraph>,
     hw_context: Option<Arc<HWContext>>,
-    // video rescaling: (width, height, pixel_format)
-    rescale: Option<(usize, usize, PixelFormat)>,
-    // audio resampling: (nb_channels, sample_rate, sample_format)
-    resample: Option<(usize, usize, SampleFormat)>,
-    // (r_frame_rate, avg_frame_rate)
+    /// (r_frame_rate, avg_frame_rate)
     frame_rate: (f32, f32),
     nb_frames: i64,
     duration: Time,
@@ -449,7 +454,7 @@ impl Decoder {
     ///
     /// # Return value
     ///
-    /// The decoded raw frame as [`RawFrame`].
+    /// The decoded raw frame that after decoding, HW download, and filtering as [`RawFrame`].
     pub fn decode_raw<R>(&mut self, reader: &mut R) -> Result<Option<RawFrame>>
     where
         R: Reader,
@@ -595,6 +600,16 @@ impl Decoder {
         }
     }
 
+    #[cfg(feature = "ndarray")]
+    fn raw_frame_to_media_frame<T>(&self, frame: &RawFrame) -> Result<MediaFrame<T>>
+    where
+        T: MediaFrameType,
+    {
+        // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
+        // after I convert it, If you want RGB24, always remember to convert it yourself!
+        MediaFrame::<T>::from_avframe(frame)
+    }
+
     /// Drain one frame from the decoder.
     ///
     /// After calling drain once the decoder is in draining mode and the caller may not use normal
@@ -633,33 +648,43 @@ impl Decoder {
 
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
     fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
-        let frame = match self.decoder_receive_frame() {
+        // 1. 从解码器获取原始帧
+        let decoded_frame = match self.decoder_receive_frame() {
             Ok(Some(f)) => f,
-            Ok(None) => return Ok(None),
+            Ok(None) => return Ok(None), // Decoder drained or flushed
             Err(e) => return Err(e),
         };
 
-        let res = match self.media_type {
-            MediaType::VIDEO => self.process_video_frame(frame),
-            MediaType::AUDIO => self.process_audio_frame(frame),
-            _ => Ok(frame),
+        // 2. 处理硬件加速帧下载 (如果需要)
+        let sw_frame = match &self.hw_context {
+            Some(hw_ctx) if hw_ctx.is_hw_frame(&decoded_frame) => hw_ctx
+                .hw_download(&mut self.context, &decoded_frame)
+                .context("Failed HW frame download")?,
+            _ => decoded_frame, // 已经是 CPU 帧或无 HW 加速
         };
 
-        match res {
-            Ok(raw_frame) => {
-                if let Some(filter) = self.filter.as_mut() {
-                    match filter.process_frame(Some(raw_frame.clone()))? {
-                        Some(f) => Ok(Some(f)),
-                        None => {
-                            log::warn!("Filter returned None, keeping original frame.");
-                            Ok(Some(raw_frame))
-                        }
+        // 3. 应用 Filter Graph (如果存在)
+        if let Some(graph) = self.filter_graph.as_mut() {
+            // filter process
+            match graph.process_frame(Some(sw_frame))? {
+                Some(filtered_frame) => Ok(Some(filtered_frame)), // 返回过滤后的帧
+                None => {
+                    if graph.is_drained() {
+                        // Filter graph 当前输入帧未能产生输出帧，需要继续尝试拉取
+                        log::debug!("Filter graph drained, trying again.");
+                        // 在这种情况下，我们应该返回 Ok(None)，让外层循环继续驱动解码器 或 filter graph
+                    } else if graph.is_flushed() {
+                        // Filter graph 当前输入帧未能产生输出帧，已经到达 EOF
+                        log::error!("Filter graph flushed. EOF reached, should not happened.");
+                    } else {
+                        log::warn!("Filter graph did not output a frame.");
                     }
-                } else {
-                    Ok(Some(raw_frame))
+                    Ok(None)
                 }
             }
-            Err(e) => Err(e),
+        } else {
+            // 4. 如果没有 Filter Graph，直接返回 CPU 帧
+            Ok(Some(sw_frame))
         }
     }
 
@@ -684,97 +709,26 @@ impl Decoder {
             }
         }
     }
-
-    /// Rescale frame if needed.
-    fn process_video_frame(&mut self, hw_frame: RawFrame) -> Result<RawFrame> {
-        // hardware acceleration decoding
-        let sw_frame = self
-            .hw_context
-            .as_ref()
-            .and_then(|hw_ctx| {
-                if hw_ctx.is_hw_frame(&hw_frame) {
-                    Some(hw_ctx.hw_download(&mut self.context, &hw_frame))
-                } else {
-                    log::warn!("Hardware acceleration decoding not available!");
-                    None
-                }
-            })
-            .map_or(Ok(hw_frame), |result| {
-                result.map_err(|e| {
-                    log::error!("Failed to download frame from hw_device: {}", e);
-                    Error::msg(format!("HW frame download failed: {}", e))
-                })
-            })?;
-
-        // rescale
-        if let Some((dst_w, dst_h, pix_fmt)) = self.rescale {
-            let is_scale_needed = !(sw_frame.format == pix_fmt.into()
-                && sw_frame.width == dst_w as i32
-                && sw_frame.height == dst_h as i32);
-            if is_scale_needed {
-                swctx::scale(&sw_frame, dst_w as i32, dst_h as i32, pix_fmt)
-            } else {
-                Ok(sw_frame)
-            }
-        } else {
-            Ok(sw_frame)
-        }
-    }
-
-    fn process_audio_frame(&mut self, frame: RawFrame) -> Result<RawFrame> {
-        if let Some((nb_channels, sample_rate, sample_fmt)) = self.resample {
-            let src_sample_rate = frame.sample_rate;
-            let src_nb_channels = frame.ch_layout.nb_channels;
-
-            let is_resample_needed = !(src_nb_channels == nb_channels as i32
-                && src_sample_rate == sample_rate as i32
-                && frame.format == sample_fmt as i32);
-
-            let out_frame = if is_resample_needed {
-                swctx::convert_frame(
-                    &frame,
-                    AVChannelLayout::from_nb_channels(nb_channels as i32).into_inner(),
-                    sample_rate as i32,
-                    sample_fmt as i32,
-                )?
-            } else {
-                frame
-            };
-
-            // ensure timebase are correct
-            // let dst_time_base = self.decode_ctx.time_base;
-            // if src_pts != ffi::AV_NOPTS_VALUE {
-            //     let new_pts = avutil::av_rescale_q(src_pts, src_time_base, dst_time_base);
-            //     out_frame.set_pts(new_pts);
-            //     out_frame.set_time_base(dst_time_base);
-            // }
-
-            Ok(out_frame)
-        } else {
-            Ok(frame)
-        }
-    }
-
-    #[cfg(feature = "ndarray")]
-    fn raw_frame_to_media_frame<T>(&self, frame: &RawFrame) -> Result<MediaFrame<T>>
-    where
-        T: MediaFrameType,
-    {
-        // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
-        // after I convert it, If you want RGB24, always remember to convert it yourself!
-        let frame = MediaFrame::<T>::from_avframe(frame)?;
-
-        Ok(frame)
-    }
 }
 
 /// Important note: Do not forget to drain the decoder after the reader is exhausted. It may still
 /// contain frames. Run `drain_raw()` or `drain()` in a loop until no more frames are produced.
 impl Drop for Decoder {
     fn drop(&mut self) {
-        // flush filter before drop
-        if let Some(filter) = self.filter.as_mut() {
-            let _frames = filter.flush().context("Failed to flush filter").unwrap();
+        // 1. Flush Filter Graph if exists.
+        if let Some(graph) = self.filter_graph.as_mut() {
+            match graph.flush() {
+                Ok(frames) => {
+                    if !frames.is_empty() {
+                        log::warn!(
+                            "{} frames dropped during Decoder drop filter flush.",
+                            frames.len()
+                        );
+                    }
+                    log::debug!("Filter graph flushed during Decoder drop.");
+                }
+                Err(e) => log::error!("Failed to flush filter graph during Decoder drop: {}", e),
+            }
         }
 
         // We need to drain the items still in the decoders queue.
@@ -837,7 +791,7 @@ unsafe impl Sync for Decoder {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::filter::{self, AudioParams, FilterConfig, FilterParams, VideoParams};
+    use crate::filter;
     use crate::io::StreamReader;
 
     #[test]
@@ -845,28 +799,14 @@ mod tests {
     fn test_decode_video() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
 
-        let video_filter_params = FilterParams::Video(VideoParams {
-            width: 640,
-            height: 360,
-            format: PixelFormat::YUV420P,
-            time_base: ffi::AVRational { num: 1, den: 25 },
-            frame_rate: ffi::AVRational { num: 25, den: 1 },
-            pixel_aspect: ffi::AVRational { num: 1, den: 1 },
-        });
-
         let filters = vec![
-            filter::video::scale(1280, 720, PixelFormat::RGB24),
+            filter::video::scale(1280, 720, None),
             filter::video::drawtext("Hello", 10, 10, 24, "white"),
         ];
 
-        let video_filter_config = FilterConfig {
-            params: video_filter_params,
-            filters,
-        };
-
         let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = DecoderBuilder::new_video()
-            .with_filter(Some(FilterContext::new(video_filter_config)?))
+            .with_filters(Some(filters))
             .build(&stream_reader)
             .unwrap();
         loop {
@@ -893,27 +833,14 @@ mod tests {
     fn test_decode_audio() -> Result<()> {
         let path = std::path::Path::new("/tmp/bear.mp4");
 
-        let audio_filter_params = FilterParams::Audio(AudioParams {
-            nb_channels: 2,
-            sample_rate: 44100,
-            format: SampleFormat::FLTP,
-            time_base: ffi::AVRational { num: 1, den: 44100 },
-        });
-
         let filters = vec![
             filter::audio::resample(2, 48000, SampleFormat::FLTP),
             filter::audio::volume(1.5),
-            filter::audio::loudnorm(-16.0),
         ];
-
-        let audio_filter_config = FilterConfig {
-            params: audio_filter_params,
-            filters,
-        };
 
         let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = DecoderBuilder::new_audio()
-            .with_filter(Some(FilterContext::new(audio_filter_config)?))
+            .with_filters(Some(filters))
             .build(&stream_reader)
             .unwrap();
         loop {

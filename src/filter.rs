@@ -66,16 +66,23 @@ pub mod video {
     use super::*;
 
     /// 缩放视频尺寸
-    pub fn scale(width: i32, height: i32, format: PixelFormat) -> Filter {
+    /// `flags`: 可选，例如 "bilinear", "bicubic" 等 SWS_FLAG
+    pub fn scale(width: i32, height: i32, flags: Option<&str>) -> Filter {
+        let flags_str = flags.unwrap_or("fast_bilinear");
         Filter::new(
             "scale",
             MediaType::VIDEO,
-            format!(
-                "scale=w={}:h={},format={}",
-                width,
-                height,
-                format.get_pix_fmt_name()
-            ),
+            format!("scale=w={}:h={}:flags={}", width, height, flags_str),
+        )
+    }
+
+    /// `format`: <https://ffmpeg.org/ffmpeg-filters.html#format>
+    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1.
+    pub fn format(format: PixelFormat) -> Filter {
+        Filter::new(
+            "format",
+            MediaType::VIDEO,
+            format!("format=pix_fmts={}", format.get_pix_fmt_name()),
         )
     }
 
@@ -197,13 +204,31 @@ pub mod audio {
             .unwrap();
 
         let spec_str = format!(
-            "aresample=osr={}:async=0:ochl={}:osf={}",
+            "aresample=osr={}:osf={}:ochl={}:async=0",
             sample_rate,
+            format.get_sample_fmt_name(),
             channel_desc.to_string_lossy(),
-            format as i32,
         );
 
         Filter::new("resample", MediaType::AUDIO, spec_str)
+    }
+
+    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1.
+    pub fn format(nb_channels: i32, sample_rates: i32, format: SampleFormat) -> Filter {
+        let channel_desc = AVChannelLayout::from_nb_channels(nb_channels)
+            .describe()
+            .unwrap();
+
+        Filter::new(
+            "aformat",
+            MediaType::AUDIO,
+            format!(
+                "aformat=sample_fmts={}:sample_rates={}:channel_layouts={}",
+                format.get_sample_fmt_name(),
+                sample_rates, // aformat 需要指定采样率和布局
+                channel_desc.to_string_lossy()
+            ),
+        )
     }
 
     /// 音量调整
@@ -326,17 +351,6 @@ pub mod audio {
 pub struct FilterFactory;
 
 impl FilterFactory {
-    /// format 转换
-    /// `format`: <https://ffmpeg.org/ffmpeg-filters.html#format>
-    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1.
-    pub fn format(media_type: MediaType, fmt: &str) -> Filter {
-        if media_type == MediaType::AUDIO {
-            Filter::new("format", media_type, format!("aformat={}", fmt))
-        } else {
-            Filter::new("format", media_type, format!("format={}", fmt))
-        }
-    }
-
     /// 分支滤镜
     /// <https://ffmpeg.org/ffmpeg-filters.html#split_002c-asplit>
     pub fn split(media_type: MediaType, n: i32) -> Filter {
@@ -386,27 +400,48 @@ pub struct AudioParams {
 
 const DEFAULT_ORDERING: Ordering = Ordering::SeqCst;
 
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+enum FilterGraphState {
+    Normal,
+    Drained,
+    Flushed,
+}
+
 /// 过滤器图表 - 包含所有过滤器配置
 pub struct FilterGraph {
     graph: AVFilterGraph,
+    state: FilterGraphState,
     initialized: AtomicBool,
 }
 
 impl FilterGraph {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             graph: AVFilterGraph::new(),
+            state: FilterGraphState::Normal,
             initialized: AtomicBool::new(false),
         }
     }
 
+    pub fn is_initialized(&self) -> bool {
+        self.initialized.load(DEFAULT_ORDERING)
+    }
+
+    pub fn is_drained(&self) -> bool {
+        self.state == FilterGraphState::Drained
+    }
+
+    pub fn is_flushed(&self) -> bool {
+        self.state == FilterGraphState::Flushed
+    }
+
     /// 初始化过滤器图表
     pub fn init(&mut self, params: &FilterParams, filters: &[Filter]) -> Result<()> {
-        if self.initialized.load(DEFAULT_ORDERING) {
+        if self.is_initialized() {
             return Err(Error::msg("Filter graph already initialized"));
         }
 
-        // 验证过滤器类型匹配
+        // check
         for filter in filters {
             if filter.media_type() != params.media_type() {
                 return Err(Error::msg(format!(
@@ -417,7 +452,7 @@ impl FilterGraph {
             }
         }
 
-        // 构建过滤器链
+        // build filters spec
         let filter_spec = filters
             .iter()
             .map(|f| f.spec())
@@ -542,7 +577,7 @@ impl FilterGraph {
 
     /// 处理单帧
     pub fn process_frame(&mut self, frame: Option<AVFrame>) -> Result<Option<AVFrame>> {
-        if !self.initialized.load(DEFAULT_ORDERING) {
+        if !self.is_initialized() {
             return Err(Error::msg("Filter graph not initialized"));
         }
 
@@ -551,21 +586,26 @@ impl FilterGraph {
             let mut src_ctx = self.get_src_context()?;
             src_ctx
                 .buffersrc_add_frame(frame, None)
-                .context("Error submitting the frame to the filter graph:")?;
+                .context("Error submitting the frame to the filter graph.")?;
         } // src_ctx is dropped here, releasing the mutable borrow
 
-        // safely get a new mutable borrow for sink_ctx
-        let mut sink_ctx = self.get_sink_context()?;
+        let filter_result = {
+            // safely get a new mutable borrow for sink_ctx
+            let mut sink_ctx = self.get_sink_context()?;
+            sink_ctx.buffersink_get_frame(None)
+        }; // sink_ctx is dropped here, releasing the mutable borrow
 
         // 获取处理后的帧
-        match sink_ctx.buffersink_get_frame(None) {
+        match filter_result {
             Ok(frame) => Ok(Some(frame)),
             Err(rsmpeg::error::RsmpegError::BufferSinkDrainError) => {
                 log::debug!("filter graph: buffer sink drain error");
+                self.state = FilterGraphState::Drained;
                 Ok(None)
             }
             Err(rsmpeg::error::RsmpegError::BufferSinkEofError) => {
-                log::debug!("filter graph: buffer sink eof error");
+                log::warn!("filter graph: buffer sink eof error");
+                self.state = FilterGraphState::Flushed;
                 Ok(None)
             }
             Err(e) => Err(Error::msg(format!(
@@ -577,7 +617,7 @@ impl FilterGraph {
 
     /// 刷新过滤器链
     pub fn flush(&mut self) -> Result<Vec<AVFrame>> {
-        if !self.initialized.load(DEFAULT_ORDERING) {
+        if !self.is_initialized() {
             return Err(Error::msg("Filter graph not initialized"));
         }
 
@@ -619,9 +659,10 @@ impl std::fmt::Debug for FilterGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "FilterGraph nb_filters:{}, initialized:{}",
+            "FilterGraph nb_filters:{}, initialized:{}, state:{:?}",
             self.graph.nb_filters,
-            self.initialized.load(DEFAULT_ORDERING)
+            self.is_initialized(),
+            self.state,
         )
     }
 }
@@ -635,20 +676,25 @@ pub struct FilterConfig {
 
 /// 流过滤器
 pub struct FilterContext {
-    config: FilterConfig,
-    graph: FilterGraph,
+    pub stream_index: usize,
+    pub config: FilterConfig,
+    pub graph: FilterGraph,
 }
 
 impl FilterContext {
     /// 为指定流添加过滤器
-    pub fn new(config: FilterConfig) -> Result<FilterContext> {
+    pub fn new(stream_index: usize, config: FilterConfig) -> Result<FilterContext> {
         log::debug!("new filter context:{:?}", config);
 
         // 创建并初始化过滤器图表
         let mut graph = FilterGraph::new();
         graph.init(&config.params, &config.filters)?;
 
-        Ok(FilterContext { config, graph })
+        Ok(FilterContext {
+            stream_index,
+            config,
+            graph,
+        })
     }
 
     /// 处理指定流的帧
@@ -665,6 +711,7 @@ impl FilterContext {
 impl std::fmt::Debug for FilterContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FilterContext")
+            .field("stream_index", &self.stream_index)
             .field("config", &self.config)
             .field("graph", &self.graph)
             .finish()

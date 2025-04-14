@@ -485,7 +485,7 @@ mod tests {
         let sample_format = SampleFormat::from(audio_params.supported_sample_fmts[0]);
         let frame_size = audio_params.frame_size;
         let bitrate = audio_params.bitrate;
-        let channels = audio_params.channels as u32;
+        let channels = audio_params.channels;
 
         println!(
             "encode_audio type: {}, sample_rate: {}, sample_format: {:?}",
@@ -494,7 +494,7 @@ mod tests {
 
         // 创建适合当前格式的编码器
         let mut encoder =
-            EncoderBuilder::new_audio(bitrate, channels, sample_rate as u32, sample_format)
+            EncoderBuilder::new_audio(bitrate, channels as i32, sample_rate, sample_format)
                 .with_codec_name(Some(audio_params.codec_name))
                 .with_options(audio_params.codec_options.map(|opts| opts.into()))
                 .build()?;

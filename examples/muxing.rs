@@ -54,8 +54,8 @@ fn main() {
                 // build audio encoder
                 EncoderBuilder::new_audio(
                     stream_info.bit_rate,
-                    stream_info.channel_layout.nb_channels as u32,
-                    stream_info.sample_rate as u32,
+                    stream_info.channel_layout.nb_channels,
+                    stream_info.sample_rate,
                     SampleFormat::from(stream_info.format),
                 )
                 .build()

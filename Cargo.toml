@@ -79,11 +79,11 @@ pkg-config = { version = "0.3", optional = true }
 all-features = true
 
 [[example]]
-name = "decode_frame"
-path = "examples/decode_frame.rs"
+name = "decoding"
+path = "examples/decoding.rs"
 required-features = ["ndarray"]
 
 [[example]]
-name = "encode_frame"
-path = "examples/encode_frame.rs"
+name = "encoding"
+path = "examples/encoding.rs"
 required-features = ["ndarray"]

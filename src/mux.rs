@@ -1,13 +1,15 @@
+use crate::filter::Filter;
 use crate::flags::MediaType;
 use crate::hwaccel::HWDeviceConfig;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{Decoder, DecoderBuilder, Encoder, Resize};
+use crate::{Decoder, DecoderBuilder, Encoder};
 
 use rsmpeg::avutil::AVFrame;
 
 use anyhow::{Context, Error, Result};
 use dashmap::DashMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Represents a muxer. A muxer allows muxing media packets into a new container format. Muxing does
@@ -56,18 +58,18 @@ pub struct MuxerStream {
     pub encoder: Encoder,
     pub stream_info: StreamInfo,
     pub media_type: MediaType,
-    pub stream_idx: usize,
+    pub stream_index: usize,
 }
 
 impl MuxerStream {
     pub fn new(encoder: Encoder, stream_info: StreamInfo) -> Self {
         let media_type = encoder.media_type();
-        let stream_idx = stream_info.index;
+        let stream_index = stream_info.index;
         Self {
             encoder,
-            stream_info,
-            stream_idx,
             media_type,
+            stream_info,
+            stream_index,
         }
     }
 }
@@ -95,14 +97,14 @@ impl<W: Writer> Muxer<W> {
     pub fn get_stream(&self, index: usize) -> Result<&MuxerStream> {
         self.streams
             .iter()
-            .find(|s| s.stream_idx == index)
+            .find(|s| s.stream_index == index)
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
     }
 
     pub fn get_stream_mut(&mut self, index: usize) -> Result<&mut MuxerStream> {
         self.streams
             .iter_mut()
-            .find(|s| s.stream_idx == index)
+            .find(|s| s.stream_index == index)
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
     }
 
@@ -118,7 +120,7 @@ impl<W: Writer> Muxer<W> {
             match mux_stream.encoder.encode_raw(frame) {
                 Ok(Some(mut packet)) => {
                     packet.set_pos(-1);
-                    packet.set_stream_index(mux_stream.stream_idx as i32);
+                    packet.set_stream_index(mux_stream.stream_index as i32);
                     // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
                     // encode_ctx_timebase => out_stream_time_base
                     packet.rescale_ts(
@@ -152,7 +154,7 @@ impl<W: Writer> Muxer<W> {
     pub fn finish(&mut self) -> Result<Option<W::Out>> {
         for mux_stream in self.streams.iter_mut() {
             // flush the encoder to ensure all packets are sent to the muxer.
-            let out_stream_index = mux_stream.stream_idx;
+            let out_stream_index = mux_stream.stream_index;
             let out_stream_time_base = mux_stream.stream_info.time_base;
             mux_stream.encoder.flush(
                 &mut self.writer,
@@ -186,18 +188,18 @@ pub struct DemuxerStream {
     pub decoder: Decoder,
     pub stream_info: StreamInfo,
     pub media_type: MediaType,
-    pub stream_idx: usize,
+    pub stream_index: usize,
 }
 
 impl DemuxerStream {
     pub fn new(decoder: Decoder, stream_info: StreamInfo) -> Self {
         let media_type = decoder.media_type();
-        let stream_idx = stream_info.index;
+        let stream_index = stream_info.index;
         Self {
             decoder,
-            stream_info,
             media_type,
-            stream_idx,
+            stream_info,
+            stream_index,
         }
     }
 }
@@ -205,30 +207,31 @@ impl DemuxerStream {
 impl<R: Reader> Demuxer<R> {
     pub fn from_reader(
         reader: R,
-        resize: Option<Resize>,
+        filters: Option<Vec<Filter>>,
         device_config: Option<HWDeviceConfig>,
     ) -> Result<Self> {
         let device_type = device_config.as_ref().map(|c| c.device_type);
         let nb_streams = reader.input().nb_streams as usize;
+        let filter_map = filters.unwrap_or_default().into_iter().fold(
+            HashMap::<MediaType, Vec<Filter>>::new(),
+            |mut map, f| {
+                map.entry(f.media_type()).or_default().push(f);
+                map
+            },
+        );
+
         let mut streams = Vec::new();
         for stream_idx in 0..nb_streams {
             let stream_info = StreamInfo::from_reader(&reader, stream_idx)?;
+            let media_type = stream_info.media_type;
             // auto detect hardware acceleration decoder codec
             let codec_name = stream_info.find_decoder_name(device_type);
-            let decoder = if stream_info.media_type == MediaType::VIDEO {
-                DecoderBuilder::new(stream_info.media_type)
-                    .with_hardware_device(device_config.clone())
-                    .with_codec_name(codec_name)
-                    .with_resize(resize)
-                    .build(&reader)
-                    .context("Failed to build decoder")?
-            } else {
-                DecoderBuilder::new(stream_info.media_type)
-                    .with_hardware_device(device_config.clone())
-                    .with_codec_name(codec_name)
-                    .build(&reader)
-                    .context("Failed to build decoder")?
-            };
+            let decoder = DecoderBuilder::new(media_type)
+                .with_codec_name(codec_name)
+                .with_hardware_device(device_config.clone())
+                .with_filters(filter_map.get(&media_type).cloned())
+                .build(&reader)
+                .context("Failed to build decoder")?;
 
             streams.push(DemuxerStream::new(decoder, stream_info));
         }
@@ -247,14 +250,14 @@ impl<R: Reader> Demuxer<R> {
     pub fn get_stream(&self, index: usize) -> Result<&DemuxerStream> {
         self.streams
             .iter()
-            .find(|s| s.stream_idx == index)
+            .find(|s| s.stream_index == index)
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
     }
 
     pub fn get_stream_mut(&mut self, index: usize) -> Result<&mut DemuxerStream> {
         self.streams
             .iter_mut()
-            .find(|s| s.stream_idx == index)
+            .find(|s| s.stream_index == index)
             .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
     }
 
@@ -280,7 +283,7 @@ impl<R: Reader> Demuxer<R> {
                         let demux_stream = self
                             .streams
                             .iter_mut()
-                            .find(|s| s.stream_idx == stream_idx)
+                            .find(|s| s.stream_index == stream_idx)
                             .unwrap();
                         if let Some(frame) = demux_stream.decoder.decode_raw_packet(&packet)? {
                             return Ok(Some((stream_idx, frame)));
@@ -299,7 +302,7 @@ impl<R: Reader> Demuxer<R> {
             } else {
                 for i in 0..self.streams.len() {
                     // 先获取 stream_idx，避免后面重复借用
-                    let stream_idx = self.streams[i].stream_idx;
+                    let stream_idx = self.streams[i].stream_index;
 
                     // 使用实际的 stream_idx 检查状态
                     if self.is_flushed(stream_idx) {
@@ -310,7 +313,7 @@ impl<R: Reader> Demuxer<R> {
                     let demuxer_stream = &mut self.streams[i];
                     match demuxer_stream.decoder.drain_raw() {
                         Ok(Some(frame)) => {
-                            return Ok(Some((demuxer_stream.stream_idx, frame)));
+                            return Ok(Some((demuxer_stream.stream_index, frame)));
                         }
                         Ok(None) => {
                             log::debug!("Stream: [{}] Decoder flushed. EOF reached.", stream_idx);
@@ -428,12 +431,12 @@ mod tests {
         freq: f32,
         channels: usize,
         nb_samples: usize,
-        sample_rate: u32,
+        sample_rate: i32,
     ) -> Result<AVFrame> {
         let mut frame = AVFrame::new();
         frame.set_format(SampleFormat::FLTP as _);
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(channels as i32).into_inner());
-        frame.set_sample_rate(sample_rate as i32);
+        frame.set_sample_rate(sample_rate);
         frame.set_nb_samples(nb_samples as i32);
         frame
             .alloc_buffer()
@@ -497,7 +500,7 @@ mod tests {
         let stream_reader = StreamReader::new(output_path)?;
         let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
         for des in &demuxer.streams {
-            println!("{:?}, {:?}", des.stream_idx, des.media_type)
+            println!("{:?}, {:?}", des.stream_index, des.media_type)
         }
 
         for res in demuxer {
@@ -569,7 +572,7 @@ mod tests {
         let stream_reader = StreamReader::new(output_path)?;
         let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
         for des in &demuxer.streams {
-            println!("{:?}, {:?}", des.stream_idx, des.media_type)
+            println!("{:?}, {:?}", des.stream_index, des.media_type)
         }
 
         for res in demuxer {
@@ -653,8 +656,8 @@ mod tests {
         pub const VIDEO_DURATION_SEC: u32 = 10;
 
         // 音频参数
-        pub const AUDIO_SAMPLE_RATE: u32 = 48_000;
-        pub const AUDIO_CHANNELS: u32 = 2;
+        pub const AUDIO_SAMPLE_RATE: i32 = 48_000;
+        pub const AUDIO_CHANNELS: i32 = 2;
         pub const SAMPLES_PER_FRAME: u32 = 1024;
 
         let output_path = Path::new("/tmp/test_multiple_streams.mp4");
@@ -756,7 +759,7 @@ mod tests {
         let stream_reader = StreamReader::new(output_path)?;
         let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
         for stream in &demuxer.streams {
-            println!("{:?}, {:?}", stream.stream_idx, stream.media_type)
+            println!("{:?}, {:?}", stream.stream_index, stream.media_type)
         }
 
         for res in demuxer {

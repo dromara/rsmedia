@@ -564,9 +564,10 @@ impl Encoder {
 
         let raw_frame = match self.media_type {
             MediaType::VIDEO => {
-                if frame.width != self.width() ||
-                    frame.height != self.height() ||
-                    frame.format != self.pix_fmt().into() {
+                if frame.width != self.width()
+                    || frame.height != self.height()
+                    || frame.format != self.pix_fmt().into()
+                {
                     swctx::scale(&frame, self.width(), self.height(), self.pix_fmt())?
                 } else {
                     frame
@@ -574,17 +575,26 @@ impl Encoder {
             }
             MediaType::AUDIO => {
                 let ch_layout = self.context.ch_layout;
-                if frame.sample_rate != self.sample_rate() ||
-                    frame.format != self.sample_fmt() as i32 ||
-                    frame.ch_layout.nb_channels != ch_layout.nb_channels {
-                    swctx::convert_frame(&frame, ch_layout, self.sample_fmt() as _, self.sample_rate())?
+                if frame.sample_rate != self.sample_rate()
+                    || frame.format != self.sample_fmt() as i32
+                    || frame.ch_layout.nb_channels != ch_layout.nb_channels
+                {
+                    swctx::convert_frame(
+                        &frame,
+                        ch_layout,
+                        self.sample_fmt() as _,
+                        self.sample_rate(),
+                    )?
                 } else {
                     frame
                 }
             }
             _ => {
                 // do nothing
-                return Err(Error::msg(format!("Unsupported encode frame media type: {:?}", self.media_type)));
+                return Err(Error::msg(format!(
+                    "Unsupported encode frame media type: {:?}",
+                    self.media_type
+                )));
             }
         };
 

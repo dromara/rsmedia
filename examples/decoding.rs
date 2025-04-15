@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
 
     let filters = vec![
         filter::video::scale(640, 360, None),
-        filter::video::fps(30.0)
+        filter::video::fps(30.0),
     ];
 
     let mut stream_reader = StreamReader::new(source)?;

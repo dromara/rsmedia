@@ -344,43 +344,29 @@ pub mod audio {
 
     /// 多频段均衡器 (bass, mid, treble)
     /// Applies a simple 3-band equalizer using firequalizer.
+    /// See: <https://ffmpeg.org/ffmpeg-filters.html#firequalizer>
     pub fn three_band_equalizer(bass_gain: f32, mid_gain: f32, treble_gain: f32) -> Filter {
         Filter::new(
             "firequalizer",
             MediaType::AUDIO,
             format!(
-                "firequalizer=gain='if(lt(f,200),{},if(gt(f,5000),{},{}))':scale=log",
+                "firequalizer=gain='if(lt(f,200),{},if(gt(f,5000),{},{}))':scale=linlog",
                 bass_gain, treble_gain, mid_gain
             ),
         )
     }
 
-    /// 自定义多段均衡器
-    pub fn firequalizer(expr: &str) -> Filter {
-        let escaped_expr = escape_filter_str(expr);
-        Filter::new(
-            "firequalizer",
-            MediaType::AUDIO,
-            format!("firequalizer=gain='{}':scale=log", escaped_expr),
-        )
-    }
-
     /// 压缩器
     /// Applies dynamic range compression.
-    /// `threshold`: Threshold in dB (e.g., -20).
-    /// `ratio`: Compression ratio (>= 1.0).
+    /// `ratio`: Compression ratio (1 - 20).
     /// `attack`: Attack time in ms (optional, default 20).
     /// `release`: Release time in ms (optional, default 250).
-    pub fn compressor(
-        threshold: f32,
-        ratio: f32,
-        attack: Option<f32>,
-        release: Option<f32>,
-    ) -> Filter {
+    /// See: <https://ffmpeg.org/ffmpeg-filters.html#acompressor>
+    pub fn compressor(ratio: f32, attack: Option<f32>, release: Option<f32>) -> Filter {
         if ratio < 1.0 {
             panic!("{}", format!("Compressor ratio must be >= 1.0: {}", ratio));
         }
-        let mut spec = format!("acompressor=threshold={}:ratio={}", threshold, ratio);
+        let mut spec = format!("acompressor=ratio={}", ratio);
         if let Some(a) = attack {
             spec.push_str(&format!(":attack={}", a));
         }
@@ -393,24 +379,18 @@ pub mod audio {
 
     /// 高通滤波
     pub fn highpass(freq: u32) -> Filter {
-        Filter::new("highpass", MediaType::AUDIO, format!("f={}", freq))
+        Filter::new("highpass", MediaType::AUDIO, format!("highpass=f={}", freq))
     }
 
     /// 低通滤波
     pub fn lowpass(freq: u32) -> Filter {
-        Filter::new("lowpass", MediaType::AUDIO, format!("f={}", freq))
+        Filter::new("lowpass", MediaType::AUDIO, format!("lowpass=f={}", freq))
     }
 
     /// 音频变速
     /// Changes audio tempo without changing pitch.
-    /// `rate`: Speed multiplier (0.5 to 100.0).
+    /// * `rate`: Speed multiplier (0.5 to 100.0).
     pub fn atempo(rate: f32) -> Filter {
-        if !(0.5..=100.0).contains(&rate) {
-            panic!(
-                "{}",
-                format!("Atempo rate must be between 0.5 and 100.0: {}", rate)
-            );
-        }
         Filter::new("atempo", MediaType::AUDIO, format!("atempo={}", rate))
     }
 

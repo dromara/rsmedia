@@ -284,7 +284,7 @@ pub fn get_plane_buffer(frame: &AVFrame, plane_idx: usize) -> Result<Vec<u8>> {
 pub fn fill_plane_from_buffer(
     frame: &mut AVFrame,
     plane_idx: usize,
-    src: &[u8],
+    src: Vec<u8>,
     src_linesize: usize,
 ) -> Result<()> {
     // 基本参数检查
@@ -384,26 +384,85 @@ pub fn fill_plane_from_buffer(
 }
 
 /// 将buffer数据填充到frame中
-pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: &[u8]) -> Result<()> {
-    unsafe {
-        let data_ptr = frame.data_mut().as_mut_ptr();
-        let linesize_ptr = frame.linesize_mut().as_mut_ptr();
+pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()> {
+    // 1. Basic validation
+    if !frame.is_writable()? {
+        return Err(Error::msg("Frame is not writable"));
+    }
+    if frame.data[0].is_null() {
+        // This check implies the frame buffer hasn't been allocated properly
+        // alloc_buffer should have been called before passing the frame here.
+        return Err(Error::msg("Frame buffer is not allocated (frame.data is null)"));
+    }
 
-        let ret = ffi::av_image_fill_arrays(
-            data_ptr,
-            linesize_ptr,
+    // 2. Calculate the expected size of the contiguous buffer for the given format/dims
+    let expected_size = get_buffer_size(frame, 1)?;
+
+    // 3. Validate input buffer size
+    if buffer.len() < expected_size {
+        return Err(Error::msg(format!(
+            "Input buffer size mismatch. Expected at least {} bytes, got {}",
+            expected_size,
+            buffer.len()
+        )));
+    }
+
+    unsafe {
+        // 4. Prepare destination pointers and linesizes (from the frame itself)
+        let mut dst_data: [*mut u8; 4] = [
+            frame.data[0],
+            frame.data[1],
+            frame.data[2],
+            frame.data[3],
+        ];
+        // Note: AVFrame::linesize is [i32; AV_NUM_DATA_POINTERS], which is 8 on most platforms
+        let dst_linesizes: [i32; 4] = [
+            frame.linesize[0],
+            frame.linesize[1],
+            frame.linesize[2],
+            frame.linesize[3],
+        ];
+
+        // 5. Prepare source pointers and linesizes (describing the layout within the input `buffer`)
+        // We need to calculate the layout as if it were tightly packed.
+        let mut src_data = [std::ptr::null_mut(); 4];
+        let mut src_linesizes = [0; 4];
+        let pix_fmt = frame.format;
+        let width = frame.width;
+        let height = frame.height;
+
+        // Use av_image_fill_arrays on a temporary structure to calculate
+        // the packed layout pointers and linesizes within the source buffer.
+        // This correctly handles planar vs packed logic based on pix_fmt.
+        let ret_fill = ffi::av_image_fill_arrays(
+            src_data.as_mut_ptr() as *mut *mut u8,
+            src_linesizes.as_mut_ptr(),
             buffer.as_ptr(),
-            frame.format,
-            frame.width,
-            frame.height,
+            pix_fmt,
+            width,
+            height,
             1,
         );
 
-        if ret < 0 {
-            Err(anyhow::anyhow!("Failed to fill frame from buffer: {}", ret))
-        } else {
-            Ok(())
+        if ret_fill < 0 {
+            return Err(Error::msg(format!(
+                "Failed to calculate source layout using av_image_fill_arrays: {}",
+                ret_fill
+            )));
         }
+
+        // 6. Perform the copy
+        ffi::av_image_copy(
+            dst_data.as_mut_ptr(),
+            dst_linesizes.as_ptr(),
+            src_data.as_ptr() as *const *const u8,
+            src_linesizes.as_ptr() as *const _,
+            pix_fmt,
+            width,
+            height,
+        );
+
+        Ok(())
     }
 }
 
@@ -727,14 +786,16 @@ mod tests {
     #[test]
     fn test_copy_to_buffer() {
         // 测试RGB24格式
-        let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();
+        let width = 320;
+        let height = 240;
+        let mut frame = create_test_frame(width, height, ffi::AV_PIX_FMT_RGB24).unwrap();
 
         // 填充测试数据
-        let rgb_data = vec![128u8; 320 * 240 * 3];
-        fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
+        let rgb_data = vec![128u8; width as usize * height as usize * 3];
+        fill_frame_from_buffer(&mut frame, rgb_data).unwrap();
 
         let buffer = copy_frame_to_buffer(&frame).unwrap();
-        assert_eq!(buffer.len(), 320 * 240 * 3);
+        assert_eq!(buffer.len(), width as usize * height as usize * 3);
         assert_eq!(buffer[0], 128);
 
         // 测试YUV420P格式
@@ -745,9 +806,9 @@ mod tests {
         let u_data = vec![128u8; 160 * 120];
         let v_data = vec![128u8; 160 * 120];
 
-        fill_plane_from_buffer(&mut frame, 0, &y_data, 320).unwrap();
-        fill_plane_from_buffer(&mut frame, 1, &u_data, 160).unwrap();
-        fill_plane_from_buffer(&mut frame, 2, &v_data, 160).unwrap();
+        fill_plane_from_buffer(&mut frame, 0, y_data, 320).unwrap();
+        fill_plane_from_buffer(&mut frame, 1, u_data, 160).unwrap();
+        fill_plane_from_buffer(&mut frame, 2, v_data, 160).unwrap();
 
         let buffer = copy_frame_to_buffer(&frame).unwrap();
         assert_eq!(buffer.len(), 320 * 240 * 3 / 2);
@@ -774,9 +835,9 @@ mod tests {
         let v_data = vec![200_u8; uv_size];
 
         // 填充数据到 AVFrame
-        fill_plane_from_buffer(&mut frame, 0, &y_data, width as usize).unwrap();
-        fill_plane_from_buffer(&mut frame, 1, &u_data, uv_width as usize).unwrap();
-        fill_plane_from_buffer(&mut frame, 2, &v_data, uv_width as usize).unwrap();
+        fill_plane_from_buffer(&mut frame, 0, y_data.clone(), width as usize).unwrap();
+        fill_plane_from_buffer(&mut frame, 1, u_data.clone(), uv_width as usize).unwrap();
+        fill_plane_from_buffer(&mut frame, 2, v_data.clone(), uv_width as usize).unwrap();
 
         // 直接从帧数据指针读取数据进行验证
         unsafe {
@@ -850,7 +911,7 @@ mod tests {
 
         // 填充源frame
         let test_data = vec![128u8; 320 * 240 * 3];
-        fill_frame_from_buffer(&mut src_frame, &test_data)?;
+        fill_frame_from_buffer(&mut src_frame, test_data)?;
 
         // 验证源frame数据
         let src_buffer = copy_frame_to_buffer(&src_frame)?;
@@ -919,7 +980,7 @@ mod tests {
         let buffer = vec![128u8; buffer_size];
 
         // 测试正常填充
-        fill_frame_from_buffer(&mut frame, &buffer)?;
+        fill_frame_from_buffer(&mut frame, buffer)?;
 
         // 验证数据是否正确填充
         let result_buffer = copy_frame_to_buffer(&frame)?;
@@ -939,7 +1000,7 @@ mod tests {
 
         // 填充测试数据
         let rgb_data = vec![128u8; width * height * 3];
-        fill_frame_from_buffer(&mut frame, &rgb_data).unwrap();
+        fill_frame_from_buffer(&mut frame, rgb_data).unwrap();
 
         let array = to_ndarray(&frame).unwrap();
         assert_eq!(array.shape(), &[height, width, 3]);
@@ -953,9 +1014,9 @@ mod tests {
         let y_data = vec![128u8; width * height];
         let u_data = vec![64u8; (width / 2) * (height / 2)];
         let v_data = vec![32u8; (width / 2) * (height / 2)];
-        fill_plane_from_buffer(&mut frame, 0, &y_data, width).unwrap();
-        fill_plane_from_buffer(&mut frame, 1, &u_data, width / 2).unwrap();
-        fill_plane_from_buffer(&mut frame, 2, &v_data, width / 2).unwrap();
+        fill_plane_from_buffer(&mut frame, 0, y_data, width).unwrap();
+        fill_plane_from_buffer(&mut frame, 1, u_data, width / 2).unwrap();
+        fill_plane_from_buffer(&mut frame, 2, v_data, width / 2).unwrap();
 
         // 转换为 ndarray
         let array = to_ndarray(&frame).unwrap();
@@ -995,14 +1056,14 @@ mod tests {
 
         // 1. 填充原始数据
         let test_data = vec![128u8; 320 * 240 * 3];
-        fill_frame_from_buffer(&mut src_frame, &test_data).unwrap();
+        fill_frame_from_buffer(&mut src_frame, test_data).unwrap();
 
         // 2. 复制到buffer
         let buffer = copy_frame_to_buffer(&src_frame).unwrap();
 
         // 3. 从buffer创建新frame
         let mut dst_frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24).unwrap();
-        assert!(fill_frame_from_buffer(&mut dst_frame, &buffer).is_ok());
+        assert!(fill_frame_from_buffer(&mut dst_frame, buffer).is_ok());
 
         // 4. 转换为ndarray
         let array = to_ndarray(&dst_frame).unwrap();
@@ -1030,9 +1091,9 @@ mod tests {
         let v_data = vec![200_u8; uv_size];
 
         // 填充数据到 AVFrame
-        fill_plane_from_buffer(&mut frame, 0, &y_data, width as usize)?;
-        fill_plane_from_buffer(&mut frame, 1, &u_data, uv_width as usize)?;
-        fill_plane_from_buffer(&mut frame, 2, &v_data, uv_width as usize)?;
+        fill_plane_from_buffer(&mut frame, 0, y_data.clone(), width as usize)?;
+        fill_plane_from_buffer(&mut frame, 1, u_data.clone(), uv_width as usize)?;
+        fill_plane_from_buffer(&mut frame, 2, v_data.clone(), uv_width as usize)?;
 
         // 验证数据 - 方法1：使用 get_plane_buffer
         let y_buffer = get_plane_buffer(&frame, 0)?;
@@ -1089,9 +1150,9 @@ mod tests {
         let u_data = vec![150_u8; plane_size];
         let v_data = vec![200_u8; plane_size];
 
-        fill_plane_from_buffer(&mut frame, 0, &y_data, width as usize)?;
-        fill_plane_from_buffer(&mut frame, 1, &u_data, width as usize)?;
-        fill_plane_from_buffer(&mut frame, 2, &v_data, width as usize)?;
+        fill_plane_from_buffer(&mut frame, 0, y_data.clone(), width as usize)?;
+        fill_plane_from_buffer(&mut frame, 1, u_data.clone(), width as usize)?;
+        fill_plane_from_buffer(&mut frame, 2, v_data.clone(), width as usize)?;
 
         // 验证数据 - 方法1：使用 get_plane_buffer
         let y_buffer = get_plane_buffer(&frame, 0)?;
@@ -1157,7 +1218,7 @@ mod tests {
         let rgba_size = width as usize * height as usize * 4;
         let rgba_data = vec![128_u8; rgba_size];
 
-        fill_plane_from_buffer(&mut frame, 0, &rgba_data, (width * 4) as usize)?;
+        fill_plane_from_buffer(&mut frame, 0, rgba_data.clone(), (width * 4) as usize)?;
 
         // 验证数据 - 方法1：使用 get_plane_buffer
         let buffer = get_plane_buffer(&frame, 0)?;
@@ -1188,28 +1249,28 @@ mod tests {
         // 错误1: 无效的平面索引
         let data = vec![0_u8; 100];
         assert!(
-            fill_plane_from_buffer(&mut frame, 3, &data, width as usize).is_err(),
+            fill_plane_from_buffer(&mut frame, 3, data, width as usize).is_err(),
             "Should fail for invalid plane index"
         );
 
         // 错误2: 不匹配的源数据大小
         let y_data = vec![100_u8; width as usize * height as usize / 2]; // 数据太小
         assert!(
-            fill_plane_from_buffer(&mut frame, 0, &y_data, width as usize).is_err(),
+            fill_plane_from_buffer(&mut frame, 0, y_data, width as usize).is_err(),
             "Should fail for insufficient source data"
         );
 
         // 错误3: 不匹配的行大小
         let y_data = vec![100_u8; width as usize * height as usize];
         assert!(
-            fill_plane_from_buffer(&mut frame, 0, &y_data, (width / 2) as usize).is_err(),
+            fill_plane_from_buffer(&mut frame, 0, y_data, (width / 2) as usize).is_err(),
             "Should fail for mismatched linesize"
         );
 
         // 错误4: 空数据
         let empty_data = vec![];
         assert!(
-            fill_plane_from_buffer(&mut frame, 0, &empty_data, width as usize).is_err(),
+            fill_plane_from_buffer(&mut frame, 0, empty_data, width as usize).is_err(),
             "Should fail for empty data"
         );
 

@@ -552,9 +552,9 @@ where
             }
 
             // 填充 Y、U、V 平面
-            imgutils::fill_plane_from_buffer(frame, 0, &y_data, width)?;
-            imgutils::fill_plane_from_buffer(frame, 1, &u_data, uv_width)?;
-            imgutils::fill_plane_from_buffer(frame, 2, &v_data, uv_width)?;
+            imgutils::fill_plane_from_buffer(frame, 0, y_data, width)?;
+            imgutils::fill_plane_from_buffer(frame, 1, u_data, uv_width)?;
+            imgutils::fill_plane_from_buffer(frame, 2, v_data, uv_width)?;
 
             Ok(())
         }

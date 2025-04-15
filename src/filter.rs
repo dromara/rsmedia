@@ -279,7 +279,7 @@ pub mod video {
     }
 
     /// 帧率控制
-    pub fn fps(fps: i32) -> Filter {
+    pub fn fps(fps: f32) -> Filter {
         Filter::new("fps", MediaType::VIDEO, format!("fps={}", fps))
     }
 

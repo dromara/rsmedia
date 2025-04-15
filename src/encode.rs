@@ -6,7 +6,7 @@ use crate::frame::{MediaFrame, MediaFrameType};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::{time, utils, MediaType, RawFrame, SampleFormat, Writer};
+use crate::{swctx, time, utils, MediaType, RawFrame, SampleFormat, Writer};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
 use rsmpeg::avutil::{AVChannelLayout, AVChannelLayoutRef};
@@ -550,15 +550,7 @@ impl Encoder {
     where
         T: MediaFrameType,
     {
-        let raw_frame =
-            if frame.media_type == MediaType::VIDEO && frame.format != ffi::AV_PIX_FMT_YUV420P {
-                // 只有当是视频且不是YUV420P格式时才进行转换
-                frame.convert_rgb_to_yuv()?.to_avframe()?
-            } else {
-                // 其他情况直接转换
-                frame.to_avframe()?
-            };
-
+        let raw_frame = frame.to_avframe()?;
         self.encode_raw(raw_frame)
     }
 
@@ -567,8 +559,34 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, raw_frame: RawFrame) -> Result<Option<AVPacket>> {
-        log::info!("{:?}, time_base: {:?}", raw_frame, raw_frame.time_base);
+    pub fn encode_raw(&mut self, frame: RawFrame) -> Result<Option<AVPacket>> {
+        log::info!("{:?}, time_base: {:?}", frame, frame.time_base);
+
+        let raw_frame = match self.media_type {
+            MediaType::VIDEO => {
+                if frame.width != self.width() ||
+                    frame.height != self.height() ||
+                    frame.format != self.pix_fmt().into() {
+                    swctx::scale(&frame, self.width(), self.height(), self.pix_fmt())?
+                } else {
+                    frame
+                }
+            }
+            MediaType::AUDIO => {
+                let ch_layout = self.context.ch_layout;
+                if frame.sample_rate != self.sample_rate() ||
+                    frame.format != self.sample_fmt() as i32 ||
+                    frame.ch_layout.nb_channels != ch_layout.nb_channels {
+                    swctx::convert_frame(&frame, ch_layout, self.sample_fmt() as _, self.sample_rate())?
+                } else {
+                    frame
+                }
+            }
+            _ => {
+                // do nothing
+                return Err(Error::msg(format!("Unsupported encode frame media type: {:?}", self.media_type)));
+            }
+        };
 
         // send frame
         self.send_frame_to_encoder(Some(raw_frame))?;
@@ -653,6 +671,11 @@ impl Encoder {
     #[inline]
     pub fn sample_rate(&self) -> i32 {
         self.context.sample_rate
+    }
+
+    #[inline]
+    pub fn sample_fmt(&self) -> SampleFormat {
+        SampleFormat::from(self.context.sample_fmt)
     }
 
     #[inline]

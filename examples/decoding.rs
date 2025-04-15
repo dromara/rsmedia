@@ -33,7 +33,10 @@ async fn main() -> Result<()> {
     //     .parse::<url::Url>()
     //     .unwrap();
 
-    let filters = vec![filter::video::scale(640, 640, None)];
+    let filters = vec![
+        filter::video::scale(640, 360, None),
+        filter::video::fps(30.0)
+    ];
 
     let mut stream_reader = StreamReader::new(source)?;
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO)

@@ -833,14 +833,14 @@ pub struct FilterContext {
 
 impl FilterContext {
     /// 为指定流添加过滤器
-    pub fn new(stream_index: usize, config: FilterConfig) -> Result<FilterContext> {
+    pub fn new(stream_index: usize, config: FilterConfig) -> Result<Self> {
         log::debug!("new filter context:{:?}", config);
 
         // 创建并初始化过滤器图表
         let mut graph = FilterGraph::new();
         graph.init(&config.params, &config.filters)?;
 
-        Ok(FilterContext {
+        Ok(Self {
             stream_index,
             config,
             graph,

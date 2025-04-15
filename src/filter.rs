@@ -93,31 +93,13 @@ pub mod video {
 
     /// Scales video dimensions.
     ///
-    /// `flags`: Optional SWS_FLAG string (e.g., "bilinear", "bicubic", "fast_bilinear").
-    /// Default is "fast_bilinear".
+    /// `flags`: Optional SWS_FLAG string, Default is "fast_bilinear".
+    /// (e.g. "fast_bilinear", "bilinear", "bicubic", "experimental", "neighbor", "area",
+    /// "bicublin", "gauss", "sinc", "lanczos", "spline").
     ///
-    /// See: [https://ffmpeg.org/ffmpeg-scaler.html#Scaler-Options](https://ffmpeg.org/ffmpeg-scaler.html#Scaler-Options)
+    /// See: <https://ffmpeg.org/ffmpeg-scaler.html#Scaler-Options>
     pub fn scale(width: u32, height: u32, flags: Option<&str>) -> Filter {
         let flags_str = flags.unwrap_or("fast_bilinear");
-        // Basic validation for common flags (can be extended)
-        let valid_flags = [
-            "fast_bilinear",
-            "bilinear",
-            "bicubic",
-            "neighbor",
-            "area",
-            "bicublin",
-            "gauss",
-            "sinc",
-            "lanczos",
-            "spline",
-        ];
-        if !valid_flags.contains(&flags_str) {
-            log::warn!(
-                "Scale flag '{}' is not in the known list, passing anyway.",
-                flags_str
-            );
-        }
 
         Filter::new(
             "scale",

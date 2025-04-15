@@ -392,7 +392,9 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()
     if frame.data[0].is_null() {
         // This check implies the frame buffer hasn't been allocated properly
         // alloc_buffer should have been called before passing the frame here.
-        return Err(Error::msg("Frame buffer is not allocated (frame.data is null)"));
+        return Err(Error::msg(
+            "Frame buffer is not allocated (frame.data is null)",
+        ));
     }
 
     // 2. Calculate the expected size of the contiguous buffer for the given format/dims
@@ -409,12 +411,8 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()
 
     unsafe {
         // 4. Prepare destination pointers and linesizes (from the frame itself)
-        let mut dst_data: [*mut u8; 4] = [
-            frame.data[0],
-            frame.data[1],
-            frame.data[2],
-            frame.data[3],
-        ];
+        let mut dst_data: [*mut u8; 4] =
+            [frame.data[0], frame.data[1], frame.data[2], frame.data[3]];
         // Note: AVFrame::linesize is [i32; AV_NUM_DATA_POINTERS], which is 8 on most platforms
         let dst_linesizes: [i32; 4] = [
             frame.linesize[0],
@@ -435,7 +433,7 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()
         // the packed layout pointers and linesizes within the source buffer.
         // This correctly handles planar vs packed logic based on pix_fmt.
         let ret_fill = ffi::av_image_fill_arrays(
-            src_data.as_mut_ptr() as *mut *mut u8,
+            src_data.as_mut_ptr(),
             src_linesizes.as_mut_ptr(),
             buffer.as_ptr(),
             pix_fmt,

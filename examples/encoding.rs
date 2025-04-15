@@ -24,7 +24,7 @@ fn main() {
 
     let filters = vec![
         filter::video::scale(1920, 1080, None),
-        filter::video::drawtext("Watermark", 50, 50, 24, "white@0.5"),
+        filter::video::drawtext("Watermark", 50, 50, "", 24, "white@0.5"),
     ];
 
     let width = 1280;

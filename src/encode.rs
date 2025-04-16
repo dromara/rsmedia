@@ -610,10 +610,7 @@ impl Encoder {
         let filtered_frame = if let Some(graph) = self.filter_graph.as_mut() {
             // 即便输入是 None (EOF flush), 也要调用 process_frame(None) 来驱动 Filter flush
             match graph.process_frame(frame_opt)? {
-                Some(filtered) => {
-                    // TODO: Filter 输出了一个或多个帧
-                    Some(filtered)
-                }
+                Some(filtered) => Some(filtered),
                 None => {
                     if graph.is_drained() {
                         log::debug!("Filter graph drained, try send new frame again.");

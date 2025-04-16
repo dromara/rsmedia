@@ -3,7 +3,7 @@ use crate::flags::MediaType;
 use crate::hwaccel::HWDeviceConfig;
 use crate::io::{Reader, Writer};
 use crate::stream::StreamInfo;
-use crate::{Decoder, DecoderBuilder, Encoder};
+use crate::{Decoder, DecoderBuilder, Encoder, Location, StreamReader, StreamWriter};
 
 use rsmpeg::avutil::AVFrame;
 
@@ -74,8 +74,15 @@ impl MuxerStream {
     }
 }
 
+impl Muxer<StreamWriter> {
+    pub fn new(destination: impl Into<Location>) -> Result<Self> {
+        let writer = StreamWriter::new(destination)?;
+        Ok(Self::new_from_writer(writer))
+    }
+}
+
 impl<W: Writer> Muxer<W> {
-    pub fn from_writer(writer: W) -> Self {
+    pub fn new_from_writer(writer: W) -> Self {
         Self {
             writer,
             streams: Vec::new(),
@@ -204,14 +211,21 @@ impl DemuxerStream {
     }
 }
 
+impl Demuxer<StreamReader> {
+    pub fn new(source: impl Into<Location>) -> Result<Self> {
+        let reader = StreamReader::new(source)?;
+        Self::new_from_reader(reader, None, None)
+    }
+}
+
 impl<R: Reader> Demuxer<R> {
-    pub fn from_reader(
+    pub fn new_from_reader(
         reader: R,
         filters: Option<Vec<Filter>>,
         device_config: Option<HWDeviceConfig>,
-    ) -> Result<Self> {
-        let device_type = device_config.as_ref().map(|c| c.device_type);
+    ) -> Result<Demuxer<R>> {
         let nb_streams = reader.input().nb_streams as usize;
+        let device_type = device_config.as_ref().map(|c| c.device_type);
         let filter_map = filters.unwrap_or_default().into_iter().fold(
             HashMap::<MediaType, Vec<Filter>>::new(),
             |mut map, f| {
@@ -230,7 +244,7 @@ impl<R: Reader> Demuxer<R> {
                 .with_codec_name(codec_name)
                 .with_hardware_device(device_config.clone())
                 .with_filters(filter_map.get(&media_type).cloned())
-                .build(&reader)
+                .build_from_reader(&reader)
                 .context("Failed to build decoder")?;
 
             streams.push(DemuxerStream::new(decoder, stream_info));
@@ -279,7 +293,6 @@ impl<R: Reader> Demuxer<R> {
                 match self.reader.read_packet() {
                     Ok(Some((stream, packet))) => {
                         let stream_idx = stream.index();
-                        // get demuxer stream
                         let demux_stream = self
                             .streams
                             .iter_mut()
@@ -470,8 +483,7 @@ mod tests {
         let (width, height) = (1920, 1080);
         let video_encoder = Encoder::new_video(width, height)?;
 
-        let stream_writer = StreamWriter::new(output_path)?;
-        let mut muxer = Muxer::from_writer(stream_writer);
+        let mut muxer = Muxer::new(output_path)?;
 
         let encoder_frame_rate = video_encoder.frame_rate();
         let encoder_time_base = video_encoder.time_base();
@@ -497,8 +509,7 @@ mod tests {
         //////////////////////////////////////////////////////////////////
 
         // Demuxer 测试视频解码
-        let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
+        let demuxer = Demuxer::new(output_path)?;
         for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_index, des.media_type)
         }
@@ -530,8 +541,7 @@ mod tests {
 
         // 添加音频流
         let audio_encoder = Encoder::new_audio(channels, sample_rate, SampleFormat::FLTP).unwrap();
-        let stream_writer = StreamWriter::new(output_path)?;
-        let mut muxer = Muxer::from_writer(stream_writer);
+        let mut muxer = Muxer::new(output_path)?;
 
         let encoder_time_base = audio_encoder.time_base();
         let audio_index = muxer.add_stream(audio_encoder)?;
@@ -569,8 +579,7 @@ mod tests {
         //////////////////////////////////////////////////////////////////
 
         // Demuxer 测试音频解码
-        let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
+        let demuxer = Demuxer::new(output_path)?;
         for des in &demuxer.streams {
             println!("{:?}, {:?}", des.stream_index, des.media_type)
         }
@@ -608,8 +617,7 @@ mod tests {
                 .with_codec_name(Some("libmp3lame".to_string()))
                 .build()?;
 
-        let stream_writer = StreamWriter::new(output_path)?;
-        let mut muxer = Muxer::from_writer(stream_writer);
+        let mut muxer = Muxer::new(output_path)?;
 
         let encoder_time_base = audio_encoder.time_base();
         let audio_index = muxer.add_stream(audio_encoder)?;
@@ -671,8 +679,7 @@ mod tests {
         let audio_encoder =
             Encoder::new_audio(AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, SampleFormat::FLTP)?;
 
-        let stream_writer = StreamWriter::new(output_path)?;
-        let mut muxer = Muxer::from_writer(stream_writer);
+        let mut muxer = Muxer::new(output_path)?;
 
         let video_time_base = video_encoder.time_base();
         let audio_time_base = audio_encoder.time_base();
@@ -756,8 +763,7 @@ mod tests {
         /////////////////////////////////////////////////////////////////////////////
 
         // 解封装验证
-        let stream_reader = StreamReader::new(output_path)?;
-        let demuxer = Demuxer::from_reader(stream_reader, None, None)?;
+        let demuxer = Demuxer::new(output_path)?;
         for stream in &demuxer.streams {
             println!("{:?}, {:?}", stream.stream_index, stream.media_type)
         }

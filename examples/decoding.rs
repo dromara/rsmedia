@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
         // .with_codec_name(Some("h264_cuvid".to_string()))
         .with_filters(Some(filters))
-        .build(&stream_reader)
+        .build_from_reader(&stream_reader)
         .context("failed to create decoder")?;
 
     std::fs::create_dir_all(OUTPUT_DIR).context("failed to create output directory")?;

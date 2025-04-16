@@ -6,7 +6,7 @@ use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
 use crate::stream::StreamInfo;
-use crate::{utils, MediaType, PixelFormat, RawFrame, SampleFormat, Time};
+use crate::{utils, Location, MediaType, PixelFormat, RawFrame, SampleFormat, StreamReader, Time};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::avformat::AVStream;
@@ -119,8 +119,8 @@ impl DecoderBuilder {
     }
 
     /// Build [`Decoder`].
-    pub fn build<R: Reader>(self, reader: &R) -> Result<Decoder> {
-        self.build_from_reader(reader)
+    pub fn build(self, source: impl Into<Location>) -> Result<Decoder> {
+        self.build_from_reader(&StreamReader::new(source)?)
     }
 
     pub fn build_from_reader<R: Reader>(self, reader: &R) -> Result<Decoder> {
@@ -301,8 +301,8 @@ impl Decoder {
     ///
     /// * `reader` - A [`Reader`] to read the source from.
     #[inline]
-    pub fn new_video<R: Reader>(reader: &R) -> Result<Decoder> {
-        DecoderBuilder::new_video().build(reader)
+    pub fn new_video(source: impl Into<Location>) -> Result<Decoder> {
+        DecoderBuilder::new_video().build(source)
     }
 
     /// Create a decoder to decode the audio stream of the specified source.
@@ -311,8 +311,8 @@ impl Decoder {
     ///
     /// * `reader` - A [`Reader`] to read the source from.
     #[inline]
-    pub fn new_audio<R: Reader>(reader: &R) -> Result<Decoder> {
-        DecoderBuilder::new_audio().build(reader)
+    pub fn new_audio(source: impl Into<Location>) -> Result<Decoder> {
+        DecoderBuilder::new_audio().build(source)
     }
 
     /// Get the decoders input size width
@@ -792,7 +792,6 @@ unsafe impl Sync for Decoder {}
 mod tests {
     use super::*;
     use crate::filter;
-    use crate::io::StreamReader;
 
     #[test]
     #[ignore = "need a video file"]
@@ -807,7 +806,7 @@ mod tests {
         let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = DecoderBuilder::new_video()
             .with_filters(Some(filters))
-            .build(&stream_reader)
+            .build_from_reader(&stream_reader)
             .unwrap();
         loop {
             match decoder.decode_raw(&mut stream_reader) {
@@ -841,7 +840,7 @@ mod tests {
         let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = DecoderBuilder::new_audio()
             .with_filters(Some(filters))
-            .build(&stream_reader)
+            .build_from_reader(&stream_reader)
             .unwrap();
         loop {
             match decoder.decode_raw(&mut stream_reader) {

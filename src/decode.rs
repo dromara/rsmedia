@@ -120,9 +120,21 @@ impl DecoderBuilder {
 
     /// Build [`Decoder`].
     pub fn build(self, source: impl Into<Location>) -> Result<Decoder> {
-        self.build_from_reader(&StreamReader::new(source)?)
+        let reader = StreamReader::new(source)?;
+        self.build_from_reader(&reader)
     }
 
+    /// 创建一个包装的解码器
+    pub fn build_wrapped(
+        self,
+        source: impl Into<Location>,
+    ) -> Result<DecoderWrapper<StreamReader>> {
+        let reader = StreamReader::new(source)?;
+        let decoder = self.build_from_reader(&reader)?;
+        Ok(DecoderWrapper::new(decoder, reader))
+    }
+
+    /// a reader be required to get input stream, and build a decoder.
     pub fn build_from_reader<R: Reader>(self, reader: &R) -> Result<Decoder> {
         let media_type = self.media_type;
         let (stream_index, codec_name) = reader.find_best_stream(media_type)?;
@@ -509,34 +521,6 @@ impl Decoder {
         })
     }
 
-    // /// Seek in reader.
-    // ///
-    // /// See [`StreamReader::seek`](crate::io::StreamReader::seek) for more information.
-    // #[inline]
-    // pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
-    //     self.reader
-    //         .seek(timestamp_milliseconds)
-    //         .inspect(|_| self.flush())
-    // }
-
-    // /// Seek to specific frame in reader.
-    // ///
-    // /// See [`StreamReader::seek_to_frame`](crate::io::StreamReader::seek_to_frame) for more information.
-    // #[inline]
-    // pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
-    //     self.reader
-    //         .seek_to_frame(frame_number)
-    //         .inspect(|_| self.flush())
-    // }
-
-    // /// Seek to start of reader.
-    // ///
-    // /// See [`StreamReader::seek_to_start`](crate::io::StreamReader::seek_to_start) for more information.
-    // #[inline]
-    // pub fn seek_to_start(&mut self) -> Result<()> {
-    //     self.reader.seek_to_start().inspect(|_| self.flush())
-    // }
-
     /// Decode a [`Packet`].
     ///
     /// Feeds the packet to the decoder and returns a frame if there is one available. The caller
@@ -667,7 +651,7 @@ impl Decoder {
         if let Some(graph) = self.filter_graph.as_mut() {
             // filter process
             match graph.process_frame(Some(sw_frame))? {
-                Some(filtered_frame) => Ok(Some(filtered_frame)), // 返回过滤后的帧
+                Some(filtered_frame) => Ok(Some(filtered_frame)),
                 None => {
                     if graph.is_drained() {
                         // Filter graph 当前输入帧未能产生输出帧，需要继续尝试拉取
@@ -788,6 +772,73 @@ impl Drop for Decoder {
 unsafe impl Send for Decoder {}
 unsafe impl Sync for Decoder {}
 
+/// 解码器包装器，持有 Decoder 和 Reader
+pub struct DecoderWrapper<R: Reader> {
+    decoder: Decoder,
+    reader: R,
+}
+
+impl<R: Reader> DecoderWrapper<R> {
+    /// 创建一个新的解码器包装器
+    pub fn new(decoder: Decoder, reader: R) -> Self {
+        Self { decoder, reader }
+    }
+
+    /// 解码下一帧（媒体帧）
+    #[cfg(feature = "ndarray")]
+    pub fn decode<T: MediaFrameType>(&mut self) -> Result<Option<MediaFrame<T>>> {
+        self.decoder.decode(&mut self.reader)
+    }
+
+    /// 解码下一帧（原始帧）
+    pub fn decode_raw(&mut self) -> Result<Option<RawFrame>> {
+        self.decoder.decode_raw(&mut self.reader)
+    }
+
+    /// 获取内部解码器的可变引用
+    pub fn decoder_mut(&mut self) -> &mut Decoder {
+        &mut self.decoder
+    }
+
+    /// 获取内部读取器的可变引用
+    pub fn reader_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
+    /// 解构并返回内部组件
+    pub fn into_parts(self) -> (Decoder, R) {
+        (self.decoder, self.reader)
+    }
+
+    // /// Seek in reader.
+    // ///
+    // /// See [`StreamReader::seek`](crate::io::StreamReader::seek) for more information.
+    // #[inline]
+    // pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
+    //     self.reader
+    //         .seek(timestamp_milliseconds)
+    //         .inspect(|_| self.flush())
+    // }
+
+    // /// Seek to specific frame in reader.
+    // ///
+    // /// See [`StreamReader::seek_to_frame`](crate::io::StreamReader::seek_to_frame) for more information.
+    // #[inline]
+    // pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
+    //     self.reader
+    //         .seek_to_frame(frame_number)
+    //         .inspect(|_| self.flush())
+    // }
+
+    // /// Seek to start of reader.
+    // ///
+    // /// See [`StreamReader::seek_to_start`](crate::io::StreamReader::seek_to_start) for more information.
+    // #[inline]
+    // pub fn seek_to_start(&mut self) -> Result<()> {
+    //     self.reader.seek_to_start().inspect(|_| self.flush())
+    // }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -796,20 +847,19 @@ mod tests {
     #[test]
     #[ignore = "need a video file"]
     fn test_decode_video() -> Result<()> {
-        let path = std::path::Path::new("/tmp/bear.mp4");
+        let video_path = std::path::Path::new("/tmp/bear.mp4");
 
         let filters = vec![
             filter::video::scale(1280, 720, None),
             filter::video::drawtext("Hello", 10, 10, "", 24, "white"),
         ];
 
-        let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = DecoderBuilder::new_video()
             .with_filters(Some(filters))
-            .build_from_reader(&stream_reader)
-            .unwrap();
+            .build_wrapped(video_path)?;
+
         loop {
-            match decoder.decode_raw(&mut stream_reader) {
+            match decoder.decode_raw() {
                 Ok(Some(frame)) => {
                     println!("video frame: {:?}, timebase:{:?}", frame, frame.time_base);
                 }
@@ -830,20 +880,19 @@ mod tests {
     #[test]
     #[ignore = "need a audio file"]
     fn test_decode_audio() -> Result<()> {
-        let path = std::path::Path::new("/tmp/bear.mp4");
+        let audio_path = std::path::Path::new("/tmp/bear.mp4");
 
         let filters = vec![
             filter::audio::resample(2, 48000, SampleFormat::FLTP),
             filter::audio::volume(1.5),
         ];
 
-        let mut stream_reader = StreamReader::new(path)?;
         let mut decoder = DecoderBuilder::new_audio()
             .with_filters(Some(filters))
-            .build_from_reader(&stream_reader)
-            .unwrap();
+            .build_wrapped(audio_path)?;
+
         loop {
-            match decoder.decode_raw(&mut stream_reader) {
+            match decoder.decode_raw() {
                 Ok(Some(frame)) => {
                     println!("audio frame: {:?}, timebase:{:?}", frame, frame.time_base);
                 }

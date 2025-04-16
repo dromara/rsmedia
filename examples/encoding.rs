@@ -26,8 +26,6 @@ fn main() {
         filter::video::scale(1920, 1080, Some("bicubic")),
         filter::video::crop(100, 100, 1600, 900),
         filter::video::drawtext("Watermark", 50, 50, "fonts/Arial.ttf", 24, "white@0.5"),
-        // filter::video::fade_in(10),
-        // filter::video::fade_out(0, 30),
         filter::video::hflip(),
     ];
 

@@ -38,28 +38,28 @@ Supported Platforms:
 
 Hardware acceleration:
 
-| API        | Platform  | Arch    | Hardware Requirements          | Support            | Notes                     |
-|------------|-----------|---------|--------------------------------|--------------------|---------------------------|
-| VDPAU      | Linux     | x86_64  | NVIDIA GPU                     | ⚠️ Full            | `nvidia-vdpau-driver`     |
-|            | Linux     | aarch64 | NVIDIA GPU                     | ⚠️ Full            | Jetson AGX support        |
-| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             | Container-ready           |
-|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             | Jetson/Orin               |
-|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full             |                           |
-|            | Windows   | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ⚠️ Partial         | Limited driver support    |
-| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU       | ⚠️ Full            | `intel-media-driver`      |
-|            | Linux     | aarch64 | Mali/AMD GPU                   | ⚠️ Partial         | Kernel 5.15+ required     |
-| DXVA2      | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full            | WDDM 2.0+                 |
-| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full            | `intel-media-va-driver`   |
-|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full            | Intel Media SDK           |
-| TOOLBOX    | macOS     | x86_64  | Intel GPU                      | ✅ Native           | macOS 10.13+              |
-|            | macOS     | aarch64 | Apple Silicon GPU (M series)   | ✅ Native           |                           |
-| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full            |                           |
-|            | Windows   | aarch64 | DX11-compatible GPU            | ⚠️ Partial         | ARM64 Windows 11          |
-| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU                 | ⚠️ Partial         | `libdrm` + KMS            |
-|            | Linux     | aarch64 | Mali GPU                       | ⚠️ Partial         |                           |
-| MEDIACODEC | Android   | arm64   | Hardware decoder               | ⚠️ Full            | Android 12+               |
-| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU            | ⚠️ Experimental    | FFmpeg 7.0+               |
-|            | Windows   | aarch64 | DX12-compatible GPU            | ⚠️ Experimental    | FFmpeg 7.0+               |
+| API        | Platform  | Arch    | Hardware Requirements          | Support         | Notes                    |
+|------------|-----------|---------|--------------------------------|-----------------|--------------------------|
+| VDPAU      | Linux     | x86_64  | NVIDIA GPU                     | ⚠️ Full         | `nvidia-vdpau-driver`    |
+|            | Linux     | aarch64 | NVIDIA GPU                     | ⚠️ Full         | Jetson AGX support       |
+| CUDA       | Linux     | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full          | Container-ready          |
+|            | Linux     | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ✅ Full          | Jetson/Orin              |
+|            | Windows   | x86_64  | NVIDIA GPU (Compute ≥3.5)      | ✅ Full          |                          |
+|            | Windows   | aarch64 | NVIDIA GPU (Compute ≥3.5)      | ⚠️ Partial      | Limited driver support   |
+| VAAPI      | Linux     | x86_64  | Intel/AMD/Integrated GPU       | ⚠️ Full         | `intel-media-driver`     |
+|            | Linux     | aarch64 | Mali/AMD GPU                   | ⚠️ Partial      | Kernel 5.15+ required    |
+| DXVA2      | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full         | WDDM 2.0+                |
+| QSV        | Linux     | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full         | `intel-media-va-driver`  |
+|            | Windows   | x86_64  | Intel iGPU (≥6th Gen)          | ⚠️ Full         | Intel Media SDK          |
+| TOOLBOX    | macOS     | x86_64  | Intel GPU                      | ✅ Native        | macOS 10.13+             |
+|            | macOS     | aarch64 | Apple Silicon GPU (M series)   | ✅ Native        |                          |
+| D3D11VA    | Windows   | x86_64  | DX11-compatible GPU            | ⚠️ Full         |                          |
+|            | Windows   | aarch64 | DX11-compatible GPU            | ⚠️ Partial      | ARM64 Windows 11         |
+| DRM        | Linux     | x86_64  | AMD/NVIDIA GPU                 | ⚠️ Partial      | `libdrm` + KMS           |
+|            | Linux     | aarch64 | Mali GPU                       | ⚠️ Partial      |                          |
+| MEDIACODEC | Android   | arm64   | Hardware decoder               | ⚠️ Full         | Android 12+              |
+| D3D12VA    | Windows   | x86_64  | DX12-compatible GPU            | ⚠️ Experimental | FFmpeg 7.0+              |
+|            | Windows   | aarch64 | DX12-compatible GPU            | ⚠️ Experimental | FFmpeg 7.0+              |
 
 > **Note:**
 - ✅ Full support / Successful
@@ -168,104 +168,34 @@ export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 ### 1. Demux and mux a video:
 
 ```rust
-use rsmedia::{
-  mux::{DemuxResult, Demuxer, Muxer},
-  EncoderBuilder, MediaType, Options, PixelFormat, SampleFormat, StreamReader,
-  StreamWriterBuilder,
-};
-
-use std::path::Path;
-
 fn main() {
   rsmedia::init().unwrap();
 
   let input_path = Path::new("/tmp/bear.mp4");
-  let stream_reader = StreamReader::new(input_path).unwrap();
-  let mut demuxer = Demuxer::from_reader(stream_reader, None, None).unwrap();
+  let mut demuxer = Demuxer::new(input_path).unwrap();
 
-  let output_path = Path::new("/tmp/output.mov");
-  let stream_writer = StreamWriterBuilder::new(output_path)
-          .with_format("mov")
-          .with_options(Options::preset_avformat_fragmented_mov())
-          .build()
-          .unwrap();
-  let mut muxer = Muxer::from_writer(stream_writer);
-
-  // add all streams from input to output muxer
-  for in_stream in demuxer.streams() {
-    let stream_info = &in_stream.stream_info;
-
-    let encoder = {
-      if stream_info.media_type == MediaType::VIDEO {
-        // build video encoder
-        EncoderBuilder::new_video(stream_info.width as u32, stream_info.height as u32)
-                // cuda acceleration
-                // .with_hardware_device(Some(HWDeviceType::CUDA))
-                // .with_codec_name("h264_nvenc".to_string())
-                // notes: options must be match with input video encoder codec,
-                // .with_options(Options::preset_h264_nvenc())
-                .with_bit_rate(stream_info.bit_rate)
-                // video
-                .with_time_base_ra(stream_info.time_base)
-                .with_frame_rate_ra(stream_info.frame_rate)
-                .with_pixel_format(PixelFormat::from(stream_info.format))
-                .build()
-                .unwrap()
-      } else if stream_info.media_type == MediaType::AUDIO {
-        // build audio encoder
-        EncoderBuilder::new_audio(
-          stream_info.bit_rate,
-          stream_info.channel_layout.nb_channels as u32,
-          stream_info.sample_rate as u32,
-          SampleFormat::from(stream_info.format),
-        )
-                .build()
-                .unwrap()
-      } else {
-        panic!("Unsupported media type: {:?}", stream_info.media_type);
-      }
-    };
-
-    let _stream_index = muxer.add_stream(encoder).unwrap();
-  }
-
-  // demux and mux all frames from input to output muxer
+  // demux and mux all streams frame
   loop {
     match demuxer.demux() {
-      DemuxResult::Frame(stream_index, frame) => {
+      Ok(Some((stream_index, frame))) => {
         println!("stream index:{}, {:?}", stream_index, frame);
-        let _ = muxer.mux(frame, stream_index).unwrap();
       }
-      DemuxResult::Drain => {
-        println!("Need more data, continuing...");
-        continue;
-      }
-      DemuxResult::Flushed => {
-        println!("Input stream EOF reached");
+      Ok(None) => {
+        log::info!("End of input file");
         break;
       }
-      DemuxResult::Error(e) => {
+      Err(e) => {
         eprintln!("Demuxing error: {}", e);
         break;
       }
     }
   }
-
-  // finish muxer
-  muxer.finish().unwrap();
 }
 ```
 
 ### 2. Decode a video and print the RGB value for the top left pixel:
 
 ```rust
-use image::{ImageBuffer, Rgb};
-use rsmedia::decode::Decoder;
-use rsmedia::frame;
-use std::error::Error;
-use tokio::task;
-use url::Url;
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     rsmedia::init()?;
@@ -273,123 +203,82 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
         .parse::<Url>()
         .unwrap();
-    let mut decoder = Decoder::new(source).expect("failed to create decoder");
 
-    let output_folder = "frames_video_rs";
-    std::fs::create_dir_all(output_folder).expect("failed to create output directory");
+    let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
+          // decoder with CUDA acceleration
+          // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
+          // .with_codec_name(Some("h264_cuvid".to_string()))
+          .build_wrapped(source)
+          .context("failed to create decoder")?;
 
-    let (width, height) = decoder.size();
-    let frame_rate = decoder.frame_rate(); // Assuming 30 FPS if not available
-
-    let max_duration = 20.0; // Max duration in seconds
-    let _max_frames = (frame_rate * max_duration).ceil() as usize;
-
-    let mut frame_count = 0;
-    let mut elapsed_time = 0.0;
-    let mut tasks = vec![];
-
-    for frame in decoder.decode_iter() {
-        if let Ok((_timestamp, yuv_frame)) = frame {
-            if elapsed_time > max_duration {
-                break;
-            }
-
-            // Notes: yuv frame
-            let rgb_frame = frame::convert_ndarray_yuv_to_rgb(&yuv_frame).unwrap();
-
-            let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
-                ImageBuffer::from_raw(width, height, rgb_frame.as_slice().unwrap().to_vec())
-                    .expect("failed to create image buffer");
-
-            let frame_path = format!("{}/frame_{:05}.png", output_folder, frame_count);
-
-            let task = task::spawn_blocking(move || {
-                img.save(&frame_path).expect("failed to save frame");
-            });
-
-            tasks.push(task);
-
-            frame_count += 1;
-            elapsed_time += 1.0 / frame_rate;
-        } else {
-            break;
-        }
+  loop {
+    match decoder.decode::<u8>() {
+      Ok(Some(yuv_frame)) => {
+        println!(
+          "decoded frame pts: {}, type: {:?}, format:{:?}",
+          yuv_frame.pts, yuv_frame.media_type, yuv_frame.format
+        );
+        
+        // processing frame here...
+        // process_frame(yuv_frame)?;
+      }
+      Ok(None) => {
+        println!("Decoder has reached the end of the stream");
+        break;
+      }
+      Err(e) => {
+        println!("Error decoding frame: {}", e);
+        break;
+      }
     }
-
-    // Await all tasks to finish
-    for task in tasks {
-        task.await.expect("task failed");
-    }
-
-    println!("Saved {} frames in the '{}' directory", frame_count, output_folder);
-    Ok(())
+  }
+  
+  Ok(())
 }
 ```
 
 ### 3. Encode a 🌈 video, using `ndarray` to create each frame:
 
 ```rust
-use rsmedia::io::private::{Output, Write};
-use rsmedia::time::Time;
-use rsmedia::{colors, StreamWriter};
-use rsmedia::{EncoderBuilder, FrameArray};
-
-use anyhow::Context;
-use rsmedia::stream::StreamInfo;
-use std::path::Path;
-
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
   rsmedia::init().unwrap();
 
-  let mut encoder = EncoderBuilder::new()
-          .with_video_size(1280, 720)
-          // use hwaccel cuda
-          // .with_hardware_device(HWDeviceType::CUDA)
-          // libx264, libx265, h264_nvenc, h264_vaapi etc.
-          // .with_codec_name("h264_nvenc".to_string())
-          // .with_codec_options(&Options::preset_h264_nvenc())
-          .build()
-          .expect("failed to create encoder");
-
   let output_path = Path::new("/tmp/rainbow.mp4");
-  let mut stream_writer = StreamWriter::new(output_path).unwrap();
-  let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base().into());
-  let stream_info = StreamInfo::from_writer(&stream_writer, video_index).unwrap();
-
-  // Write the header to the output file.
-  stream_writer.write_header().unwrap();
+  let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)
+          // encoder with CUDA acceleration
+          // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
+          // libx264, libx265, h264_nvenc, h264_vaapi
+          // .with_codec_name(Some("h264_nvenc".to_string()))
+          // .with_options(Some(Options::preset_h264_nvenc()))
+          .with_filters(Some(filters))
+          .build_wrapped(output_path)
+          .expect("failed to create encoder");
 
   let duration: Time = Time::from_nth_of_a_second(24);
   let mut position = Time::zero();
 
   for i in 0..256 {
     // This will create a smooth rainbow animation video!
-    let frame = rainbow_frame(i as f32 / 256.0);
+    let mut frame = rainbow_frame(width as usize, height as usize, i as f32 / 256.0);
 
-    match encoder.encode(&frame, position) {
-      Ok(Some(mut packet)) => {
-        packet.set_pos(-1);
-        packet.set_stream_index(video_index as i32);
-        packet.rescale_ts(encoder.time_base(), stream_info.time_base);
-        stream_writer
-                .write_frame(&mut packet)
-                .context("failed to write frame")
-                .unwrap();
-      }
-      Ok(None) => {
-        println!("No packet received from encoder.");
-      }
-      Err(e) => {
-        println!("Error encoding frame: {:?}", e);
-      }
-    }
+    frame.set_pts(
+      position
+              .aligned_with_rational(encoder.time_base())
+              .into_value()
+              .unwrap(),
+    );
+
+    encoder.encode(frame)?;
+
+    println!("Encoded frame {} at position {}", i, position);
 
     // Update the current position and add the inter-frame duration to it.
     position = position.aligned_with(duration).add();
   }
 
-  encoder.flush().expect("failed to finish encoder");
-  stream_writer.write_trailer().unwrap();
+  encoder.finish()?;
+
+  Ok(())
 }
 
 fn rainbow_frame(p: f32) -> FrameArray {

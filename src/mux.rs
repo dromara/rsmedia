@@ -373,7 +373,6 @@ unsafe impl<R: Reader> Sync for Demuxer<R> {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::private::Output;
     use crate::{utils, EncoderBuilder, PixelFormat, SampleFormat, StreamReader, StreamWriter};
 
     use anyhow::{Context, Result};
@@ -793,6 +792,8 @@ mod tests {
         let mut input_reader = StreamReader::new(Path::new(input_path))?;
         let input = input_reader.input();
 
+        // inner output
+        use crate::io::private::Output;
         let mut output_writer = StreamWriter::new(Path::new(output_path))?;
         let output = output_writer.output_mut();
 

@@ -4,9 +4,10 @@ use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{MediaFrame, MediaFrameType};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
+use crate::io::{private::Output, Writer};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::{swctx, time, utils, MediaType, RawFrame, SampleFormat, Writer};
+use crate::{swctx, time, utils, Location, MediaType, RawFrame, SampleFormat, StreamWriter};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
 use rsmpeg::avutil::{AVChannelLayout, AVChannelLayoutRef};
@@ -297,6 +298,16 @@ impl EncoderBuilder {
         Ok(())
     }
 
+    pub fn build_wrapped(
+        self,
+        destination: impl Into<Location>,
+    ) -> Result<EncoderWrapper<StreamWriter>> {
+        let encoder = self.build()?;
+        let mut writer = StreamWriter::new(destination)?;
+        let index = writer.add_stream(encoder.codecpar(), encoder.time_base());
+        Ok(EncoderWrapper::new(encoder, writer, index, true))
+    }
+
     /// Build an [`Encoder`].
     ///
     /// Create an encoder from a [`StreamWriter`].
@@ -562,6 +573,7 @@ impl Encoder {
     pub fn encode_raw(&mut self, frame: RawFrame) -> Result<Option<AVPacket>> {
         log::info!("{:?}, time_base: {:?}", frame, frame.time_base);
 
+        // reformat
         let raw_frame = match self.media_type {
             MediaType::VIDEO => {
                 if frame.width != self.width()
@@ -837,13 +849,103 @@ impl Drop for Encoder {
 unsafe impl Send for Encoder {}
 unsafe impl Sync for Encoder {}
 
+/// 编码器包装器，持有编码器和写入器
+pub struct EncoderWrapper<W: Writer> {
+    writer: W,
+    encoder: Encoder,
+    interleaved: bool,
+    stream_index: usize,
+    have_written_header: bool,
+    have_written_trailer: bool,
+}
+
+impl<W: Writer> EncoderWrapper<W> {
+    /// 创建一个新的编码器包装器
+    pub fn new(encoder: Encoder, writer: W, stream_index: usize, interleaved: bool) -> Self {
+        Self {
+            writer,
+            encoder,
+            interleaved,
+            stream_index,
+            have_written_header: false,
+            have_written_trailer: false,
+        }
+    }
+
+    #[cfg(feature = "ndarray")]
+    pub fn encode<T: MediaFrameType>(&mut self, frame: MediaFrame<T>) -> Result<()> {
+        let raw_frame = frame.to_avframe()?;
+        self.encode_raw(raw_frame)
+    }
+
+    pub fn encode_raw(&mut self, frame: RawFrame) -> Result<()> {
+        // Write file header if we hadn't done that yet.
+        if !self.have_written_header {
+            self.writer.write_header()?;
+            self.have_written_header = true;
+        }
+
+        if let Some(mut pkt) = self.encoder.encode_raw(frame)? {
+            if self.interleaved {
+                self.writer.write_interleaved(&mut pkt)?;
+            } else {
+                self.writer.write_frame(&mut pkt)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Signal to the encoder that writing has finished. This will cause any packets in the encoder
+    /// to be flushed and a trailer to be written if the container format has one.
+    ///
+    /// Note: If you don't call this function before dropping the encoder, it will be called
+    /// automatically. This will block the caller thread. Any errors cannot be propagated in this
+    /// case.
+    pub fn finish(&mut self) -> Result<()> {
+        if self.have_written_header && !self.have_written_trailer {
+            self.have_written_trailer = true;
+            self.flush()?;
+            self.writer.write_trailer()?;
+        }
+
+        Ok(())
+    }
+
+    /// 刷新编码器并写入剩余数据
+    fn flush(&mut self) -> Result<()> {
+        self.encoder.flush(
+            &mut self.writer,
+            self.interleaved,
+            self.stream_index,
+            self.encoder.time_base(),
+        )
+    }
+
+    pub fn time_base(&self) -> ffi::AVRational {
+        self.encoder.time_base()
+    }
+
+    /// 获取内部编码器的可变引用
+    pub fn encoder_mut(&mut self) -> &mut Encoder {
+        &mut self.encoder
+    }
+
+    /// 获取内部写入器的可变引用
+    pub fn writer_mut(&mut self) -> &mut W {
+        &mut self.writer
+    }
+
+    /// 解构并返回内部组件
+    pub fn into_parts(self) -> (Encoder, W) {
+        (self.encoder, self.writer)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::filter;
-    use crate::io::private::{Output, Write};
-    use crate::stream::StreamInfo;
-    use crate::StreamWriterBuilder;
 
     use std::collections::HashMap;
     use std::path::Path;
@@ -1076,38 +1178,17 @@ mod tests {
         // 视频编码参数
         let width = 1280;
         let height = 720;
+        // 确定输出路径和扩展名
+        let output_file = format!("/tmp/test_encode_video.{}", container_type);
+        let output_path = Path::new(output_file.as_str());
+
         // 创建编码器
         let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)
             .with_time_base(time_base.0, time_base.1)
             .with_codec_name(Some(config.codec_name))
             .with_options(config.codec_options.map(|opts| opts.into()))
             .with_filters(Some(filters))
-            .build()?;
-
-        // 确定输出路径和扩展名
-        let output_file = format!("/tmp/test_encode_video.{}", container_type);
-        let output_path = Path::new(output_file.as_str());
-
-        // 创建流写入器
-        let mut stream_writer = StreamWriterBuilder::new(output_path)
-            .with_options(config.format_options.map(|opts| opts.into()))
-            .build()?;
-        let video_index = stream_writer.add_stream(encoder.codecpar(), encoder.time_base());
-        let stream_info = StreamInfo::from_writer(&stream_writer, video_index)?;
-
-        // 输出实际使用的时间基（可能与请求的不同）
-        println!(
-            "Requested timebase: {}/{}, Actual encoder timebase: {}/{}, Stream timebase: {}/{}",
-            time_base.0,
-            time_base.1,
-            encoder.time_base().num,
-            encoder.time_base().den,
-            stream_info.time_base.num,
-            stream_info.time_base.den
-        );
-
-        // write header
-        stream_writer.write_header()?;
+            .build_wrapped(output_path)?;
 
         fn rainbow_frame(w: usize, h: usize, p: f32) -> MediaFrame<u8> {
             use crate::colors;
@@ -1156,52 +1237,15 @@ mod tests {
                     .into_value()
                     .unwrap(),
             );
-            match encoder.encode(frame) {
-                Ok(Some(mut packet)) => {
-                    packet.set_pos(-1);
-                    packet.set_stream_index(video_index as i32);
 
-                    // 将编码器输出的数据包时间戳，从编码器时间基转换到输出流时间基
-                    // encode_ctx_timebase => out_stream_time_base
-                    let orig_pts = packet.pts;
-                    packet.rescale_ts(encoder.time_base(), stream_info.time_base);
-                    let new_pts = packet.pts;
-                    // 只打印少量帧以避免日志过多
-                    if i < 5 || i % 30 == 0 {
-                        println!("Frame {}: orig_pts={}, new_pts={}", i, orig_pts, new_pts);
-                    }
-
-                    stream_writer.write_frame(&mut packet)?;
-                }
-                Ok(None) => {
-                    if encoder.is_flushed() {
-                        println!("Encoder flushed, EOF reached.");
-                        break;
-                    } else {
-                        println!("Encoder drained, try send new frame again.");
-                        continue;
-                    }
-                }
-                Err(e) => {
-                    println!("Encode error: {}", e);
-                    break;
-                }
-            }
+            encoder.encode(frame)?;
 
             // 使用aligned_with确保时间基一致进行加法操作
             position = position.aligned_with(duration).add();
         }
 
         // flush encoder
-        encoder.flush(
-            &mut stream_writer,
-            false,
-            video_index,
-            stream_info.time_base,
-        )?;
-
-        // write trailer
-        stream_writer.write_trailer()?;
+        encoder.finish().unwrap();
 
         Ok(())
     }

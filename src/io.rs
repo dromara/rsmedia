@@ -534,9 +534,8 @@ impl Writer for PacketizedBufWriter {}
 unsafe impl Send for PacketizedBufWriter {}
 unsafe impl Sync for PacketizedBufWriter {}
 
-pub mod private {
+pub(crate) mod private {
     use super::*;
-    use rsmpeg::avcodec::AVPacket;
 
     pub trait Write {
         type Out;

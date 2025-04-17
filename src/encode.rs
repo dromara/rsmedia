@@ -7,10 +7,10 @@ use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::{private::Output, Writer};
 use crate::options::Options;
 use crate::pixel::PixelFormat;
-use crate::{swctx, time, utils, Location, MediaType, RawFrame, SampleFormat, StreamWriter};
+use crate::{swctx, time, utils, Location, MediaType, SampleFormat, StreamWriter};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
-use rsmpeg::avutil::{AVChannelLayout, AVChannelLayoutRef};
+use rsmpeg::avutil::{AVChannelLayout, AVChannelLayoutRef, AVFrame};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -570,7 +570,7 @@ impl Encoder {
     /// # Arguments
     ///
     /// * `frame` - Frame to encode.
-    pub fn encode_raw(&mut self, frame: RawFrame) -> Result<Option<AVPacket>> {
+    pub fn encode_raw(&mut self, frame: AVFrame) -> Result<Option<AVPacket>> {
         log::info!("{:?}, time_base: {:?}", frame, frame.time_base);
 
         // reformat
@@ -617,7 +617,7 @@ impl Encoder {
         self.receive_packet()
     }
 
-    fn send_frame_to_encoder(&mut self, frame_opt: Option<RawFrame>) -> Result<()> {
+    fn send_frame_to_encoder(&mut self, frame_opt: Option<AVFrame>) -> Result<()> {
         // 1. 应用 Filter Graph (如果存在)
         let filtered_frame = if let Some(graph) = self.filter_graph.as_mut() {
             // 即便输入是 None (EOF flush), 也要调用 process_frame(None) 来驱动 Filter flush
@@ -878,7 +878,7 @@ impl<W: Writer> EncoderWrapper<W> {
         self.encode_raw(raw_frame)
     }
 
-    pub fn encode_raw(&mut self, frame: RawFrame) -> Result<()> {
+    pub fn encode_raw(&mut self, frame: AVFrame) -> Result<()> {
         // Write file header if we hadn't done that yet.
         if !self.have_written_header {
             self.writer.write_header()?;

@@ -6,11 +6,11 @@ use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
 use crate::stream::StreamInfo;
-use crate::{utils, Location, MediaType, PixelFormat, RawFrame, SampleFormat, StreamReader, Time};
+use crate::{utils, Location, MediaType, PixelFormat, SampleFormat, StreamReader, Time};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::avformat::AVStream;
-use rsmpeg::avutil;
+use rsmpeg::avutil::{self, AVFrame};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -44,16 +44,6 @@ impl DecoderBuilder {
             thread_count: num_cpus::get(),
             flags: AvCodecFlags::LOW_DELAY,
         }
-    }
-
-    /// Create a video decoder
-    pub fn new_video() -> Self {
-        Self::new(MediaType::VIDEO)
-    }
-
-    /// create an audio decoder
-    pub fn new_audio() -> Self {
-        Self::new(MediaType::AUDIO)
     }
 
     /// Set decoding flags.
@@ -314,7 +304,7 @@ impl Decoder {
     /// * `reader` - A [`Reader`] to read the source from.
     #[inline]
     pub fn new_video(source: impl Into<Location>) -> Result<Decoder> {
-        DecoderBuilder::new_video().build(source)
+        DecoderBuilder::new(MediaType::VIDEO).build(source)
     }
 
     /// Create a decoder to decode the audio stream of the specified source.
@@ -324,7 +314,7 @@ impl Decoder {
     /// * `reader` - A [`Reader`] to read the source from.
     #[inline]
     pub fn new_audio(source: impl Into<Location>) -> Result<Decoder> {
-        DecoderBuilder::new_audio().build(source)
+        DecoderBuilder::new(MediaType::AUDIO).build(source)
     }
 
     /// Get the decoders input size width
@@ -466,8 +456,8 @@ impl Decoder {
     ///
     /// # Return value
     ///
-    /// The decoded raw frame that after decoding, HW download, and filtering as [`RawFrame`].
-    pub fn decode_raw<R>(&mut self, reader: &mut R) -> Result<Option<RawFrame>>
+    /// The decoded raw frame that after decoding, HW download, and filtering as [`AVFrame`].
+    pub fn decode_raw<R>(&mut self, reader: &mut R) -> Result<Option<AVFrame>>
     where
         R: Reader,
     {
@@ -557,8 +547,8 @@ impl Decoder {
     ///
     /// # Return value
     ///
-    /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    pub fn decode_raw_packet(&mut self, packet: &AVPacket) -> Result<Option<RawFrame>> {
+    /// The decoded raw frame as [`AVFrame`] if the decoder has a frame available, [`None`] if not.
+    pub fn decode_raw_packet(&mut self, packet: &AVPacket) -> Result<Option<AVFrame>> {
         self.send_packet_to_decoder(Some(packet))?;
         self.receive_frame_from_decoder()
     }
@@ -585,7 +575,7 @@ impl Decoder {
     }
 
     #[cfg(feature = "ndarray")]
-    fn raw_frame_to_media_frame<T>(&self, frame: &RawFrame) -> Result<MediaFrame<T>>
+    fn raw_frame_to_media_frame<T>(&self, frame: &AVFrame) -> Result<MediaFrame<T>>
     where
         T: MediaFrameType,
     {
@@ -601,8 +591,8 @@ impl Decoder {
     ///
     /// # Return value
     ///
-    /// The decoded raw frame as [`RawFrame`] if the decoder has a frame available, [`None`] if not.
-    pub fn drain_raw(&mut self) -> Result<Option<RawFrame>> {
+    /// The decoded raw frame as [`AVFrame`] if the decoder has a frame available, [`None`] if not.
+    pub fn drain_raw(&mut self) -> Result<Option<AVFrame>> {
         if !self.is_drained() {
             self.send_packet_to_decoder(None)?;
         }
@@ -631,7 +621,7 @@ impl Decoder {
     }
 
     /// Receive packet from decoder. Will handle hwaccel conversions and scaling as well.
-    fn receive_frame_from_decoder(&mut self) -> Result<Option<RawFrame>> {
+    fn receive_frame_from_decoder(&mut self) -> Result<Option<AVFrame>> {
         // 1. 从解码器获取原始帧
         let decoded_frame = match self.decoder_receive_frame() {
             Ok(Some(f)) => f,
@@ -674,7 +664,7 @@ impl Decoder {
 
     /// Pull a decoded frame from the decoder. This function also implements retry mechanism in case
     /// the decoder signals `EAGAIN` and `EOF`
-    fn decoder_receive_frame(&mut self) -> Result<Option<RawFrame>> {
+    fn decoder_receive_frame(&mut self) -> Result<Option<AVFrame>> {
         match self.context.receive_frame() {
             Ok(frame) => Ok(Some(frame)),
             Err(rsmpeg::error::RsmpegError::DecoderDrainError) => {
@@ -791,7 +781,7 @@ impl<R: Reader> DecoderWrapper<R> {
     }
 
     /// 解码下一帧（原始帧）
-    pub fn decode_raw(&mut self) -> Result<Option<RawFrame>> {
+    pub fn decode_raw(&mut self) -> Result<Option<AVFrame>> {
         self.decoder.decode_raw(&mut self.reader)
     }
 
@@ -854,7 +844,7 @@ mod tests {
             filter::video::drawtext("Hello", 10, 10, "", 24, "white"),
         ];
 
-        let mut decoder = DecoderBuilder::new_video()
+        let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
             .with_filters(Some(filters))
             .build_wrapped(video_path)?;
 
@@ -887,7 +877,7 @@ mod tests {
             filter::audio::volume(1.5),
         ];
 
-        let mut decoder = DecoderBuilder::new_audio()
+        let mut decoder = DecoderBuilder::new(MediaType::AUDIO)
             .with_filters(Some(filters))
             .build_wrapped(audio_path)?;
 

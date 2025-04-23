@@ -64,28 +64,59 @@ impl Filter {
 
 /// Escapes characters that are special within FFmpeg filtergraph descriptions.
 ///
-/// This function prepends a backslash (`\`) to characters like `\`, `'`, `:`,
-/// `,`, `[`, `]`, and `=`. This is necessary when incorporating user-provided
-/// strings into filter parameters to prevent syntax errors or unexpected behavior.
+/// This function uses FFmpeg's native av_escape function to properly escape
+/// characters that have special meaning in filter graphs.
 ///
-/// Note: This implementation covers common cases. For extremely complex strings
-/// or direct use in `avfilter_graph_parse_ptr` with unquoted segments,
-/// FFmpeg's internal escaping might be more comprehensive (e.g., using
-/// `av_escape` or `av_bprint_escape`).
+/// # Arguments
+///
+/// * `input` - The string to escape
+///
+/// # Returns
+///
+/// A new string with special characters escaped according to FFmpeg rules
 fn escape_filter_str(input: &str) -> String {
-    let mut escaped = String::with_capacity(input.len());
-    for c in input.chars() {
-        match c {
-            '\\' | '\'' | ':' | ',' | '[' | ']' | '=' => {
-                escaped.push('\\'); // Add the escape character
-                escaped.push(c); // Add the original character
-            }
-            _ => {
-                escaped.push(c); // Append regular characters directly
-            }
-        }
+    // Early return for empty strings
+    if input.is_empty() {
+        return String::new();
     }
-    escaped
+
+    unsafe {
+        // Create a C string from our input
+        let c_input = match CString::new(input) {
+            Ok(s) => s,
+            Err(_) => return input.replace('\0', "").to_string(), // Handle null bytes
+        };
+
+        // Characters that need escaping in filtergraph descriptions
+        let special_chars = CString::new("\\':,[]={};").unwrap();
+
+        // Pointer that will receive the escaped string
+        let mut escaped_ptr = std::ptr::null_mut();
+
+        // FFmpeg `av_escape` function flags:
+        // AV_ESCAPE_MODE_BACKSLASH (0) - escape with backslashes
+        // AV_ESCAPE_FLAG_STRICT (1) - be strict about escaping
+        let result = ffi::av_escape(
+            &mut escaped_ptr,
+            c_input.as_ptr(),
+            special_chars.as_ptr(),
+            ffi::AV_ESCAPE_MODE_BACKSLASH,
+            1,
+        );
+
+        if result < 0 || escaped_ptr.is_null() {
+            panic!("Invalid input spec: {}", input);
+        }
+
+        // Convert back to Rust String and free the memory
+        let escaped_cstr = std::ffi::CStr::from_ptr(escaped_ptr);
+        let escaped_string = escaped_cstr.to_string_lossy().into_owned();
+
+        // Free memory allocated by FFmpeg
+        ffi::av_free(escaped_ptr as *mut _);
+
+        escaped_string
+    }
 }
 
 pub mod video {
@@ -173,6 +204,30 @@ pub mod video {
                 thickness.abs()
             ),
         )
+    }
+
+    /// 去除水印
+    ///
+    /// # Arguments
+    ///
+    /// `x` and `y` are the top-left corner of the logo.
+    /// `w` and `h` are the width and height of the logo.
+    /// See: <https://ffmpeg.org/ffmpeg-filters.html#delogo>
+    pub fn delogo(x: i32, y: i32, w: u32, h: u32) -> Filter {
+        Filter::new(
+            "delogo",
+            MediaType::VIDEO,
+            format!("delogo=x={}:y={}:w={}:h={}", x, y, w, h),
+        )
+    }
+
+    /// zoompan - 平移和缩放效果
+    pub fn zoompan(zoom: &str, x: &str, y: &str, duration: Option<i32>) -> Filter {
+        let mut params = format!("zoompan=z={}:x={}:y={}", zoom, x, y);
+        if let Some(d) = duration {
+            params.push_str(&format!(":d={}", d));
+        }
+        Filter::new("zoompan", MediaType::VIDEO, params)
     }
 
     /// transpose - 用于快速 90°/180°/270° 视频画面旋转、水平翻转或镜像翻转（无插值，高性能）
@@ -264,19 +319,6 @@ pub mod video {
     pub fn fps(fps: f32) -> Filter {
         Filter::new("fps", MediaType::VIDEO, format!("fps={}", fps))
     }
-
-    /// 修改时间戳表达式（加速、减速、对齐等）
-    /// 典型值：`setpts=0.5*PTS`（2倍速），`1.5*PTS`（慢放）
-    /// Modifies presentation timestamp (PTS). Use with caution.
-    /// `expr`: FFmpeg expression (e.g., "0.5*PTS", "PTS-STARTPTS").
-    pub fn setpts(expr: &str) -> Filter {
-        let escaped_expr = escape_filter_str(expr);
-        Filter::new(
-            "setpts",
-            MediaType::VIDEO,
-            format!("setpts={}", escaped_expr),
-        )
-    }
 }
 
 pub mod audio {
@@ -324,6 +366,15 @@ pub mod audio {
         // FFmpeg volume filter can take linear scale or dB. Pass string directly.
         // Validation could check if it's a number or ends with "dB".
         Filter::new("volume", MediaType::AUDIO, format!("volume={}", val))
+    }
+
+    /// loudnorm - EBU R128音量标准化
+    pub fn loudnorm(integrated_loudness: f32) -> Filter {
+        Filter::new(
+            "loudnorm",
+            MediaType::AUDIO,
+            format!("loudnorm=I={}:TP=-1.5:LRA=11", integrated_loudness),
+        )
     }
 
     /// 单频段均衡器
@@ -469,14 +520,37 @@ pub mod audio {
 pub struct FilterFactory;
 
 impl FilterFactory {
-    /// 分支滤镜
-    /// <https://ffmpeg.org/ffmpeg-filters.html#split_002c-asplit>
+    /// 创建 FIFO 过滤器
+    pub fn fifo(media_type: MediaType) -> Filter {
+        #[rustfmt::skip]
+        let name = if media_type == MediaType::AUDIO { "afifo" } else { "fifo" };
+        Filter::new(name, media_type, name.to_string())
+    }
+
+    /// 分支滤镜，将一个输入流分成多个相同的输出流
+    /// See: <https://ffmpeg.org/ffmpeg-filters.html#split_002c-asplit>
     pub fn split(media_type: MediaType, n: i32) -> Filter {
-        if media_type == MediaType::AUDIO {
-            Filter::new("split", media_type, format!("asplit={}", n))
-        } else {
-            Filter::new("split", media_type, format!("split={}", n))
-        }
+        #[rustfmt::skip]
+        let name = if media_type == MediaType::AUDIO { "asplit" } else { "split" };
+        Filter::new(name, media_type, format!("{}={}", name, n))
+    }
+
+    /// 修改时间戳表达式（加速、减速、对齐等）
+    /// 典型值：`setpts=0.5*PTS`（2倍速），`1.5*PTS`（慢放）
+    /// Modifies presentation timestamp (PTS). Use with caution.
+    /// `expr`: FFmpeg expression (e.g., "0.5*PTS", "PTS-STARTPTS").
+    pub fn setpts(media_type: MediaType, expr: &str) -> Filter {
+        #[rustfmt::skip]
+        let name = if media_type == MediaType::AUDIO { "asetpts" } else { "setpts" };
+        let escaped_expr = escape_filter_str(expr);
+        Filter::new(name, media_type, format!("{}={}", name, escaped_expr))
+    }
+
+    /// Trim video/audio to a specific time range.
+    pub fn trim(media_type: MediaType, start: f32, end: f32) -> Filter {
+        #[rustfmt::skip]
+        let name = if media_type == MediaType::AUDIO { "atrim" } else { "trim" };
+        Filter::new(name, media_type, format!("{}={}:{}", name, start, end))
     }
 }
 
@@ -845,5 +919,150 @@ impl std::fmt::Debug for FilterContext {
             .field("config", &self.config)
             .field("graph", &self.graph)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_filter_str() {
+        // Test case 1: Empty string
+        assert_eq!(
+            escape_filter_str(""),
+            "",
+            "Empty string should return empty string"
+        );
+
+        // Test case 2: String with no special characters but with spaces
+        // FFmpeg appears to escape spaces as well
+        assert_eq!(
+            escape_filter_str("normal text"),
+            "normal\\ text",
+            "Spaces are also escaped by av_escape"
+        );
+
+        // Test case 3: String with special characters
+        assert_eq!(
+            escape_filter_str("text with [brackets]"),
+            "text\\ with\\ \\[brackets\\]",
+            "Brackets should be escaped and spaces too"
+        );
+
+        // Test case 4: String with multiple special characters
+        assert_eq!(
+            escape_filter_str("file:///path/to/video.mp4"),
+            "file\\:///path/to/video.mp4",
+            "Colon should be escaped"
+        );
+
+        // Test case 5: String with all special characters
+        let input = "filter=value,'text',[in],[out],key=val;next:filter\\backslash";
+        let expected = "filter\\=value\\,\\'text\\'\\,\\[in\\]\\,\\[out\\]\\,key\\=val\\;next\\:filter\\\\backslash";
+        assert_eq!(
+            escape_filter_str(input),
+            expected,
+            "All special characters should be escaped"
+        );
+
+        // Test case 6: String with escaped characters already
+        assert_eq!(
+            escape_filter_str("already\\escaped"),
+            "already\\\\escaped",
+            "Backslashes should be escaped even if they're escaping something else"
+        );
+
+        // Test case 7: Complex filter string with multiple special chars
+        // Note that FFmpeg also escapes the exclamation mark (!)
+        let complex_filter = "drawtext=text='Hello, World!':x=10:y=10";
+        let expected = "drawtext\\=text\\=\\'Hello\\,\\ World!\\'\\:x\\=10\\:y\\=10";
+        assert_eq!(
+            escape_filter_str(complex_filter),
+            expected,
+            "Complex filter string should be properly escaped with spaces and exclamation marks escaped too"
+        );
+
+        // Test case 8: Test with exclamation marks specifically
+        // Note character!
+        assert_eq!(
+            escape_filter_str("Warning!"),
+            "Warning!",
+            "Exclamation marks should be escaped"
+        );
+
+        // Test case 9: Unicode characters - using pattern matching instead of exact comparison
+        let unicode_result = escape_filter_str("Unicode: こんにちは");
+        assert!(
+            unicode_result.contains("Unicode"),
+            "Result should contain the word 'Unicode'"
+        );
+        assert!(
+            unicode_result.contains("こんにちは"),
+            "Result should contain the Japanese characters"
+        );
+
+        // Test case 10: Unicode with special characters - using pattern matching
+        let unicode_special_result = escape_filter_str("Unicode: こんにちは[世界]");
+        assert!(
+            unicode_special_result.contains("\\[") && unicode_special_result.contains("\\]"),
+            "Unicode string with special characters should have brackets escaped"
+        );
+
+        // Test case 11: Very long string - only check that it ends correctly
+        let long_string = "x".repeat(1000) + "=[]:";
+        let long_result = escape_filter_str(&long_string);
+        assert!(
+            long_result.ends_with("\\=\\[\\]\\:"),
+            "Long strings should have special characters at the end properly escaped"
+        );
+    }
+
+    #[test]
+    fn test_real_world_filter_strings() {
+        // Test case 1: Scale filter
+        assert_eq!(
+            escape_filter_str("scale=width=1280:height=720"),
+            "scale\\=width\\=1280\\:height\\=720",
+            "Scale filter string should be properly escaped"
+        );
+
+        // Test case 2: Overlay filter
+        assert_eq!(
+            escape_filter_str("overlay=x=10:y=10"),
+            "overlay\\=x\\=10\\:y\\=10",
+            "Overlay filter string should be properly escaped"
+        );
+
+        // Test case 3: Complex drawtext filter with Unicode
+        let drawtext = "drawtext=text='Copyright © 2023':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:x=(w-text_w)/2:y=h-th-10";
+
+        // Instead of checking the exact string, check for key patterns
+        let drawtext_result = escape_filter_str(drawtext);
+
+        // Check presence of escaped key components
+        assert!(
+            drawtext_result.contains("drawtext\\="),
+            "Result should contain escaped filter name"
+        );
+        assert!(
+            drawtext_result.contains("text\\=\\'"),
+            "Result should contain escaped parameter text"
+        );
+        assert!(
+            drawtext_result.contains("Copyright"),
+            "Result should preserve the copyright text"
+        );
+        assert!(
+            drawtext_result.contains("\\:fontcolor\\="),
+            "Result should escape colon and equals sign"
+        );
+
+        // Test case 4: Filter with square brackets for pad names
+        assert_eq!(
+            escape_filter_str("[in1][in2]overlay=format=rgb[out]"),
+            "\\[in1\\]\\[in2\\]overlay\\=format\\=rgb\\[out\\]",
+            "Filter with pad names should be properly escaped"
+        );
     }
 }

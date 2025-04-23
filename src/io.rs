@@ -13,8 +13,10 @@ use anyhow::{Context, Error, Result};
 use std::ops::{Bound, Deref};
 
 pub trait Reader {
-    fn input(&self) -> &AVFormatContextInput;
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 
+    fn input(&self) -> &AVFormatContextInput;
     fn input_mut(&mut self) -> &mut AVFormatContextInput;
 
     fn read_packet(&mut self) -> Result<Option<(Stream, AVPacket)>> {
@@ -163,7 +165,7 @@ impl StreamReader {
     /// # Arguments
     ///
     /// * `timestamp_milliseconds` - Number of millisecond from start of video to seek to.
-    pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
+    pub fn seek_to_timestamp(&mut self, timestamp_milliseconds: i64) -> Result<()> {
         // Conversion factor from timestamp in milliseconds to `TIME_BASE` units.
         const CONVERSION_FACTOR: i64 = (ffi::AV_TIME_BASE_Q.den / 1000) as i64;
         // One second left and right leeway when seeking.
@@ -173,23 +175,9 @@ impl StreamReader {
         let range = timestamp - LEEWAY..timestamp + LEEWAY;
 
         self._seek(timestamp, range)
-            .context("Failed to seek in reader")?;
+            .context("Failed to seek timestamp in reader")?;
 
         Ok(())
-    }
-
-    /// Seek to a specific frame in the video stream.
-    ///
-    /// # Arguments
-    ///
-    /// * `frame_number` - The frame number to seek to.
-    pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
-        unsafe {
-            match ffi::av_seek_frame(self.input.as_mut_ptr(), -1, frame_number, 0) {
-                0 => Ok(()),
-                e => Err(Error::new(RsmpegError::from(e))),
-            }
-        }
     }
 
     /// Seek to start of reader. This function performs best effort seeking to the start of the
@@ -198,6 +186,33 @@ impl StreamReader {
         self._seek(i64::MIN, ..)
             .context("Failed to seek to start of reader")?;
         Ok(())
+    }
+
+    /// Seek to a specific frame in the video stream.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream_index` - The index of the stream to seek to.
+    /// * `frame_ts` - The timestamp of the target frame. This is typically derived from the frame's presentation timestamp (PTS).
+    /// * `flags` - Flags to use when seeking. Possible values include:
+    ///   - `AVSEEK_FLAG_BACKWARD` (1) <- Seek backward.
+    ///   - `AVSEEK_FLAG_BYTE` (2) <- Seek based on position in bytes.
+    ///   - `AVSEEK_FLAG_ANY` (4) <- Seek to any frame, even non-key frames.
+    ///   - `AVSEEK_FLAG_FRAME` (8) <- Seek based on frame number.
+    ///
+    pub fn seek_to_frame(&mut self, stream_index: usize, frame_ts: i64, flags: i32) -> Result<()> {
+        unsafe {
+            let res = ffi::av_seek_frame(
+                self.input.as_mut_ptr(),
+                stream_index as i32,
+                frame_ts,
+                flags,
+            );
+            if res != 0 {
+                return Err(Error::msg(format!("Seek to frame failed: {}", res)));
+            }
+            Ok(())
+        }
     }
 
     fn _seek<R: std::ops::RangeBounds<i64>>(&mut self, ts: i64, range: R) -> Result<()> {
@@ -214,15 +229,24 @@ impl StreamReader {
         };
 
         unsafe {
-            match ffi::avformat_seek_file(self.input.as_mut_ptr(), -1, start, ts, end, 0) {
-                s if s >= 0 => Ok(()),
-                e => Err(Error::new(RsmpegError::from(e))),
+            let res = ffi::avformat_seek_file(self.input.as_mut_ptr(), -1, start, ts, end, 0);
+            if res < 0 {
+                // >=0 on success, error code otherwise
+                return Err(Error::msg(format!("Seek file failed: {}", res)));
             }
+            Ok(())
         }
     }
 }
 
 impl Reader for StreamReader {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn input(&self) -> &AVFormatContextInput {
         &self.input
     }
@@ -912,8 +936,7 @@ extern "C" fn output_raw_buf_start_callback(
 pub(crate) fn flush_output(output: &mut AVFormatContextOutput) -> Result<()> {
     unsafe {
         match ffi::av_write_frame(output.as_mut_ptr(), std::ptr::null_mut()) {
-            0 => Ok(()),
-            1 => Ok(()),
+            0 | 1 => Ok(()),
             e => Err(Error::new(RsmpegError::from(e))),
         }
     }

@@ -800,33 +800,55 @@ impl<R: Reader> DecoderWrapper<R> {
         (self.decoder, self.reader)
     }
 
-    // /// Seek in reader.
-    // ///
-    // /// See [`StreamReader::seek`](crate::io::StreamReader::seek) for more information.
-    // #[inline]
-    // pub fn seek(&mut self, timestamp_milliseconds: i64) -> Result<()> {
-    //     self.reader
-    //         .seek(timestamp_milliseconds)
-    //         .inspect(|_| self.flush())
-    // }
+    /// Seek in reader.
+    ///
+    /// See [`StreamReader::seek_to_time`](crate::io::StreamReader::seek_to_timestamp) for more information.
+    #[inline]
+    pub fn seek_to_timestamp(&mut self, timestamp_milliseconds: i64) -> Result<()> {
+        if let Some(stream_reader) = self.reader.as_any_mut().downcast_mut::<StreamReader>() {
+            stream_reader
+                .seek_to_timestamp(timestamp_milliseconds)
+                .inspect(|_| self.decoder.flush())
+        } else {
+            Err(Error::msg("Seek is only supported for StreamReader"))
+        }
+    }
 
-    // /// Seek to specific frame in reader.
-    // ///
-    // /// See [`StreamReader::seek_to_frame`](crate::io::StreamReader::seek_to_frame) for more information.
-    // #[inline]
-    // pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
-    //     self.reader
-    //         .seek_to_frame(frame_number)
-    //         .inspect(|_| self.flush())
-    // }
+    /// Seek to specific frame in reader.
+    ///
+    /// See [`StreamReader::seek_to_frame`](crate::io::StreamReader::seek_to_frame) for more information.
+    #[inline]
+    pub fn seek_to_frame(&mut self, frame_number: i64) -> Result<()> {
+        if let Some(stream_reader) = self.reader.as_any_mut().downcast_mut::<StreamReader>() {
+            stream_reader
+                .seek_to_frame(
+                    self.decoder.stream_index(),
+                    frame_number,
+                    ffi::AVSEEK_FLAG_ANY as i32,
+                )
+                .inspect(|_| self.decoder.flush())
+        } else {
+            Err(Error::msg(
+                "Seek to frame is only supported for StreamReader",
+            ))
+        }
+    }
 
-    // /// Seek to start of reader.
-    // ///
-    // /// See [`StreamReader::seek_to_start`](crate::io::StreamReader::seek_to_start) for more information.
-    // #[inline]
-    // pub fn seek_to_start(&mut self) -> Result<()> {
-    //     self.reader.seek_to_start().inspect(|_| self.flush())
-    // }
+    /// Seek to start of reader.
+    ///
+    /// See [`StreamReader::seek_to_start`](crate::io::StreamReader::seek_to_start) for more information.
+    #[inline]
+    pub fn seek_to_start(&mut self) -> Result<()> {
+        if let Some(stream_reader) = self.reader.as_any_mut().downcast_mut::<StreamReader>() {
+            stream_reader
+                .seek_to_start()
+                .inspect(|_| self.decoder.flush())
+        } else {
+            Err(Error::msg(
+                "Seek to start is only supported for StreamReader",
+            ))
+        }
+    }
 }
 
 #[cfg(test)]

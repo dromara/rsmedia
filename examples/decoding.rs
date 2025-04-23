@@ -48,6 +48,9 @@ async fn main() -> Result<()> {
 
     std::fs::create_dir_all(OUTPUT_DIR).context("failed to create output directory")?;
 
+    // seek to the 20th frame
+    decoder.seek_to_frame(20).unwrap();
+
     loop {
         match decoder.decode::<u8>() {
             Ok(Some(yuv_frame)) => {

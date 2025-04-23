@@ -4,7 +4,7 @@ use crate::flags::AvFormatFlags;
 #[cfg(feature = "ndarray")]
 use crate::frame::{MediaFrame, MediaFrameType};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
-use crate::io::{private::Output, Writer};
+use crate::io::Writer;
 use crate::options::Options;
 use crate::pixel::PixelFormat;
 use crate::{swctx, time, utils, Location, MediaType, SampleFormat, StreamWriter};
@@ -298,14 +298,24 @@ impl EncoderBuilder {
         Ok(())
     }
 
+    /// Build an [`EncoderWrapper`] with a [`StreamWriter`].
     pub fn build_wrapped(
         self,
         destination: impl Into<Location>,
     ) -> Result<EncoderWrapper<StreamWriter>> {
+        let writer = StreamWriter::new(destination)?;
+        self.build_wrapped_with_writer(writer, true)
+    }
+
+    /// Build an [`EncoderWrapper`] with a custom writer.
+    pub fn build_wrapped_with_writer<W: Writer>(
+        self,
+        mut writer: W,
+        interleaved: bool,
+    ) -> Result<EncoderWrapper<W>> {
         let encoder = self.build()?;
-        let mut writer = StreamWriter::new(destination)?;
         let index = writer.add_stream(encoder.codecpar(), encoder.time_base());
-        Ok(EncoderWrapper::new(encoder, writer, index, true))
+        Ok(EncoderWrapper::new(encoder, writer, index, interleaved))
     }
 
     /// Build an [`Encoder`].

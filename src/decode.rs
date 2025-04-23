@@ -120,6 +120,11 @@ impl DecoderBuilder {
         source: impl Into<Location>,
     ) -> Result<DecoderWrapper<StreamReader>> {
         let reader = StreamReader::new(source)?;
+        self.build_wrapped_with_reader(reader)
+    }
+
+    /// a reader be required to get input stream, and build a decoder.
+    pub fn build_wrapped_with_reader<R: Reader>(self, reader: R) -> Result<DecoderWrapper<R>> {
         let decoder = self.build_from_reader(&reader)?;
         Ok(DecoderWrapper::new(decoder, reader))
     }
@@ -764,8 +769,8 @@ unsafe impl Sync for Decoder {}
 
 /// 解码器包装器，持有 Decoder 和 Reader
 pub struct DecoderWrapper<R: Reader> {
-    decoder: Decoder,
     reader: R,
+    decoder: Decoder,
 }
 
 impl<R: Reader> DecoderWrapper<R> {

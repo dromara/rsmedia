@@ -64,7 +64,8 @@ fn main() {
             }
         };
 
-        let _stream_index = muxer.add_stream(encoder).unwrap();
+        let stream_index = muxer.add_stream(encoder).unwrap();
+        muxer.dump(stream_index).unwrap()
     }
 
     // demux and mux all frames from input to output muxer

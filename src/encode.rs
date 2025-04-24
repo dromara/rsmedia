@@ -696,16 +696,6 @@ impl Encoder {
     }
 
     #[inline]
-    pub fn sample_rate(&self) -> i32 {
-        self.context.sample_rate
-    }
-
-    #[inline]
-    pub fn sample_fmt(&self) -> SampleFormat {
-        SampleFormat::from(self.context.sample_fmt)
-    }
-
-    #[inline]
     pub fn width(&self) -> i32 {
         self.context.width
     }
@@ -720,6 +710,30 @@ impl Encoder {
         self.context.pix_fmt.into()
     }
 
+    /// Each submitted frame except the last must contain exactly frame_size samples per channel.
+    /// May be 0 when the codec has AV_CODEC_CAP_VARIABLE_FRAME_SIZE set, then the frame size is not restricted.
+    #[inline]
+    pub fn frame_size(&self) -> i32 {
+        self.context.frame_size
+    }
+
+    /// audio samples per second
+    #[inline]
+    pub fn sample_rate(&self) -> i32 {
+        self.context.sample_rate
+    }
+
+    /// audio sample format
+    #[inline]
+    pub fn sample_fmt(&self) -> SampleFormat {
+        SampleFormat::from(self.context.sample_fmt)
+    }
+
+    #[inline]
+    pub fn ch_layout(&self) -> AVChannelLayoutRef {
+        self.context.ch_layout()
+    }
+
     #[inline]
     pub fn media_type(&self) -> MediaType {
         self.media_type
@@ -728,11 +742,6 @@ impl Encoder {
     #[inline]
     pub fn codecpar(&self) -> AVCodecParameters {
         self.context.extract_codecpar()
-    }
-
-    #[inline]
-    pub fn ch_layout(&self) -> AVChannelLayoutRef {
-        self.context.ch_layout()
     }
 
     /// Internal: Pull an encoded packet from the decoder.

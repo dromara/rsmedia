@@ -458,7 +458,7 @@ impl StreamInfo {
     }
 }
 
-impl std::fmt::Display for StreamInfo {
+impl std::fmt::Debug for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
             let codec_id = self.codec_id as ffi::AVCodecID;
@@ -476,7 +476,7 @@ impl std::fmt::Display for StreamInfo {
         let stream_type = self.media_type.get_media_type_string();
         write!(
             f,
-            "{} #{}: codec={}, format={}, size={}x{}, fps={:?}, bit_rate={}, sample_rate={}, video_delay={}",
+            "{} #{}: codec={}, format={}, size={}x{}, fps={:?}, bit_rate={}, sample_rate={}, nb_channels={}, video_delay={}",
             stream_type,
             self.index,
             codec_name,
@@ -486,14 +486,15 @@ impl std::fmt::Display for StreamInfo {
             self.avg_frame_rate,
             self.bit_rate,
             self.sample_rate,
+            self.channel_layout.nb_channels,
             self.video_delay,
         )
     }
 }
 
-impl std::fmt::Debug for StreamInfo {
+impl std::fmt::Display for StreamInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
+        std::fmt::Debug::fmt(self, f)
     }
 }
 

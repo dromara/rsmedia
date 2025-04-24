@@ -92,6 +92,12 @@ impl<W: Writer> Muxer<W> {
         }
     }
 
+    pub fn dump(&mut self, index: usize) -> Result<()> {
+        let mux_stream = self.get_stream(index)?;
+        println!("{:?}", mux_stream.stream_info);
+        Ok(())
+    }
+
     pub fn add_stream(&mut self, encoder: Encoder) -> Result<usize> {
         let stream_idx = self
             .writer

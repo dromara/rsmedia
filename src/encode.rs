@@ -659,14 +659,14 @@ impl Encoder {
                 }
             }
             MediaType::AUDIO => {
-                let ch_layout = self.context.ch_layout;
+                let ch_layout = self.ch_layout();
                 if frame.sample_rate != self.sample_rate()
                     || frame.format != self.sample_fmt() as i32
                     || frame.ch_layout.nb_channels != ch_layout.nb_channels
                 {
                     swctx::convert_frame(
                         &frame,
-                        ch_layout,
+                        ch_layout.clone().into_inner(),
                         self.sample_fmt() as _,
                         self.sample_rate(),
                     )?

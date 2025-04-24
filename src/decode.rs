@@ -6,11 +6,11 @@ use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
 use crate::stream::StreamInfo;
-use crate::{utils, Location, MediaType, PixelFormat, SampleFormat, StreamReader, Time};
+use crate::{swctx, utils, Location, MediaType, PixelFormat, SampleFormat, StreamReader, Time};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
 use rsmpeg::avformat::AVStream;
-use rsmpeg::avutil::{self, AVFrame};
+use rsmpeg::avutil::{self, AVChannelLayoutRef, AVFrame};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -322,14 +322,34 @@ impl Decoder {
 
     /// Get the decoders input size width
     #[inline(always)]
-    pub fn width(&self) -> usize {
-        self.context.width as usize
+    pub fn width(&self) -> i32 {
+        self.context.width
     }
 
     /// Get the decoders input size height
     #[inline(always)]
-    pub fn height(&self) -> usize {
-        self.context.height as usize
+    pub fn height(&self) -> i32 {
+        self.context.height
+    }
+
+    #[inline]
+    pub fn pix_fmt(&self) -> PixelFormat {
+        self.context.pix_fmt.into()
+    }
+
+    #[inline]
+    pub fn sample_rate(&self) -> i32 {
+        self.context.sample_rate
+    }
+
+    #[inline]
+    pub fn sample_fmt(&self) -> SampleFormat {
+        SampleFormat::from(self.context.sample_fmt)
+    }
+
+    #[inline]
+    pub fn ch_layout(&self) -> AVChannelLayoutRef {
+        self.context.ch_layout()
     }
 
     /// Get the decoders input duration
@@ -533,7 +553,7 @@ impl Decoder {
         T: MediaFrameType,
     {
         match self.decode_raw_packet(packet) {
-            Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(&raw_frame)?)),
+            Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(raw_frame)?)),
             Ok(None) => Ok(None),
             Err(e) => Err(e),
         }
@@ -571,20 +591,19 @@ impl Decoder {
         T: MediaFrameType,
     {
         match self.drain_raw() {
-            Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(&raw_frame)?)),
+            Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(raw_frame)?)),
             Ok(None) => Ok(None),
             Err(e) => Err(e),
         }
     }
 
     #[cfg(feature = "ndarray")]
-    fn raw_frame_to_media_frame<T>(&self, frame: &AVFrame) -> Result<MediaFrame<T>>
+    fn raw_frame_to_media_frame<T>(&self, frame: AVFrame) -> Result<MediaFrame<T>>
     where
         T: MediaFrameType,
     {
-        // AVFrame default pixel is YUV420P, So here keeping the format that YUV420P the same
-        // after I convert it, If you want RGB24, always remember to convert it yourself!
-        MediaFrame::<T>::from_avframe(frame)
+        // Video Frame pixel YUV420P, RGB24 is supported
+        MediaFrame::<T>::from_avframe(&frame)
     }
 
     /// Drain one frame from the decoder.
@@ -632,18 +651,46 @@ impl Decoder {
             Err(e) => return Err(e),
         };
 
-        // 2. 处理硬件加速帧下载 (如果需要)
+        // 2. 处理硬件加速帧下载,
         let sw_frame = match &self.hw_context {
-            Some(hw_ctx) if hw_ctx.is_hw_frame(&decoded_frame) => hw_ctx
-                .hw_download(&mut self.context, &decoded_frame)
-                .context("Failed HW frame download")?,
-            _ => decoded_frame, // 已经是 CPU 帧或无 HW 加速
+            Some(hw_ctx) if hw_ctx.is_hw_frame(&decoded_frame) => {
+                // hw_frame -> sw_frame
+                hw_ctx
+                    .hw_download(&mut self.context, &decoded_frame)
+                    .context("Failed HW frame download")?
+            }
+            _ => {
+                // 已经是 CPU 帧或无 HWaccel
+                decoded_frame
+            }
+        };
+
+        // reformat if needed, eg. NV12 -> YUV420P
+        // Video AVFrame default pixel is YUV420P,
+        let raw_frame = match self.media_type {
+            MediaType::VIDEO => {
+                let target_sw_pix_fmt = PixelFormat::YUV420P;
+                if sw_frame.format != target_sw_pix_fmt.into() {
+                    swctx::scale(
+                        &sw_frame,
+                        sw_frame.width,
+                        sw_frame.height,
+                        target_sw_pix_fmt,
+                    )?
+                } else {
+                    sw_frame
+                }
+            }
+            _ => {
+                // do nothing
+                sw_frame
+            }
         };
 
         // 3. 应用 Filter Graph (如果存在)
         if let Some(graph) = self.filter_graph.as_mut() {
             // filter process
-            match graph.process_frame(Some(sw_frame))? {
+            match graph.process_frame(Some(raw_frame))? {
                 Some(filtered_frame) => Ok(Some(filtered_frame)),
                 None => {
                     if graph.is_drained() {
@@ -661,7 +708,7 @@ impl Decoder {
             }
         } else {
             // 4. 如果没有 Filter Graph，直接返回 CPU 帧
-            Ok(Some(sw_frame))
+            Ok(Some(raw_frame))
         }
     }
 

@@ -162,12 +162,6 @@ impl DecoderBuilder {
         // video
         let init_width = decode_ctx.width;
         let init_height = decode_ctx.height;
-        let mut init_pix_fmt = PixelFormat::from(decode_ctx.pix_fmt);
-        // audio
-        let init_sample_rate = decode_ctx.sample_rate;
-        let init_time_base = decode_ctx.time_base;
-        let init_ch_layout = decode_ctx.ch_layout;
-        let init_sample_fmt = SampleFormat::from(decode_ctx.sample_fmt);
 
         let hw_context = self
             .hw_device_config
@@ -197,10 +191,8 @@ impl DecoderBuilder {
                 // create hardware context
                 HWContext::new(cfg)
                     .and_then(|ctx| {
-                        // *注意*：setup_hw_frames 可能会改变 decode_ctx.pix_fmt
+                        // 注意：setup_hw_frames 可能会改变 decode_ctx.pix_fmt
                         ctx.setup_hw_frames(true, &mut decode_ctx, init_width, init_height)?;
-                        // *重要*: 更新 filter 输入参数中的 pix_fmt (因为 HW 下载后格式会变)
-                        init_pix_fmt = ctx.get_format(false).into();
                         Ok(ctx)
                     })
                     .context("Hardware acceleration context initialization failed")
@@ -221,17 +213,17 @@ impl DecoderBuilder {
                     FilterParams::Video(VideoParams {
                         width: init_width,
                         height: init_height,
-                        format: init_pix_fmt, // 使用解码器（或HW下载后）的格式
-                        time_base: init_time_base,
+                        format: PixelFormat::YUV420P, // 确保 filter 的输入格式是 YUV420P
+                        time_base: decode_ctx.time_base,
                         frame_rate: decode_ctx.framerate, // 使用解码器帧率
                         pixel_aspect: decode_ctx.sample_aspect_ratio,
                     })
                 }
                 MediaType::AUDIO => FilterParams::Audio(AudioParams {
-                    nb_channels: init_ch_layout.nb_channels,
-                    sample_rate: init_sample_rate,
-                    format: init_sample_fmt,
-                    time_base: init_time_base,
+                    nb_channels: decode_ctx.ch_layout.nb_channels,
+                    sample_rate: decode_ctx.sample_rate,
+                    format: SampleFormat::from(decode_ctx.sample_fmt),
+                    time_base: decode_ctx.time_base,
                 }),
                 _ => panic!("Unsupported filter for media type: {:?}", media_type),
             };
@@ -665,7 +657,7 @@ impl Decoder {
             }
         };
 
-        // reformat if needed, eg. NV12 -> YUV420P
+        // 确保输入Filter的视频帧的格式为YUV420P. 例如，硬件加速帧 NV12 -> YUV420P
         // Video AVFrame default pixel is YUV420P,
         let raw_frame = match self.media_type {
             MediaType::VIDEO => {

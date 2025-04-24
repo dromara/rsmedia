@@ -558,7 +558,11 @@ where
 
             Ok(())
         }
-        _ => Err(Error::msg("Unsupported video format")),
+
+        _ => Err(Error::msg(format!(
+            "Unsupported to_frame video format: {:?}",
+            frame
+        ))),
     }
 }
 
@@ -676,7 +680,10 @@ where
             Ok(array)
         }
 
-        _ => Err(Error::msg("Unsupported video format")),
+        _ => Err(Error::msg(format!(
+            "Unsupported from_frame video format: {:?}",
+            frame
+        ))),
     }
 }
 

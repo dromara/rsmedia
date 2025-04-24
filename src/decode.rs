@@ -145,10 +145,8 @@ impl DecoderBuilder {
             } else {
                 codec_name.as_str()
             };
-            AVCodec::find_decoder_by_name(&utils::from_str(codec_name)).context(format!(
-                "Failed to find decoder by codec name: '{}'",
-                codec_name
-            ))?
+            AVCodec::find_decoder_by_name(&utils::from_str(codec_name))
+                .context(format!("Failed to find decoder by name: '{}'", codec_name))?
         };
 
         let duration = Time::new(Some(input_stream.duration), input_stream.time_base);
@@ -416,7 +414,7 @@ impl Decoder {
                     Ok(Some((stream, packet))) => {
                         if stream.index() != self.stream_index() {
                             // skip other streams
-                            log::debug!("skip stream index: {}, {:?}", stream.index(), packet);
+                            log::trace!("skip stream index: {}, {:?}", stream.index(), packet);
                             continue;
                         }
                         if let Some(frame) = self.decode_packet(&packet)? {
@@ -479,7 +477,7 @@ impl Decoder {
                     Ok(Some((stream, packet))) => {
                         if stream.index() != self.stream_index() {
                             // skip other streams
-                            log::debug!("skip stream index: {}, {:?}", stream.index(), packet);
+                            log::trace!("skip stream index: {}, {:?}", stream.index(), packet);
                             continue;
                         }
                         if let Some(frame) = self.decode_raw_packet(&packet)? {

@@ -344,10 +344,8 @@ impl EncoderBuilder {
                     }
                 }
             };
-            AVCodec::find_encoder_by_name(&utils::from_str(codec_name)).context(format!(
-                "Failed to find encoder for codec: '{}'",
-                codec_name
-            ))?
+            AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
+                .context(format!("Failed to find encoder by name: '{}'", codec_name))?
         };
 
         let mut encode_ctx = AVCodecContext::new(&codec);
@@ -402,20 +400,21 @@ impl EncoderBuilder {
             let filter_params = match media_type {
                 MediaType::VIDEO => {
                     FilterParams::Video(VideoParams {
-                        width: self.width as i32, // 使用 Builder 的 width/height/format
+                        width: self.width as i32,
                         height: self.height as i32,
                         format: self.pixel_format,
-                        time_base: self.time_base, // 使用 Builder 的 time_base
+                        time_base: self.time_base,
                         frame_rate: self.frame_rate,
-                        pixel_aspect: time::new_rational(1, 1), // 默认
+                        pixel_aspect: time::new_rational(1, 1), // 默认 1:1
                     })
                 }
                 MediaType::AUDIO => {
+                    // 音频参数
                     FilterParams::Audio(AudioParams {
                         nb_channels: self.nb_channels,
                         sample_rate: self.sample_rate,
-                        format: self.sample_format, // 使用 Builder 的 format/rate/channels
-                        time_base: time::new_rational(1, self.sample_rate), // 基于 Builder 的 rate
+                        format: self.sample_format,
+                        time_base: time::new_rational(1, self.sample_rate),
                     })
                 }
                 _ => {
@@ -423,7 +422,7 @@ impl EncoderBuilder {
                 }
             };
             let mut graph = FilterGraph::new();
-            // 验证 Filter 链的媒体类型
+            // check Filter media type
             if !filters.iter().all(|f| f.media_type() == media_type) {
                 return Err(Error::msg(format!(
                     "Filter media type mismatch for encoder type {:?}",
@@ -586,11 +585,17 @@ impl Encoder {
         // reformat
         let raw_frame = match self.media_type {
             MediaType::VIDEO => {
+                let target_sw_pix_fmt = if let Some(hw_ctx) = self.hw_context.as_ref() {
+                    hw_ctx.config.sw_pixel_format
+                } else {
+                    self.pix_fmt()
+                };
+
                 if frame.width != self.width()
                     || frame.height != self.height()
-                    || frame.format != self.pix_fmt().into()
+                    || frame.format != target_sw_pix_fmt.into()
                 {
-                    swctx::scale(&frame, self.width(), self.height(), self.pix_fmt())?
+                    swctx::scale(&frame, self.width(), self.height(), target_sw_pix_fmt)?
                 } else {
                     frame
                 }

@@ -1,4 +1,4 @@
-use crate::{time, PixelFormat};
+use crate::{time, PixelFormat, SampleFormat};
 
 use rsmpeg::avutil::{AVFrame, AVSamples};
 use rsmpeg::ffi;
@@ -152,6 +152,16 @@ pub fn scale(
         return Err(Error::msg(format!("Failed to scale frame, ret: {}", ret)));
     }
 
+    log::debug!(
+        "Sws scale from: src[{}x{}, {:?}] to dst[{}x{}, {:?}]",
+        src_frame.width,
+        src_frame.height,
+        PixelFormat::from(src_frame.format),
+        dst_width,
+        dst_height,
+        dst_pix_fmt
+    );
+
     Ok(dst_frame)
 }
 
@@ -196,6 +206,16 @@ pub fn scale_frame(
             "Failed to scale frame from [fmt:{}, size:{}x{}] to [fmt:{:?}, size:{}x{}]",
             src_frame.format, src_frame.width, src_frame.height, dst_pix_fmt, dst_width, dst_height
         ))?;
+
+    log::debug!(
+        "Sws scale_frame from: src[{}x{}, {:?}] to dst[{}x{}, {:?}]",
+        src_frame.width,
+        src_frame.height,
+        PixelFormat::from(src_frame.format),
+        dst_width,
+        dst_height,
+        dst_pix_fmt
+    );
 
     Ok(dst_frame)
 }
@@ -279,6 +299,16 @@ pub fn convert(
         )));
     }
 
+    log::debug!(
+        "Swr convert from: src[{}, {:?}, {}] to dst[{}, {:?}, {}]",
+        src_frame.ch_layout.nb_channels,
+        SampleFormat::from(src_frame.format),
+        src_frame.sample_rate,
+        out_ch_layout.nb_channels,
+        SampleFormat::from(out_sample_fmt),
+        out_sample_rate
+    );
+
     Ok(output_samples)
 }
 
@@ -334,6 +364,16 @@ pub fn convert_frame(
     resample_context
         .convert_frame(Some(src_frame), &mut dst_frame)
         .context("Failed to convert frame.")?;
+
+    log::debug!(
+        "Swr convert_frame from: src[{}, {:?}, {}] to dst[{}, {:?}, {}]",
+        src_frame.ch_layout.nb_channels,
+        SampleFormat::from(src_frame.format),
+        src_frame.sample_rate,
+        out_ch_layout.nb_channels,
+        SampleFormat::from(out_sample_fmt),
+        out_sample_rate
+    );
 
     Ok(dst_frame)
 }

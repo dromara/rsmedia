@@ -5,7 +5,7 @@ use rsmpeg::avutil::{AVChannelLayout, AVFrame};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
-use yuvutils_rs::{
+use yuv::{
     BufferStoreMut, YuvConversionMode, YuvPlanarImage, YuvPlanarImageMut, YuvRange,
     YuvStandardMatrix,
 };
@@ -339,7 +339,7 @@ where
         };
 
         // 5. 使用Full Range进行转换
-        yuvutils_rs::rgb_to_yuv420(
+        yuv::rgb_to_yuv420(
             &mut planar_image,
             &rgb_bytes,
             (width * 3) as u32,
@@ -457,7 +457,7 @@ where
         };
 
         // 5. 使用Full Range进行转换
-        yuvutils_rs::yuv420_to_rgb(
+        yuv::yuv420_to_rgb(
             &planar_image,
             &mut rgb_bytes,
             (width * 3) as u32,

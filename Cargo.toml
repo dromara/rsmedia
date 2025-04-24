@@ -33,7 +33,7 @@ tracing = "0.1"
 once_cell = "1.21"
 num_cpus = "1.16"
 ndarray = { version = "0.16", optional = true }
-yuvutils-rs = {version = "0.8", features = ["rayon", "professional_mode"]}
+yuv = {version = "0.8", features = ["rayon", "professional_mode"]}
 rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-features = false }
 
 [dev-dependencies]

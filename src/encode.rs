@@ -278,8 +278,8 @@ impl EncoderBuilder {
             encoder.set_ch_layout(AVChannelLayout::from_nb_channels(self.nb_channels).into_inner());
             encoder.set_bit_rate(self.bit_rate);
             encoder.set_sample_rate(self.sample_rate);
-            encoder.set_time_base(time::new_rational(1, self.sample_rate));
             encoder.set_sample_fmt(self.sample_format as _);
+            encoder.set_time_base(time::new_rational(1, self.sample_rate));
         } else {
             return Err(Error::msg(format!(
                 "Unsupported media type: {:?}",

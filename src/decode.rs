@@ -97,6 +97,7 @@ impl DecoderBuilder {
         decoder.apply_codecpar(&input.codecpar())?;
         decoder.set_flags(self.flags as i32);
         decoder.set_time_base(input.time_base);
+        decoder.set_pkt_timebase(input.time_base);
         if let Some(framerate) = input.guess_framerate() {
             decoder.set_framerate(framerate);
         }

@@ -92,7 +92,7 @@ impl<W: Writer> Muxer<W> {
         }
     }
 
-    pub fn dump(&mut self, index: usize) -> Result<()> {
+    pub fn dump(&self, index: usize) -> Result<()> {
         let mux_stream = self.get_stream(index)?;
         println!("{:?}", mux_stream.stream_info);
         Ok(())

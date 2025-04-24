@@ -633,6 +633,9 @@ impl Encoder {
             self.media_type()
         );
 
+        // check frame valid
+        self.check_frame(final_frame.as_ref())?;
+
         // 发送最终帧给编码器上下文
         self.context.send_frame(final_frame.as_ref())?;
 
@@ -682,6 +685,76 @@ impl Encoder {
             }
         };
         Ok(scaled_frame)
+    }
+
+    /// Check if the frame is valid for encoding.
+    fn check_frame(&self, frame: Option<&AVFrame>) -> Result<()> {
+        if frame.is_none() {
+            return Ok(());
+        }
+        let frame = frame.unwrap();
+        match self.media_type {
+            MediaType::VIDEO => {
+                let pix_fmts_opt = self.config.supported_pixel_formats()?;
+                if let Some(pix_fmts) = pix_fmts_opt {
+                    if !pix_fmts.contains(&frame.format) {
+                        return Err(Error::msg(format!(
+                            "Unsupported encode frame pixel format: {:?}",
+                            frame.format
+                        )));
+                    }
+                }
+            }
+
+            MediaType::AUDIO => {
+                let ch_layouts_opt = self.config.supported_channel_layouts()?;
+                if let Some(ch_layouts) = ch_layouts_opt {
+                    ch_layouts
+                        .iter()
+                        .find(|ch_layout| ch_layout.nb_channels == frame.ch_layout.nb_channels)
+                        .ok_or_else(|| {
+                            Error::msg(format!(
+                                "Unsupported encode frame channel layout: {:?}",
+                                frame.ch_layout
+                            ))
+                        })?;
+                }
+
+                let sample_fmts_opt = self.config.supported_sample_formats()?;
+                if let Some(sample_fmts) = sample_fmts_opt {
+                    if !sample_fmts.contains(&frame.format) {
+                        return Err(Error::msg(format!(
+                            "Unsupported encode frame sample format: {:?}",
+                            frame.format
+                        )));
+                    }
+                }
+
+                let sample_rates_opt = self.config.supported_sample_rates()?;
+                if let Some(sample_rates) = sample_rates_opt {
+                    if !sample_rates.contains(&frame.sample_rate) {
+                        return Err(Error::msg(format!(
+                            "Unsupported encode frame sample rate: {:?}",
+                            frame.sample_rate
+                        )));
+                    }
+                }
+
+                // variable frame size, do nothing
+                // if fixed frame size, require frame size
+                if !self.config.support_variable_frame_size()
+                    && frame.nb_samples != self.frame_size()
+                {
+                    return Err(Error::msg(format!(
+                        "Unsupported encode frame sample size: {:?}, expect {:?}",
+                        frame.nb_samples,
+                        self.frame_size()
+                    )));
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Get encoder time base.

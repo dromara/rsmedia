@@ -577,7 +577,7 @@ impl Encoder {
     }
 
     fn send_frame_to_encoder(&mut self, frame_opt: Option<AVFrame>) -> Result<()> {
-        // 1. 应用 Filter Graph (如果存在)
+        // 1. Filter Graph
         let filtered_frame = if let Some(graph) = self.filter_graph.as_mut() {
             // 即便输入是 None (EOF flush), 也要调用 process_frame(None) 来驱动 Filter flush
             match graph.process_frame(frame_opt)? {
@@ -626,6 +626,9 @@ impl Encoder {
             None
         };
 
+        // check frame valid
+        self.check_frame(final_frame.as_ref())?;
+
         log::debug!(
             "Send frame to encoder: {:?}, time_base: {:?}, media_type: {:?}",
             final_frame,
@@ -633,10 +636,7 @@ impl Encoder {
             self.media_type()
         );
 
-        // check frame valid
-        self.check_frame(final_frame.as_ref())?;
-
-        // 发送最终帧给编码器上下文
+        // finally
         self.context.send_frame(final_frame.as_ref())?;
 
         Ok(())

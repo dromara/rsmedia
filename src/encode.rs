@@ -360,20 +360,9 @@ impl EncoderBuilder {
             })
             .map(|cfg| {
                 // codec support or not for hardware acceleration
-                let hw_pixel = cfg
-                    .device_type
-                    .find_hw_pixel_format_with_codec(&codec)
-                    .ok_or_else(|| {
-                        let codec_name = utils::to_string(codec.name()).unwrap();
-                        Error::msg(format!(
-                            "Encoder with HW acceleration is not supported for codec: {codec_name}"
-                        ))
-                    })?;
-
                 log::info!(
-                    "Video Encoder with HW acceleration codec: {:?}, hw_pixel: {:?}, config: {:#?}",
+                    "Video Encoder with HW acceleration codec: {:?}, config: {:#?}",
                     codec.name(),
-                    PixelFormat::from(hw_pixel),
                     cfg
                 );
 
@@ -582,11 +571,80 @@ impl Encoder {
     pub fn encode_raw(&mut self, frame: AVFrame) -> Result<Option<AVPacket>> {
         log::info!("{:?}, time_base: {:?}", frame, frame.time_base);
 
-        // reformat
-        let raw_frame = match self.media_type {
+        // send frame
+        self.send_frame_to_encoder(Some(frame))?;
+
+        // receive packet
+        self.receive_packet()
+    }
+
+    fn send_frame_to_encoder(&mut self, frame_opt: Option<AVFrame>) -> Result<()> {
+        // 1. 应用 Filter Graph (如果存在)
+        let filtered_frame = if let Some(graph) = self.filter_graph.as_mut() {
+            // 即便输入是 None (EOF flush), 也要调用 process_frame(None) 来驱动 Filter flush
+            match graph.process_frame(frame_opt)? {
+                Some(filtered) => Some(filtered),
+                None => {
+                    if graph.is_drained() {
+                        log::debug!("Filter graph drained, try send new frame again.");
+                        return Ok(());
+                    } else if graph.is_flushed() {
+                        log::warn!("Filter graph EOF reached.");
+                    } else {
+                        log::error!("Filter graph returned None, should not happen.");
+                    }
+                    None
+                }
+            }
+        } else {
+            // 没有Filter，直接发送到 Encoder 或者是 EOF
+            frame_opt
+        };
+
+        let final_frame = if let Some(mut frame) = filtered_frame {
+            // 2. 处理需要发送给编码器的帧 (可能是过滤后的，也可能是原始的，或者是 None)
+            // 确保关键帧标记正确, *注意*：frame_num 在 send_frame 后才更新
+            if (self.context.frame_num + 1) % self.keyframe_interval as i64 == 0 {
+                frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
+            }
+
+            // 3. 确保帧的格式匹配编码器要求
+            let scaled_frame = self.rescale(frame)?;
+
+            // 转换硬件帧
+            let hw_frame = match self.hw_context.as_ref() {
+                Some(hw_ctx) if hw_ctx.is_sw_frame(&scaled_frame) => {
+                    // sw_frame -> hw_frame
+                    hw_ctx
+                        .hw_upload(&mut self.context, &scaled_frame)
+                        .context("Failed to upload frame to HW")?
+                }
+                _ => scaled_frame, // 不需要上传或已经是 HW frame
+            };
+
+            Some(hw_frame)
+        } else {
+            // EOF
+            None
+        };
+
+        log::debug!(
+            "Send frame to encoder: {:?}, time_base: {:?}",
+            final_frame,
+            self.time_base()
+        );
+
+        // 发送最终帧给编码器上下文
+        self.context.send_frame(final_frame.as_ref())?;
+
+        Ok(())
+    }
+
+    fn rescale(&self, frame: AVFrame) -> Result<AVFrame> {
+        let scaled_frame = match self.media_type {
             MediaType::VIDEO => {
                 let target_sw_pix_fmt = if let Some(hw_ctx) = self.hw_context.as_ref() {
-                    hw_ctx.config.sw_pixel_format
+                    hw_ctx.get_format(false).into()
                 } else {
                     self.pix_fmt()
                 };
@@ -624,71 +682,7 @@ impl Encoder {
                 )));
             }
         };
-
-        // send frame
-        self.send_frame_to_encoder(Some(raw_frame))?;
-
-        // receive packet
-        self.receive_packet()
-    }
-
-    fn send_frame_to_encoder(&mut self, frame_opt: Option<AVFrame>) -> Result<()> {
-        // 1. 应用 Filter Graph (如果存在)
-        let filtered_frame = if let Some(graph) = self.filter_graph.as_mut() {
-            // 即便输入是 None (EOF flush), 也要调用 process_frame(None) 来驱动 Filter flush
-            match graph.process_frame(frame_opt)? {
-                Some(filtered) => Some(filtered),
-                None => {
-                    if graph.is_drained() {
-                        log::debug!("Filter graph drained, try send new frame again.");
-                        return Ok(());
-                    } else if graph.is_flushed() {
-                        log::warn!("Filter graph EOF reached.");
-                    } else {
-                        log::error!("Filter graph returned None, should not happen.");
-                    }
-                    None
-                }
-            }
-        } else {
-            // 没有Filter，直接发送到 Encoder 或者是 EOF
-            frame_opt
-        };
-
-        let final_frame = if let Some(mut frame) = filtered_frame {
-            // 2. 处理需要发送给编码器的帧 (可能是过滤后的，也可能是原始的，或者是 None)
-            // 确保关键帧标记正确, *注意*：frame_num 在 send_frame 后才更新
-            if (self.context.frame_num + 1) % self.keyframe_interval as i64 == 0 {
-                frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
-            }
-
-            // HW 上传 (如果需要)
-            let hw_frame = match self.hw_context.as_ref() {
-                Some(hw_ctx) if hw_ctx.is_sw_frame(&frame) => {
-                    // sw_frame -> hw_frame
-                    hw_ctx
-                        .hw_upload(&mut self.context, &frame)
-                        .context("Failed to upload frame to HW")?
-                }
-                _ => frame, // 不需要上传或已经是 HW frame
-            };
-
-            Some(hw_frame)
-        } else {
-            // EOF
-            None
-        };
-
-        log::debug!(
-            "Send frame to encoder: {:?}, time_base: {:?}",
-            final_frame,
-            self.time_base()
-        );
-
-        // c. 发送最终帧给编码器上下文
-        self.context.send_frame(final_frame.as_ref())?;
-
-        Ok(())
+        Ok(scaled_frame)
     }
 
     /// Get encoder time base.

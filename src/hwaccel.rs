@@ -161,7 +161,7 @@ static HW_CTX_CACHE: Lazy<Mutex<HashMap<HWDeviceConfig, Arc<HWContext>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub struct HWContext {
-    pub config: HWDeviceConfig,
+    config: HWDeviceConfig,
     device_ctx: UnsafeCell<AVHWDeviceContext>,
 }
 
@@ -576,6 +576,8 @@ impl HWDeviceType {
         }
     }
 
+    /// 注意：该方法只适用于硬件解码，用于查找解码器输出到硬件表面所需的像素格式。
+    /// 对于硬件编码，应检查编码器 AVCodec 的 pix_fmts 字段来确定支持的输入像素格式。
     pub fn find_hw_pixel_format_with_codec(&self, codec: &AVCodec) -> Option<ffi::AVPixelFormat> {
         let mut i = 0;
         loop {

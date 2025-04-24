@@ -153,7 +153,7 @@ pub fn scale(
     }
 
     log::debug!(
-        "Sws scale from: src[{}x{}, {:?}] to dst[{}x{}, {:?}]",
+        "Sws scale from src:[{}x{}, {:?}] to dst:[{}x{}, {:?}]",
         src_frame.width,
         src_frame.height,
         PixelFormat::from(src_frame.format),
@@ -208,7 +208,7 @@ pub fn scale_frame(
         ))?;
 
     log::debug!(
-        "Sws scale_frame from: src[{}x{}, {:?}] to dst[{}x{}, {:?}]",
+        "Sws scale_frame from src:[{}x{}, {:?}] to dst:[{}x{}, {:?}]",
         src_frame.width,
         src_frame.height,
         PixelFormat::from(src_frame.format),
@@ -300,7 +300,7 @@ pub fn convert(
     }
 
     log::debug!(
-        "Swr convert from: src[{}, {:?}, {}] to dst[{}, {:?}, {}]",
+        "Swr convert from src:[{}, {:?}, {}] to dst:[{}, {:?}, {}]",
         src_frame.ch_layout.nb_channels,
         SampleFormat::from(src_frame.format),
         src_frame.sample_rate,
@@ -366,7 +366,7 @@ pub fn convert_frame(
         .context("Failed to convert frame.")?;
 
     log::debug!(
-        "Swr convert_frame from: src[{}, {:?}, {}] to dst[{}, {:?}, {}]",
+        "Swr convert_frame from src:[{}, {:?}, {}] to dst:[{}, {:?}, {}]",
         src_frame.ch_layout.nb_channels,
         SampleFormat::from(src_frame.format),
         src_frame.sample_rate,

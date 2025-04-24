@@ -200,7 +200,7 @@ impl DecoderBuilder {
                         // *注意*：setup_hw_frames 可能会改变 decode_ctx.pix_fmt
                         ctx.setup_hw_frames(true, &mut decode_ctx, init_width, init_height)?;
                         // *重要*: 更新 filter 输入参数中的 pix_fmt (因为 HW 下载后格式会变)
-                        init_pix_fmt = ctx.config.sw_pixel_format;
+                        init_pix_fmt = ctx.get_format(false).into();
                         Ok(ctx)
                     })
                     .context("Hardware acceleration context initialization failed")
@@ -268,7 +268,7 @@ impl DecoderBuilder {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum DecoderState {
+enum DecoderState {
     Normal,
     Drained,
     Flushed,
@@ -720,7 +720,7 @@ impl Drop for Decoder {
                         Ok(None) => {
                             if self.is_drained() {
                                 // If we need more, we continue to drain the queue.
-                                log::debug!("Decoder drained. try send new packet again.");
+                                log::debug!("Decoder draining. continue...");
                                 continue;
                             } else {
                                 log::debug!("Decoder flushed. EOF reached.");

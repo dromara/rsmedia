@@ -434,7 +434,6 @@ impl EncoderBuilder {
             filter_graph,
             context: encode_ctx,
             state: EncoderState::Normal,
-            keyframe_interval: self.keyframe_interval,
         })
     }
 }
@@ -502,7 +501,6 @@ pub struct Encoder {
     filter_graph: Option<FilterGraph>,
     hw_context: Option<Arc<HWContext>>,
     media_type: MediaType,
-    keyframe_interval: u64,
     state: EncoderState,
 }
 
@@ -601,12 +599,12 @@ impl Encoder {
             frame_opt
         };
 
-        let final_frame = if let Some(mut frame) = filtered_frame {
-            // 2. 处理需要发送给编码器的帧 (可能是过滤后的，也可能是原始的，或者是 None)
+        let final_frame = if let Some(frame) = filtered_frame {
+            // 2. 处理需要发送给编码器的帧
             // 确保关键帧标记正确, *注意*：frame_num 在 send_frame 后才更新
-            if (self.context.frame_num + 1) % self.keyframe_interval as i64 == 0 {
-                frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
-            }
+            // if (self.context.frame_num + 1) % self.keyframe_interval as i64 == 0 {
+            //     frame.set_pict_type(ffi::AV_PICTURE_TYPE_I);
+            // }
 
             // 3. 确保帧的格式匹配编码器要求
             let scaled_frame = self.rescale(frame)?;

@@ -124,9 +124,29 @@ pub mod video {
 
     /// Scales video dimensions.
     ///
-    /// `flags`: Optional SWS_FLAG string, Default is "fast_bilinear".
-    /// (e.g. "fast_bilinear", "bilinear", "bicubic", "experimental", "neighbor", "area",
-    /// "bicublin", "gauss", "sinc", "lanczos", "spline").
+    /// # Arguments
+    ///
+    /// * `width`: Target width.
+    /// * `height`: Target height.
+    /// * `flags`: Optional `SWS_FLAG_*` string, specifying the scaling algorithm and other options. Default is "bicubic".
+    ///   Possible values for scaling algorithm flags:
+    ///     - `fast_bilinear`: Select fast bilinear scaling algorithm.
+    ///     - `bilinear`: Select bilinear scaling algorithm.
+    ///     - `bicubic`: Select bicubic scaling algorithm (default).
+    ///     - `experimental`: Select experimental scaling algorithm.
+    ///     - `neighbor`: Select nearest neighbor rescaling algorithm.
+    ///     - `area`: Select averaging area rescaling algorithm.
+    ///     - `bicublin`: Select bicubic scaling algorithm for the luma component, bilinear for chroma components.
+    ///     - `gauss`: Select Gaussian rescaling algorithm.
+    ///     - `sinc`: Select sinc rescaling algorithm.
+    ///     - `lanczos`: Select Lanczos rescaling algorithm. The default width (alpha) is 3 and can be changed by setting param0.
+    ///     - `spline`: Select natural bicubic spline rescaling algorithm.
+    ///       Other possible flags:
+    ///     - `print_info`: Enable printing/debug logging.
+    ///     - `accurate_rnd`: Enable accurate rounding.
+    ///     - `full_chroma_int`: Enable full chroma interpolation.
+    ///     - `full_chroma_inp`: Select full chroma input.
+    ///     - `bitexact`: Enable bitexact output.
     ///
     /// See: <https://ffmpeg.org/ffmpeg-scaler.html#Scaler-Options>
     pub fn scale(width: u32, height: u32, flags: Option<&str>) -> Filter {
@@ -341,6 +361,8 @@ pub mod audio {
         Filter::new("resample", MediaType::AUDIO, spec_str)
     }
 
+    /// Converts audio sample format.
+    /// `format`: <https://ffmpeg.org/ffmpeg-filters.html#format>
     /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1.
     pub fn format(nb_channels: u32, sample_rate: u32, format: SampleFormat) -> Filter {
         let channel_desc = AVChannelLayout::from_nb_channels(nb_channels as i32)

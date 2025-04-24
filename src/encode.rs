@@ -627,9 +627,10 @@ impl Encoder {
         };
 
         log::debug!(
-            "Send frame to encoder: {:?}, time_base: {:?}",
+            "Send frame to encoder: {:?}, time_base: {:?}, media_type: {:?}",
             final_frame,
-            self.time_base()
+            self.time_base(),
+            self.media_type()
         );
 
         // 发送最终帧给编码器上下文

@@ -395,9 +395,6 @@ impl HWContext {
 
     /// 复制帧属性
     ///
-    /// This method copies essential properties and side data from the source frame to the destination frame.
-    /// It uses manual copying instead of `ffi::av_frame_copy_props` due to runtime errors encountered with the latter.
-    ///
     /// # Arguments
     /// * `dst` - The destination frame to which properties will be copied.
     /// * `src` - The source frame from which properties will be copied.
@@ -425,7 +422,7 @@ impl HWContext {
             }
         }
 
-        // 注意：这里尝试使用 av_frame_copy_props 会导致 runtime error:
+        // 注意：这里尝试使用 ffi 拷贝属性会导致 runtime error:
         // unsafe {
         //     ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
         // }

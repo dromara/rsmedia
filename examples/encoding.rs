@@ -19,15 +19,15 @@ fn main() -> anyhow::Result<()> {
 
     rsmedia::init().unwrap();
 
+    let width = 640;
+    let height = 640;
+    
     let filters = vec![
-        filter::video::scale(1920, 1080, Some("bicubic")),
-        filter::video::crop(100, 100, 1600, 900),
-        filter::video::drawtext("Watermark", 50, 50, "fonts/Arial.ttf", 24, "white@0.5"),
-        filter::video::hflip(),
+        filter::video::scale(1280, 720, Some("bicubic")),
+        filter::video::crop(20, 20, width, height),
+        filter::video::drawtext("Watermark", 50, 50, "fonts/Arial.ttf", 18, "white@0.5"),
     ];
-
-    let width = 1280;
-    let height = 720;
+ 
     let output_path = Path::new("/tmp/rainbow.mp4");
 
     let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)

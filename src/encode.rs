@@ -650,11 +650,7 @@ impl Encoder {
                 } else {
                     self.pix_fmt()
                 };
-
-                if frame.width != self.width()
-                    || frame.height != self.height()
-                    || frame.format != target_sw_pix_fmt.into()
-                {
+                if frame.format != target_sw_pix_fmt.into() {
                     swctx::scale(&frame, self.width(), self.height(), target_sw_pix_fmt)?
                 } else {
                     frame

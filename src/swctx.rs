@@ -1,4 +1,4 @@
-use crate::{time, PixelFormat, SampleFormat};
+use crate::{imgutils, time, PixelFormat, SampleFormat};
 
 use rsmpeg::avutil::{AVFrame, AVSamples};
 use rsmpeg::ffi;
@@ -121,15 +121,10 @@ pub fn scale(
     dst_frame.set_width(dst_width);
     dst_frame.set_height(dst_height);
     dst_frame.set_format(dst_pix_fmt.into());
-    // copy props
-    let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));
-    }
-
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
+    imgutils::copy_frame(src_frame, &mut dst_frame)?;
 
     let mut sws_ctx = setup_scaler(
         src_frame.width,
@@ -142,11 +137,22 @@ pub fn scale(
     .context("Failed to create swscale context.")?;
 
     let ret = unsafe {
-        ffi::sws_scale_frame(
-            sws_ctx.as_mut_ptr(),
-            dst_frame.as_mut_ptr(),
-            src_frame.as_ptr(),
-        )
+        let dst_frame_ptr = dst_frame.as_mut_ptr();
+        // set color properties:
+        // 指定像素分量值（Y, U, V 或 R, G, B）的范围
+        // - AVCOL_RANGE_MPEG (或 AVCOL_RANGE_LIMITED): 有限范围，通常用于广播电视标准（如 BT.709），Y 值范围通常是 16-235，UV 值范围是 16-240
+        // - AVCOL_RANGE_JPEG (或 AVCOL_RANGE_FULL): 全范围，通常用于计算机图形和数字摄影，YUV 或 RGB 值范围通常是 0-255
+        (*dst_frame_ptr).color_range = ffi::AVCOL_RANGE_JPEG;
+        // 表示的颜色范围, 决定了图像的色域
+        (*dst_frame_ptr).color_primaries = ffi::AVCOL_PRI_RESERVED0;
+        // 伽马校正（Gamma）:描述了编码的像素值（数字信号）和实际场景光线强度之间的非线性关系
+        (*dst_frame_ptr).color_trc = ffi::AVCOL_TRC_RESERVED0;
+        // 转换矩阵系数: 与 color_primaries 紧密相关，因为转换矩阵通常依赖于原色定义
+        (*dst_frame_ptr).colorspace = ffi::AVCOL_SPC_RGB;
+        // 指定色度样本（U, V）相对于亮度样本（Y）的采样位置, 不做要求
+        (*dst_frame_ptr).chroma_location = ffi::AVCHROMA_LOC_UNSPECIFIED;
+
+        ffi::sws_scale_frame(sws_ctx.as_mut_ptr(), dst_frame_ptr, src_frame.as_ptr())
     };
     if ret < 0 {
         return Err(Error::msg(format!("Failed to scale frame, ret: {}", ret)));
@@ -180,15 +186,10 @@ pub fn scale_frame(
     dst_frame.set_width(dst_width);
     dst_frame.set_height(dst_height);
     dst_frame.set_format(dst_pix_fmt.into());
-    // copy props
-    let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));
-    }
-
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
+    imgutils::copy_frame(src_frame, &mut dst_frame)?;
 
     let mut sws_ctx = setup_scaler(
         src_frame.width,
@@ -342,6 +343,7 @@ pub fn convert_frame(
     .context("Failed to create resample context.")?;
 
     let mut dst_frame = AVFrame::new();
+    // copy properties
     let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
     if ret < 0 {
         return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));

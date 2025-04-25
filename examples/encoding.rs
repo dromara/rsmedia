@@ -21,13 +21,13 @@ fn main() -> anyhow::Result<()> {
 
     let width = 640;
     let height = 640;
-    
+
     let filters = vec![
         filter::video::scale(1280, 720, Some("bicubic")),
         filter::video::crop(20, 20, width, height),
         filter::video::drawtext("Watermark", 50, 50, "fonts/Arial.ttf", 18, "white@0.5"),
     ];
- 
+
     let output_path = Path::new("/tmp/rainbow.mp4");
 
     let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)

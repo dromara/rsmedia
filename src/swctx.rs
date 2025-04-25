@@ -124,7 +124,7 @@ pub fn scale(
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
-    imgutils::copy_frame_props(src_frame, &mut dst_frame, false)?;
+    imgutils::copy_frame_metadata(src_frame, &mut dst_frame, false)?;
     let mut sws_ctx = setup_scaler(
         src_frame.width,
         src_frame.height,
@@ -188,7 +188,7 @@ pub fn scale_frame(
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
-    imgutils::copy_frame_props(src_frame, &mut dst_frame, false)?;
+    imgutils::copy_frame_metadata(src_frame, &mut dst_frame, false)?;
 
     let mut sws_ctx = setup_scaler(
         src_frame.width,
@@ -343,7 +343,7 @@ pub fn convert_frame(
 
     let mut dst_frame = AVFrame::new();
     // copy props
-    imgutils::copy_frame_props(src_frame, &mut dst_frame, false)?;
+    imgutils::copy_frame_metadata(src_frame, &mut dst_frame, false)?;
     dst_frame.set_format(out_sample_fmt);
     dst_frame.set_ch_layout(out_ch_layout);
     dst_frame.set_nb_samples(src_frame.nb_samples);

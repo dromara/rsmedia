@@ -1,5 +1,5 @@
 use crate::pixel::PixelFormat;
-use crate::{utils, Options};
+use crate::{imgutils, utils, Options};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
 use rsmpeg::avutil::{AVFrame, AVHWDeviceContext, AVHWFramesContext};
@@ -310,7 +310,7 @@ impl HWContext {
             .context("Failed to transfer data from hardware frame to software frame")?;
 
         // 复制帧属性
-        self.copy_frame_props(&mut sw_frame, hw_frame);
+        self.copy_frame_props(hw_frame, &mut sw_frame)?;
 
         log::debug!(
             "Downloaded from GPU: format={:?}, size={}x{}, linesize=[{}, {}], cost={:?}ms",
@@ -378,7 +378,7 @@ impl HWContext {
             .context("Failed to transfer data from software frame to hardware frame")?;
 
         // 复制帧属性
-        self.copy_frame_props(&mut hw_frame, sw_frame);
+        self.copy_frame_props(sw_frame, &mut hw_frame)?;
 
         log::debug!(
             "Uploaded to GPU: format={:?}, size={}x{}, linesize=[{}, {}], cost={:?}ms",
@@ -398,7 +398,7 @@ impl HWContext {
     /// # Arguments
     /// * `dst` - The destination frame to which properties will be copied.
     /// * `src` - The source frame from which properties will be copied.
-    fn copy_frame_props(&self, dst: &mut AVFrame, src: &AVFrame) {
+    fn copy_frame_props(&self, src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
         dst.set_pts(src.pts);
         dst.set_time_base(src.time_base);
         dst.set_pict_type(src.pict_type);
@@ -408,24 +408,15 @@ impl HWContext {
 
         unsafe {
             let dst_ptr = dst.as_mut_ptr();
+            (*dst_ptr).flags = src.flags;
+            (*dst_ptr).opaque = src.opaque;
             (*dst_ptr).quality = src.quality;
+            (*dst_ptr).duration = src.duration;
             (*dst_ptr).sample_aspect_ratio = src.sample_aspect_ratio;
-
-            // copy side_data
-            for i in 0..src.nb_side_data {
-                let side_data = *src.side_data.add(i as usize);
-                ffi::av_frame_new_side_data_from_buf(
-                    dst_ptr,
-                    (*side_data).type_,
-                    ffi::av_buffer_ref((*side_data).buf),
-                );
-            }
         }
 
-        // 注意：这里尝试使用 ffi 拷贝属性会导致 runtime error:
-        // unsafe {
-        //     ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
-        // }
+        // 复制帧属性
+        imgutils::copy_frame_metadata(src, dst, false)
     }
 
     /// Determine if a frame is in hardware memory

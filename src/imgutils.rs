@@ -148,15 +148,17 @@ pub fn copy_frame_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
 }
 
 /// 完整复制 AVFrame（包括数据和属性）
-pub fn copy_frame(src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
-    // 目标 AVFrame 需已分配内存
-    assert!(dst.is_allocated(), "destination frame is not allocated");
-
+pub fn copy_frame_props(src: &AVFrame, dst: &mut AVFrame, copy_data: bool) -> Result<()> {
     unsafe {
-        // 复制数据
-        let ret = ffi::av_frame_copy(dst.as_mut_ptr(), src.as_ptr());
-        if ret < 0 {
-            return Err(anyhow::anyhow!("Failed to copy frame data: {}", ret));
+        if copy_data {
+            // 目标 AVFrame 需已分配内存
+            assert!(dst.is_allocated(), "destination frame is not allocated");
+
+            // 复制数据
+            let ret = ffi::av_frame_copy(dst.as_mut_ptr(), src.as_ptr());
+            if ret < 0 {
+                return Err(anyhow::anyhow!("Failed to copy frame data: {}", ret));
+            }
         }
 
         // 复制属性
@@ -924,7 +926,7 @@ mod tests {
         );
 
         // 测试复制
-        copy_frame(&src_frame, &mut dst_frame)?;
+        copy_frame_props(&src_frame, &mut dst_frame, true)?;
 
         // 验证目标frame属性
         assert_eq!(dst_frame.width, 320, "Frame width mismatch");

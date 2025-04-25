@@ -124,8 +124,7 @@ pub fn scale(
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
-    imgutils::copy_frame(src_frame, &mut dst_frame)?;
-
+    imgutils::copy_frame_props(src_frame, &mut dst_frame, false)?;
     let mut sws_ctx = setup_scaler(
         src_frame.width,
         src_frame.height,
@@ -189,7 +188,7 @@ pub fn scale_frame(
     dst_frame
         .alloc_buffer()
         .context("Failed to allocate destination frame buffer")?;
-    imgutils::copy_frame(src_frame, &mut dst_frame)?;
+    imgutils::copy_frame_props(src_frame, &mut dst_frame, false)?;
 
     let mut sws_ctx = setup_scaler(
         src_frame.width,

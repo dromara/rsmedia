@@ -119,7 +119,6 @@ pub unsafe fn to_c_char(s: &str) -> *mut c_char {
     CString::new(s).unwrap().into_raw()
 }
 
-// 使用示例
 #[cfg(test)]
 mod tests {
     use super::*;

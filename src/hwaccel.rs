@@ -160,6 +160,10 @@ impl std::fmt::Display for HWDeviceConfig {
 static HW_CTX_CACHE: Lazy<Mutex<HashMap<HWDeviceConfig, Arc<HWContext>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
+/// `HWContext` represents a hardware context.
+///
+/// It includes methods for setting up hardware frames, downloading frames from hardware to system memory,
+/// and uploading frames from system memory to hardware.
 pub struct HWContext {
     config: HWDeviceConfig,
     device_ctx: UnsafeCell<AVHWDeviceContext>,
@@ -286,15 +290,7 @@ impl HWContext {
             }
         }
 
-        // 确保解码器上下文有硬件帧上下文
-        // let mut hw_frames_ctx = decoder
-        //     .hw_frames_ctx_mut()
-        //     .ok_or_else(|| Error::msg("Decoder has no hardware frames context"))?;
-        //
-        // let from_gpu_fmt_vec = get_transfer_formats_from_gpu(&mut hw_frames_ctx);
-        // log::debug!("from_gpu_fmt_vec:{:?}", from_gpu_fmt_vec);
-
-        // 创建新的软件帧
+        // 创建软件帧
         let mut sw_frame = AVFrame::new();
         sw_frame.set_width(hw_frame.width);
         sw_frame.set_height(hw_frame.height);
@@ -303,7 +299,7 @@ impl HWContext {
             .alloc_buffer()
             .context("Failed to allocate software frame buffer")?;
 
-        // 分配硬件帧缓冲区，这里是从硬件帧转换为软件帧，所以需要分配软件帧缓冲区
+        // 该方法分配硬件帧缓冲区，这里是从硬件帧转换为软件帧，所以需要分配软件帧缓冲区
         // hw_frames_ctx
         //     .get_buffer(&mut sw_frame)
         //     .context("Failed to allocate software frame buffer")?;
@@ -362,10 +358,7 @@ impl HWContext {
             .hw_frames_ctx_mut()
             .ok_or_else(|| Error::msg("Encoder has no hardware frames context"))?;
 
-        // let to_gpu_fmt_vec = get_transfer_formats_to_gpu(&mut hw_frames_ctx);
-        // log::debug!("to_gpu_fmt_vec:{:?}", to_gpu_fmt_vec);
-
-        // 创建新的硬件帧
+        // 创建硬件帧
         let mut hw_frame = AVFrame::new();
         hw_frame.set_width(sw_frame.width);
         hw_frame.set_height(sw_frame.height);
@@ -401,28 +394,38 @@ impl HWContext {
     }
 
     /// 复制帧属性
+    ///
+    /// This method copies essential properties and side data from the source frame to the destination frame.
+    /// It uses manual copying instead of `ffi::av_frame_copy_props` due to runtime errors encountered with the latter.
+    ///
+    /// # Arguments
+    /// * `dst` - The destination frame to which properties will be copied.
+    /// * `src` - The source frame from which properties will be copied.
     fn copy_frame_props(&self, dst: &mut AVFrame, src: &AVFrame) {
         dst.set_pts(src.pts);
         dst.set_time_base(src.time_base);
-        dst.set_sample_rate(src.sample_rate);
         dst.set_pict_type(src.pict_type);
         dst.set_ch_layout(src.ch_layout);
         dst.set_nb_samples(src.nb_samples);
+        dst.set_sample_rate(src.sample_rate);
 
-        // copy side_data
         unsafe {
+            let dst_ptr = dst.as_mut_ptr();
+            (*dst_ptr).quality = src.quality;
+            (*dst_ptr).sample_aspect_ratio = src.sample_aspect_ratio;
+
+            // copy side_data
             for i in 0..src.nb_side_data {
                 let side_data = *src.side_data.add(i as usize);
                 ffi::av_frame_new_side_data_from_buf(
-                    dst.as_mut_ptr(),
+                    dst_ptr,
                     (*side_data).type_,
                     ffi::av_buffer_ref((*side_data).buf),
                 );
             }
         }
 
-        // 注意：尝试使用 av_frame_copy_props 会导致运行时错误
-        // runtime error:
+        // 注意：这里尝试使用 av_frame_copy_props 会导致 runtime error:
         // unsafe {
         //     ffi::av_frame_copy_props(sw_frame.as_mut_ptr(), hw_frame.as_ptr());
         // }

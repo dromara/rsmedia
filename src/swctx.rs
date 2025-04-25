@@ -342,12 +342,8 @@ pub fn convert_frame(
     .context("Failed to create resample context.")?;
 
     let mut dst_frame = AVFrame::new();
-    // copy properties
-    let ret = unsafe { ffi::av_frame_copy_props(dst_frame.as_mut_ptr(), src_frame.as_ptr()) };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to copy props, ret: {}", ret)));
-    }
-
+    // copy props
+    imgutils::copy_frame_props(src_frame, &mut dst_frame, false)?;
     dst_frame.set_format(out_sample_fmt);
     dst_frame.set_ch_layout(out_ch_layout);
     dst_frame.set_nb_samples(src_frame.nb_samples);

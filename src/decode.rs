@@ -809,12 +809,18 @@ unsafe impl Sync for Decoder {}
 pub struct DecoderWrapper<R: Reader> {
     reader: R,
     decoder: Decoder,
+    stream_info: StreamInfo,
 }
 
 impl<R: Reader> DecoderWrapper<R> {
     /// 创建一个新的解码器包装器
     pub fn new(decoder: Decoder, reader: R) -> Self {
-        Self { decoder, reader }
+        let stream_info = StreamInfo::from_reader(&reader, decoder.stream_index()).unwrap();
+        Self {
+            reader,
+            decoder,
+            stream_info,
+        }
     }
 
     /// 解码下一帧（媒体帧）
@@ -826,6 +832,10 @@ impl<R: Reader> DecoderWrapper<R> {
     /// 解码下一帧（原始帧）
     pub fn decode_raw(&mut self) -> Result<Option<AVFrame>> {
         self.decoder.decode_raw(&mut self.reader)
+    }
+
+    pub fn stream_info(&self) -> &StreamInfo {
+        &self.stream_info
     }
 
     /// 获取内部解码器的可变引用

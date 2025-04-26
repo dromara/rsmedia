@@ -7,6 +7,7 @@ use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Writer;
 use crate::options::Options;
 use crate::pixel::PixelFormat;
+use crate::stream::StreamInfo;
 use crate::{swctx, time, utils, Location, MediaType, SampleFormat, StreamWriter};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
@@ -941,6 +942,7 @@ pub struct EncoderWrapper<W: Writer> {
     encoder: Encoder,
     interleaved: bool,
     stream_index: usize,
+    stream_info: StreamInfo,
     have_written_header: bool,
     have_written_trailer: bool,
 }
@@ -948,11 +950,13 @@ pub struct EncoderWrapper<W: Writer> {
 impl<W: Writer> EncoderWrapper<W> {
     /// 创建一个新的编码器包装器
     pub fn new(encoder: Encoder, writer: W, stream_index: usize, interleaved: bool) -> Self {
+        let stream_info = StreamInfo::from_writer(&writer, stream_index).unwrap();
         Self {
             writer,
             encoder,
             interleaved,
             stream_index,
+            stream_info,
             have_written_header: false,
             have_written_trailer: false,
         }
@@ -971,11 +975,15 @@ impl<W: Writer> EncoderWrapper<W> {
             self.have_written_header = true;
         }
 
-        if let Some(mut pkt) = self.encoder.encode_raw(frame)? {
+        if let Some(mut packet) = self.encoder.encode_raw(frame)? {
+            packet.set_pos(-1);
+            packet.set_stream_index(self.stream_index as i32);
+            packet.rescale_ts(self.time_base(), self.stream_info.time_base);
+
             if self.interleaved {
-                self.writer.write_interleaved(&mut pkt)?;
+                self.writer.write_interleaved(&mut packet)?;
             } else {
-                self.writer.write_frame(&mut pkt)?;
+                self.writer.write_frame(&mut packet)?;
             }
         }
 
@@ -1004,12 +1012,16 @@ impl<W: Writer> EncoderWrapper<W> {
             &mut self.writer,
             self.interleaved,
             self.stream_index,
-            self.encoder.time_base(),
+            self.stream_info.time_base,
         )
     }
 
     pub fn time_base(&self) -> ffi::AVRational {
         self.encoder.time_base()
+    }
+
+    pub fn stream_info(&self) -> &StreamInfo {
+        &self.stream_info
     }
 
     /// 获取内部编码器的可变引用

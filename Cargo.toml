@@ -57,7 +57,7 @@ palette = "0.7"
 colorous = "1.0"
 ab_glyph = "0.2"
 libblur = "0.17"
-pic-scale = "0.5"
+pic-scale = "0.6"
 colorutils-rs = "0.7"
 histogram_equalization = "0.2"
 

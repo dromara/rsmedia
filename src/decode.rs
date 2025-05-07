@@ -214,9 +214,9 @@ impl DecoderBuilder {
                     FilterParams::Video(VideoParams {
                         width: init_width,
                         height: init_height,
-                        format: PixelFormat::YUV420P, // 确保 filter 的输入格式是 YUV420P
+                        format: PixelFormat::YUV420P, // 确保视频帧 filter 的输入格式是 YUV420P
                         time_base: decode_ctx.time_base,
-                        frame_rate: decode_ctx.framerate, // 使用解码器帧率
+                        frame_rate: decode_ctx.framerate,
                         pixel_aspect: decode_ctx.sample_aspect_ratio,
                     })
                 }
@@ -658,8 +658,10 @@ impl Decoder {
             }
         };
 
-        // 确保输入Filter的视频帧的格式为YUV420P. 例如，硬件加速帧 NV12 -> YUV420P
-        // Video AVFrame default pixel is YUV420P,
+        // 3. 确保输入Filter的视频帧的格式为 YUV420P
+        // 例如：
+        // 无硬件加速，默认解码格式 YUV420P
+        // 存在硬件加速帧，则转换 NV12 -> YUV420P
         let raw_frame = match self.media_type {
             MediaType::VIDEO => {
                 let target_sw_pix_fmt = PixelFormat::YUV420P;
@@ -680,7 +682,7 @@ impl Decoder {
             }
         };
 
-        // 3. 应用 Filter Graph (如果存在)
+        // 4. 应用 Filter Graph
         if let Some(graph) = self.filter_graph.as_mut() {
             // filter process
             match graph.process_frame(Some(raw_frame))? {
@@ -700,7 +702,7 @@ impl Decoder {
                 }
             }
         } else {
-            // 4. 如果没有 Filter Graph，直接返回 CPU 帧
+            // 如果没有 Filter Graph，直接返回 CPU 帧
             Ok(Some(raw_frame))
         }
     }

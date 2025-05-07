@@ -395,16 +395,15 @@ impl EncoderBuilder {
                         format: self.pixel_format,
                         time_base: self.time_base,
                         frame_rate: self.frame_rate,
-                        pixel_aspect: time::new_rational(1, 1), // 默认 1:1
+                        pixel_aspect: encode_ctx.sample_aspect_ratio, // sample aspect ratio (0 if unknown)
                     })
                 }
                 MediaType::AUDIO => {
-                    // 音频参数
                     FilterParams::Audio(AudioParams {
                         nb_channels: self.nb_channels,
                         sample_rate: self.sample_rate,
                         format: self.sample_format,
-                        time_base: time::new_rational(1, self.sample_rate),
+                        time_base: time::new_rational(1, self.sample_rate), // time_base = 1 / sample_rate
                     })
                 }
                 _ => {
@@ -652,7 +651,7 @@ impl Encoder {
                     self.pix_fmt()
                 };
                 if frame.format != target_sw_pix_fmt.into() {
-                    swctx::scale(&frame, self.width(), self.height(), target_sw_pix_fmt)?
+                    swctx::scale(&frame, frame.width, frame.height, target_sw_pix_fmt)?
                 } else {
                     frame
                 }

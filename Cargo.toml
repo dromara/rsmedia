@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "High-level video toolkit based on ffmpeg."
 keywords = ["video", "ffmpeg", "encoding", "decoding", "muxing"]
 categories = ["multimedia", "multimedia::video", "multimedia::audio"]
-authors = ["Oddity.ai Developers", "phial3"]
+authors = ["phial3"]
 repository = "https://github.com/phial3/rsmedia.git"
 exclude = [".github/*", "assets/*", "data/*", "examples/*", "tests/*", "benches/*", "docs/*", ]
 
@@ -57,7 +57,7 @@ palette = "0.7"
 colorous = "1.0"
 ab_glyph = "0.2"
 libblur = "0.17"
-pic-scale = "0.5"
+pic-scale = "0.6"
 colorutils-rs = "0.7"
 histogram_equalization = "0.2"
 

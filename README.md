@@ -146,21 +146,12 @@ export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 >
 > ```toml
 > ## default feature is ok for ffmpeg 7.x unix:
-> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg" }
-> ## or like this:
 > rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_system_ffmpeg"] }
 > ```
-> - ffmpeg 6.x for unix:
-> ```toml
-> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg6", "link_system_ffmpeg"] }
-> ```
+>
 > - ffmpeg 7.x for windows:
 > ```toml
 > rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_vcpkg_ffmpeg"] }
-> ```
-> - ffmpeg 6.x for windows:
-> ```toml
-> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg6", "link_vcpkg_ffmpeg"] }
 > ```
 
 ## 📖 Examples
@@ -335,7 +326,7 @@ RUST_LOG=video=debug cargo run
 Licensed under either of
 
 * Apache License, Version 2.0
-  ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+  ([LICENSE-APACHE](LICENSE-APACHE.md) or http://www.apache.org/licenses/LICENSE-2.0)
 * MIT license
   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 

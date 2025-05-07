@@ -100,8 +100,8 @@ fn escape_filter_str(input: &str) -> String {
             &mut escaped_ptr,
             c_input.as_ptr(),
             special_chars.as_ptr(),
-            ffi::AV_ESCAPE_MODE_BACKSLASH,
-            1,
+            ffi::AV_ESCAPE_MODE_AUTO,
+            ffi::AV_ESCAPE_FLAG_WHITESPACE as i32,
         );
 
         if result < 0 || escaped_ptr.is_null() {

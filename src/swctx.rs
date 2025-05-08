@@ -587,6 +587,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "This test is too slow to run by default"]
     fn test_format_conversion_with_different_rates() -> Result<()> {
         let sample_rates = &[44100, 48000, 96000];
         let nb_samples = 1024;

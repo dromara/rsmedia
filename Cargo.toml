@@ -22,18 +22,26 @@ link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg", "pkg-config"]
 link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg", "vcpkg"]
 
 [dependencies]
-url = "2.5"
-dashmap = "6.1"
+pix = "0.14"
+rgb = "0.8"
+yuv = {version = "0.8", features = ["rayon", "professional_mode"]}
+color = "0.3"
+colorous = "1.0"
+colorutils-rs = "0.7"
+palette = "0.7"
 image = "0.25"
 imageproc = "0.25"
 num-traits = "0.2"
 anyhow = "1.0"
 log = "0.4"
 tracing = "0.1"
+url = "2.5"
+rand = "0.9"
+rayon = "1.10"
+dashmap = "6.1"
 once_cell = "1.21"
 num_cpus = "1.16"
 ndarray = { version = "0.16", optional = true }
-yuv = {version = "0.8", features = ["rayon", "professional_mode"]}
 rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-features = false }
 
 [dev-dependencies]
@@ -43,27 +51,14 @@ chrono = "0.4"
 ringbuf = "0.4"
 ctor = "0.4"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
-
-## parallel
-rayon = "1.10"
-
-## security & async
-futures = "0.3"
-tokio = { version = "1", features = ["full"] }
-
-## color
-pix = "0.14"
-palette = "0.7"
-colorous = "1.0"
 ab_glyph = "0.2"
 libblur = "0.17"
 pic-scale = "0.6"
-colorutils-rs = "0.7"
-histogram_equalization = "0.2"
-
-## image & video
 fast_image_resize = "=5.1"
-
+histogram_equalization = "0.2"
+## security & async
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
 ## sound & audio
 cpal = "0.15"
 wavers = "1.5"

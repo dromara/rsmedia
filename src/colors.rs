@@ -1,60 +1,280 @@
-use image::Rgb;
-use std::collections::HashMap;
+/// Color: 0xRRGGBBAA
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Color(pub u32);
 
-pub fn create_color_map() -> HashMap<String, Rgb<u8>> {
-    let mut map = HashMap::new();
+/// base
+impl Color {
+    pub const fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self(((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | (a as u32))
+    }
 
-    // 基础颜色
-    map.insert("red".to_string(), Rgb([255, 0, 0]));
-    map.insert("green".to_string(), Rgb([0, 255, 0]));
-    map.insert("blue".to_string(), Rgb([0, 0, 255]));
-    map.insert("yellow".to_string(), Rgb([255, 255, 0]));
-    map.insert("cyan".to_string(), Rgb([0, 255, 255]));
-    map.insert("magenta".to_string(), Rgb([255, 0, 255]));
-    map.insert("white".to_string(), Rgb([255, 255, 255]));
-    map.insert("black".to_string(), Rgb([0, 0, 0]));
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+        Self::from_rgba(r, g, b, 0xff)
+    }
 
-    // 金属色系
-    map.insert("silver".to_string(), Rgb([192, 192, 192]));
-    map.insert("gold".to_string(), Rgb([255, 215, 0]));
-    map.insert("bronze".to_string(), Rgb([205, 127, 50]));
-    map.insert("platinum".to_string(), Rgb([229, 228, 226]));
+    pub fn rgba(&self) -> (u8, u8, u8, u8) {
+        let r = ((self.0 >> 24) & 0xff) as u8;
+        let g = ((self.0 >> 16) & 0xff) as u8;
+        let b = ((self.0 >> 8) & 0xff) as u8;
+        let a = (self.0 & 0xff) as u8;
+        (r, g, b, a)
+    }
 
-    // 灰度
-    map.insert("gray".to_string(), Rgb([128, 128, 128]));
-    map.insert("dark_gray".to_string(), Rgb([64, 64, 64]));
-    map.insert("light_gray".to_string(), Rgb([192, 192, 192]));
+    pub fn rgb(&self) -> (u8, u8, u8) {
+        let (r, g, b, _) = self.rgba();
+        (r, g, b)
+    }
 
-    // 自然色系
-    map.insert("brown".to_string(), Rgb([165, 42, 42]));
-    map.insert("beige".to_string(), Rgb([245, 245, 220]));
-    map.insert("ivory".to_string(), Rgb([255, 255, 240]));
-    map.insert("coral".to_string(), Rgb([255, 127, 80]));
-    map.insert("salmon".to_string(), Rgb([250, 128, 114]));
+    pub fn bgr(&self) -> (u8, u8, u8) {
+        let (r, g, b) = self.rgb();
+        (b, g, r)
+    }
 
-    // 深色系
-    map.insert("navy".to_string(), Rgb([0, 0, 128]));
-    map.insert("maroon".to_string(), Rgb([128, 0, 0]));
-    map.insert("olive".to_string(), Rgb([128, 128, 0]));
-    map.insert("teal".to_string(), Rgb([0, 128, 128]));
-    map.insert("purple".to_string(), Rgb([128, 0, 128]));
+    pub fn r(&self) -> u8 {
+        self.rgba().0
+    }
 
-    // 浅色系
-    map.insert("pink".to_string(), Rgb([255, 192, 203]));
-    map.insert("lavender".to_string(), Rgb([230, 230, 250]));
-    map.insert("mint".to_string(), Rgb([189, 252, 201]));
-    map.insert("peach".to_string(), Rgb([255, 218, 185]));
-    map.insert("sky_blue".to_string(), Rgb([135, 206, 235]));
+    pub fn g(&self) -> u8 {
+        self.rgba().1
+    }
 
-    // 特殊色
-    map.insert("turquoise".to_string(), Rgb([64, 224, 208]));
-    map.insert("indigo".to_string(), Rgb([75, 0, 130]));
-    map.insert("violet".to_string(), Rgb([238, 130, 238]));
-    map.insert("crimson".to_string(), Rgb([220, 20, 60]));
-    map.insert("chartreuse".to_string(), Rgb([127, 255, 0]));
+    pub fn b(&self) -> u8 {
+        self.rgba().2
+    }
 
-    map
+    pub fn a(&self) -> u8 {
+        self.rgba().3
+    }
+
+    pub fn hex(&self, uppercase: bool) -> String {
+        if uppercase {
+            format!("#{:08X}", self.0)
+        } else {
+            format!("#{:08x}", self.0)
+        }
+    }
+
+    pub fn with_alpha(self, a: u8) -> Self {
+        let (r, g, b) = self.rgb();
+        (r, g, b, a).into()
+    }
+
+    pub fn create_palette<A: Into<Self> + Copy>(xs: &[A]) -> Vec<Self> {
+        xs.iter().copied().map(Into::into).collect()
+    }
+
+    pub fn try_create_palette<A: TryInto<Self> + Copy>(xs: &[A]) -> anyhow::Result<Vec<Self>>
+    where
+        <A as TryInto<Self>>::Error: std::fmt::Debug,
+    {
+        xs.iter()
+            .copied()
+            .map(|x| {
+                x.try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert: {:?}", e))
+            })
+            .collect()
+    }
+
+    pub fn palette_rand(n: usize) -> Vec<Self> {
+        use rand::Rng;
+        use rayon::prelude::*;
+        let xs: Vec<(u8, u8, u8)> = (0..n)
+            .into_par_iter()
+            .map(|_| {
+                let mut rng = rand::rng();
+                (
+                    rng.random_range(0..=255),
+                    rng.random_range(0..=255),
+                    rng.random_range(0..=255),
+                )
+            })
+            .collect();
+        Self::create_palette(&xs)
+    }
+
+    pub fn palette_distinct(count: usize) -> Vec<Color> {
+        (0..count)
+            .map(|i| {
+                // 均匀分布色相(0-360度)
+                let hue = (i as f32 * 360.0 / count as f32) % 360.0;
+                // 固定饱和度和亮度为适中值
+                let saturation = 0.7;
+                let lightness = 0.5;
+                Color::from_hsl(hue as u16, saturation as u16, lightness as u16)
+            })
+            .collect()
+    }
 }
+
+/// extend
+impl Color {
+    /// HSV
+    pub fn from_hsv(h: u16, s: u16, v: u16) -> Self {
+        let rgb = colorutils_rs::Hsv::new(h, s, v).to_rgb8();
+        Self::from_rgb(rgb.r, rgb.g, rgb.b)
+    }
+
+    pub fn to_hsv(&self) -> colorutils_rs::Hsv {
+        let (r, g, b) = self.rgb();
+        colorutils_rs::Rgb::<u8>::new(r, g, b).to_hsv()
+    }
+
+    /// HSL
+    pub fn from_hsl(h: u16, s: u16, l: u16) -> Self {
+        let rgb = colorutils_rs::Hsl::new(h, s, l).to_rgb8();
+        Self::from_rgb(rgb.r, rgb.g, rgb.b)
+    }
+
+    pub fn to_hsl(&self) -> colorutils_rs::Hsl {
+        let (r, g, b) = self.rgb();
+        colorutils_rs::Rgb::<u8>::new(r, g, b).to_hsl()
+    }
+
+    /// LAB
+    pub fn from_lab(l: f32, a: f32, b: f32) -> Self {
+        let rgb = colorutils_rs::Lab::new(l, a, b).to_rgb8();
+        Self::from_rgb(rgb.r, rgb.g, rgb.b)
+    }
+
+    pub fn to_lab(&self) -> colorutils_rs::Lab {
+        let (r, g, b) = self.rgb();
+        colorutils_rs::Rgb::<u8>::new(r, g, b).to_lab()
+    }
+
+    /// XYB
+    pub fn from_xyb(x: f32, y: f32, b: f32) -> Self {
+        let rgb = colorutils_rs::Xyb::new(x, y, b).to_rgb(colorutils_rs::TransferFunction::Srgb);
+        Self::from_rgb(rgb.r, rgb.g, rgb.b)
+    }
+
+    pub fn to_xyb(&self) -> colorutils_rs::Xyb {
+        let (r, g, b) = self.rgb();
+        let rgb = colorutils_rs::Rgb::<u8>::new(r, g, b);
+        colorutils_rs::Xyb::from_rgb(rgb, colorutils_rs::TransferFunction::Srgb)
+    }
+
+    /// XYZ
+    pub fn from_xyz(x: f32, y: f32, z: f32) -> Self {
+        let rgb = colorutils_rs::Xyz::new(x, y, z).to_srgb();
+        Self::from_rgb(rgb.r, rgb.g, rgb.b)
+    }
+
+    pub fn to_xyz(&self) -> colorutils_rs::Xyz {
+        let (r, g, b) = self.rgb();
+        let rgb = colorutils_rs::Rgb::<u8>::new(r, g, b);
+        colorutils_rs::Xyz::from_srgb(rgb)
+    }
+}
+
+/// convert
+impl From<u32> for Color {
+    fn from(x: u32) -> Self {
+        Self(x)
+    }
+}
+
+impl From<(u8, u8, u8)> for Color {
+    fn from((r, g, b): (u8, u8, u8)) -> Self {
+        Self::from_rgb(r, g, b)
+    }
+}
+
+impl From<[u8; 3]> for Color {
+    fn from(c: [u8; 3]) -> Self {
+        Self::from((c[0], c[1], c[2]))
+    }
+}
+
+impl From<(u8, u8, u8, u8)> for Color {
+    fn from((r, g, b, a): (u8, u8, u8, u8)) -> Self {
+        Self::from_rgba(r, g, b, a)
+    }
+}
+
+impl From<[u8; 4]> for Color {
+    fn from(c: [u8; 4]) -> Self {
+        Self::from((c[0], c[1], c[2], c[3]))
+    }
+}
+
+impl From<Color> for (u8, u8, u8, u8) {
+    fn from(color: Color) -> Self {
+        color.rgba()
+    }
+}
+
+impl From<Color> for [u8; 4] {
+    fn from(color: Color) -> Self {
+        let (r, g, b, a) = color.rgba();
+        [r, g, b, a]
+    }
+}
+
+impl From<Color> for (u8, u8, u8) {
+    fn from(color: Color) -> Self {
+        color.rgb()
+    }
+}
+
+impl From<Color> for [u8; 3] {
+    fn from(color: Color) -> Self {
+        let (r, g, b) = color.rgb();
+        [r, g, b]
+    }
+}
+
+impl TryFrom<&str> for Color {
+    type Error = &'static str;
+
+    fn try_from(x: &str) -> Result<Self, Self::Error> {
+        let hex = x.trim_start_matches('#');
+        let hex = match hex.len() {
+            6 => format!("{}ff", hex),
+            8 => hex.to_string(),
+            _ => return Err("Failed to convert `Color` from str: invalid length"),
+        };
+
+        u32::from_str_radix(&hex, 16)
+            .map(Self)
+            .map_err(|_| "Failed to convert `Color` from str: invalid hex")
+    }
+}
+
+/// 彩虹色
+pub const RED: Color = Color::from_rgb(255, 0, 0);
+pub const ORANGE: Color = Color::from_rgb(255, 165, 0);
+pub const YELLOW: Color = Color::from_rgb(255, 255, 0);
+pub const GREEN: Color = Color::from_rgb(0, 128, 0);
+pub const BLUE: Color = Color::from_rgb(0, 0, 255);
+pub const INDIGO: Color = Color::from_rgb(75, 0, 130);
+pub const VIOLET: Color = Color::from_rgb(238, 130, 238);
+
+/// 基本颜色
+pub const PURPLE: Color = Color::from_rgb(128, 0, 128);
+pub const MAGENTA: Color = Color::from_rgb(255, 0, 255);
+pub const CYAN: Color = Color::from_rgb(0, 255, 255);
+pub const LIME: Color = Color::from_rgb(0, 255, 0);
+pub const TEAL: Color = Color::from_rgb(0, 128, 128);
+pub const BLACK: Color = Color::from_rgb(0, 0, 0);
+pub const WHITE: Color = Color::from_rgb(255, 255, 255);
+pub const GRAY: Color = Color::from_rgb(128, 128, 128);
+pub const SILVER: Color = Color::from_rgb(192, 192, 192);
+pub const MAROON: Color = Color::from_rgb(128, 0, 0);
+pub const OLIVE: Color = Color::from_rgb(128, 128, 0);
+pub const NAVY: Color = Color::from_rgb(0, 0, 128);
+
+/// 扩展颜色
+pub const PINK: Color = Color::from_rgb(255, 192, 203);
+pub const BROWN: Color = Color::from_rgb(165, 42, 42);
+pub const GOLD: Color = Color::from_rgb(255, 215, 0);
+pub const TURQUOISE: Color = Color::from_rgb(64, 224, 208);
+pub const LAVENDER: Color = Color::from_rgb(230, 230, 250);
+pub const CORAL: Color = Color::from_rgb(255, 127, 80);
+pub const SALMON: Color = Color::from_rgb(250, 128, 114);
+pub const CRIMSON: Color = Color::from_rgb(220, 20, 60);
+pub const KHAKI: Color = Color::from_rgb(240, 230, 140);
+pub const PLUM: Color = Color::from_rgb(221, 160, 221);
 
 /// Convert RGB to HSV color space.
 pub fn rgb_to_hsv(r: u8, g: u8, b: u8) -> [f32; 3] {
@@ -120,12 +340,12 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
     ]
 }
 
-/// Calculate the distance between two colors in RGB space.
-pub fn color_distance(c1: &Rgb<u8>, c2: &Rgb<u8>) -> u8 {
-    ((c1[0] as i16 - c2[0] as i16).abs()
-        + (c1[1] as i16 - c2[1] as i16).abs()
-        + (c1[2] as i16 - c2[2] as i16).abs()) as u8
-        / 3
+/// Calculate the Euclidean distance between two colors in RGB space.
+pub fn color_distance(c1: &Color, c2: Color) -> f32 {
+    let dr = (c1.r() as f32 - c2.r() as f32).powi(2);
+    let dg = (c1.g() as f32 - c2.g() as f32).powi(2);
+    let db = (c1.b() as f32 - c2.b() as f32).powi(2);
+    (dr + dg + db).sqrt()
 }
 
 #[cfg(test)]
@@ -155,6 +375,44 @@ mod tests {
         ($a:expr, $b:expr, $eps:expr) => {
             assert!(($a - $b).abs() < $eps, "{} ≈ {}", $a, $b);
         };
+    }
+
+    #[test]
+    fn test_color_to_hex() {
+        let color = Color::from_rgb(255, 0, 0);
+        assert_eq!(color.hex(true), "#FF0000FF");
+
+        let color = Color::from_rgb(0, 255, 0);
+        assert_eq!(color.hex(true), "#00FF00FF");
+
+        let color = Color::from_rgb(0, 0, 255);
+        assert_eq!(color.hex(true), "#0000FFFF");
+
+        let color = Color::from_rgb(255, 255, 0);
+        assert_eq!(color.hex(false), "#ffff00ff");
+    }
+
+    #[test]
+    fn test_hex_to_color() {
+        assert_eq!(
+            Color::try_from("#FF0000").unwrap(),
+            Color::from_rgb(255, 0, 0)
+        );
+        assert_eq!(
+            Color::try_from("00FF00").unwrap(),
+            Color::from_rgb(0, 255, 0)
+        );
+        assert_eq!(
+            Color::try_from("#0000FF").unwrap(),
+            Color::from_rgb(0, 0, 255)
+        );
+    }
+
+    #[test]
+    fn test_color_constants() {
+        assert_eq!(RED, Color::from_rgb(255, 0, 0));
+        assert_eq!(GREEN, Color::from_rgb(0, 128, 0));
+        assert_eq!(BLUE, Color::from_rgb(0, 0, 255));
     }
 
     #[test]

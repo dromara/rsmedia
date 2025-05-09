@@ -53,11 +53,12 @@ impl MediaFrameType for f64 {}
 pub struct MediaFrame<T> {
     pub pts: i64,
     pub dts: i64,
+    pub duration: i64,
     /// Video: [`PixelFormat`]
     /// Audio: [`SampleFormat`]
     pub format: i32,
     /// Video: `[height, width, channels]`
-    /// Audio: `[frames, samples, channels]`
+    /// Audio: `[frames, nb_samples, nb_channels]`
     pub data: ndarray::Array3<T>,
     /// Video: `1 / frame_rate`
     /// Audio: `1 / sample_rate`
@@ -102,6 +103,7 @@ where
             format: format.into(),
             pts: 0,
             dts: 0,
+            duration: 0,
             media_type: MediaType::VIDEO,
             pict_type: ffi::AV_PICTURE_TYPE_NONE,
             sample_rate: 0,
@@ -149,6 +151,7 @@ where
             nb_channels,
             pts: 0,
             dts: 0,
+            duration: 0,
             width: 0,
             height: 0,
             media_type: MediaType::AUDIO,
@@ -202,6 +205,7 @@ where
         let pts = frame.pts;
         let dts = frame.pkt_dts;
         let format = frame.format;
+        let duration = frame.duration;
         let time_base = frame.time_base;
 
         if width == 0 && height == 0 && frame.nb_samples > 0 {
@@ -210,6 +214,7 @@ where
                 pts,
                 dts,
                 format,
+                duration,
                 width: 0,
                 height: 0,
                 time_base,
@@ -228,6 +233,7 @@ where
                 pts,
                 dts,
                 format,
+                duration,
                 time_base,
                 data: video_data(frame)?,
                 media_type: MediaType::VIDEO,
@@ -265,6 +271,8 @@ where
         };
 
         frame.set_pts(self.pts);
+        // frame.set_dts(self.dts);
+        // frame.set_duration(self.duration);
         frame.set_time_base(time_base);
         Ok(frame)
     }

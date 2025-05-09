@@ -208,7 +208,7 @@ impl StreamReader {
                 frame_ts,
                 flags,
             );
-            if res != 0 {
+            if res < 0 {
                 return Err(Error::msg(format!("Seek to frame failed: {}", res)));
             }
             Ok(())

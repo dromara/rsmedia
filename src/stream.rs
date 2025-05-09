@@ -86,6 +86,8 @@ pub struct StreamInfo {
     pub color_primaries: usize,
     /// Video color transfer, eg: ffi::AVCOL_TRC_*
     pub color_transfer: usize,
+    /// Location of chroma samples, eg: ffi::AVCHROMA_LOC_*
+    pub chroma_location: usize,
     /// Video field order
     pub field_order: usize,
     /// Video rotation
@@ -218,8 +220,9 @@ impl StreamInfo {
             display_aspect_ratio: stream.sample_aspect_ratio,
             color_space: codecpar.color_space as usize,
             color_range: codecpar.color_range as usize,
-            color_primaries: codecpar.color_primaries as usize,
             color_transfer: codecpar.color_trc as usize,
+            color_primaries: codecpar.color_primaries as usize,
+            chroma_location: codecpar.chroma_location as usize,
             field_order: codecpar.field_order as usize,
             rotation: Self::get_stream_display_rotation(stream, &metadata),
             // Audio

@@ -148,18 +148,25 @@ fn configure_windows(target_arch: &str) {
         let ffmpeg = vcpkg::find_package("ffmpeg")
             .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
 
+        // 定义一个函数来处理库名称提取和链接
+        let rustc_link_libs = |libs: &[PathBuf], lib_type: &str| {
+            for lib in libs {
+                // 库的基本名称，不包含路径、前缀（如 "lib"）或扩展名（如 ".dll"、".lib"）
+                let lib_name = lib.file_stem().unwrap_or_default().to_string_lossy();
+                // 如果名称包含连字符（如 "avcodec-61"），只保留连字符前的部分
+                let lib_base_name = if let Some(idx) = lib_name.find('-') {
+                    lib_name[..idx].to_string()
+                } else {
+                    lib_name.to_string()
+                };
+                println!("cargo:rustc-link-lib={}={}", lib_type, lib_base_name);
+            }
+        };
+
         if ffmpeg.is_static {
-            for lib in ffmpeg.found_libs {
-                // 库的基本名称，不包含路径、前缀（如 "lib"）或扩展名（如 ".dll"、".lib"）
-                let lib_name = lib.file_stem().unwrap_or_default().to_string_lossy();
-                println!("cargo:rustc-link-lib=static={}", lib_name);
-            }
+            rustc_link_libs(&ffmpeg.found_libs, "static");
         } else {
-            for lib in ffmpeg.found_dlls {
-                // 库的基本名称，不包含路径、前缀（如 "lib"）或扩展名（如 ".dll"、".lib"）
-                let lib_name = lib.file_stem().unwrap_or_default().to_string_lossy();
-                println!("cargo:rustc-link-lib=dylib={}", lib_name);
-            }
+            rustc_link_libs(&ffmpeg.found_dlls, "dylib");
         }
 
         for path in ffmpeg.link_paths {

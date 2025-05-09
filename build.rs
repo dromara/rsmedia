@@ -14,14 +14,15 @@ fn main() {
 }
 
 #[allow(dead_code)]
-static FFMPEG_LIBS: [&str; 7] = [
-    "avutil",
-    "avcodec",
-    "avdevice",
-    "avfilter",
-    "avformat",
-    "swscale",
-    "swresample",
+static FFMPEG_LIBS: [&str; 8] = [
+    "libavutil",
+    "libavcodec",
+    "libavformat",
+    "libavdevice",
+    "libavfilter",
+    "libswscale",
+    "libswresample",
+    "libpostproc",
 ];
 
 fn configure_macos(_target_arch: &str) {
@@ -78,7 +79,7 @@ fn configure_linux(target_arch: &str) {
     #[cfg(target_os = "linux")]
     for lib in FFMPEG_LIBS.iter() {
         // println!("cargo:rustc-link-lib={}", lib);
-        match pkg_config::probe_library(format!("lib{}", lib).as_str()) {
+        match pkg_config::probe_library(lib) {
             Ok(lib_info) => {
                 println!("Found library: {}", lib);
                 for path in lib_info.link_paths.iter() {
@@ -144,12 +145,17 @@ fn configure_windows(target_arch: &str) {
 
     #[cfg(target_os = "windows")]
     {
+        let ffmpeg = vcpkg::find_package("ffmpeg")
+            .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
+
         for lib in FFMPEG_LIBS.iter() {
-            println!("cargo:rustc-link-lib={}", lib);
+            // dylib: 库名称为 lib<lib>.dll
+            println!("cargo:rustc-link-lib=dylib={}", lib);
         }
 
-        vcpkg::find_package("ffmpeg")
-            .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
+        for path in ffmpeg.link_paths {
+            println!("cargo:rustc-link-search=native={}", path.display());
+        }
     }
 
     // Windows 系统库

@@ -148,9 +148,14 @@ fn configure_windows(target_arch: &str) {
         let ffmpeg = vcpkg::find_package("ffmpeg")
             .expect("Failed to find ffmpeg libs by vcpkg, please ensure vcpkg is installed.");
 
-        for lib in FFMPEG_LIBS.iter() {
-            // dylib: 库名称为 lib<lib>.dll
-            println!("cargo:rustc-link-lib=dylib={}", lib);
+        if ffmpeg.is_static {
+            for lib in ffmpeg.found_libs {
+                println!("cargo:rustc-link-lib=static={}", lib.display());
+            }
+        } else {
+            for lib in ffmpeg.found_dlls {
+                println!("cargo:rustc-link-lib=dylib={}", lib.display());
+            }
         }
 
         for path in ffmpeg.link_paths {

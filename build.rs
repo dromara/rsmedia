@@ -150,11 +150,15 @@ fn configure_windows(target_arch: &str) {
 
         if ffmpeg.is_static {
             for lib in ffmpeg.found_libs {
-                println!("cargo:rustc-link-lib=static={}", lib.display());
+                // 库的基本名称，不包含路径、前缀（如 "lib"）或扩展名（如 ".dll"、".lib"）
+                let lib_name = lib.file_stem().unwrap_or_default().to_string_lossy();
+                println!("cargo:rustc-link-lib=static={}", lib_name);
             }
         } else {
             for lib in ffmpeg.found_dlls {
-                println!("cargo:rustc-link-lib=dylib={}", lib.display());
+                // 库的基本名称，不包含路径、前缀（如 "lib"）或扩展名（如 ".dll"、".lib"）
+                let lib_name = lib.file_stem().unwrap_or_default().to_string_lossy();
+                println!("cargo:rustc-link-lib=dylib={}", lib_name);
             }
         }
 

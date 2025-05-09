@@ -81,11 +81,8 @@ fn configure_linux(target_arch: &str) {
         match pkg_config::probe_library(format!("lib{}", lib).as_str()) {
             Ok(lib_info) => {
                 println!("Found library: {}", lib);
-                for path in lib_info.include_paths.iter() {
-                    println!("Include path: {:?}", path);
-                }
                 for path in lib_info.link_paths.iter() {
-                    println!("Library path: {:?}", path);
+                    println!("cargo:rustc-link-search=native={}", path.display());
                 }
             }
             Err(e) => {
@@ -145,7 +142,6 @@ fn configure_windows(target_arch: &str) {
         println!("cargo:rustc-link-arg=/DEFAULTLIB:msvcrt.lib");
     }
 
-    println!("Using vcpkg on Windows.");
     #[cfg(target_os = "windows")]
     {
         for lib in FFMPEG_LIBS.iter() {

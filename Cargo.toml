@@ -52,7 +52,7 @@ ringbuf = "0.4"
 ctor = "0.4"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
 ab_glyph = "0.2"
-libblur = "0.17"
+libblur = "0.18"
 pic-scale = "0.6"
 fast_image_resize = "=5.1"
 histogram_equalization = "0.2"

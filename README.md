@@ -68,8 +68,8 @@ Hardware acceleration:
 
 ## Wiki
 
-- [Home](https://github.com/phial3/rsmedia/wiki/rsmedia-Home)
-- [hardware-acceleration](https://github.com/phial3/rsmedia/wiki/rsmedia-Home#hardware-acceleration)
+- [Home](https://github.com/dromara/rsmedia/wiki/rsmedia-Home)
+- [hardware-acceleration](https://github.com/dromara/rsmedia/wiki/rsmedia-Home#hardware-acceleration)
 
 ## FFmpeg Documentation
 
@@ -150,12 +150,12 @@ export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 >
 > ```toml
 > ## default feature is ok for ffmpeg 7.x unix:
-> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_system_ffmpeg"] }
+> rsmedia = { git = "https://github.com/dromara/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_system_ffmpeg"] }
 > ```
 >
 > - ffmpeg 7.x for windows:
 > ```toml
-> rsmedia = { git = "https://github.com/phial3/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_vcpkg_ffmpeg"] }
+> rsmedia = { git = "https://github.com/dromara/rsmedia", branch = "rsmpeg", default-features = false, features = ["ndarray", "ffmpeg7", "link_vcpkg_ffmpeg"] }
 > ```
 
 ## 📖 Examples

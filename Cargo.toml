@@ -9,7 +9,7 @@ description = "High-level video toolkit based on ffmpeg."
 keywords = ["video", "ffmpeg", "encoding", "decoding", "muxing"]
 categories = ["multimedia", "multimedia::video", "multimedia::audio"]
 authors = ["phial3"]
-repository = "https://github.com/phial3/rsmedia.git"
+repository = "https://github.com/dromara/rsmedia.git"
 exclude = [".github/*", "assets/*", "data/*", "examples/*", "tests/*", "benches/*", "docs/*", ]
 
 [features]

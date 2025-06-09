@@ -52,7 +52,7 @@ ringbuf = "0.4"
 ctor = "0.4"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
 ab_glyph = "0.2"
-libblur = "0.18"
+libblur = "0.19"
 pic-scale = "0.6"
 fast_image_resize = "=5.1"
 histogram_equalization = "0.2"
@@ -60,7 +60,7 @@ histogram_equalization = "0.2"
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }
 ## sound & audio
-cpal = "0.15"
+cpal = "0.16"
 wavers = "1.5"
 rubato = "0.16"
 dasp = { version = "0.11", features = ["all"] }

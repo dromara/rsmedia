@@ -42,7 +42,8 @@ dashmap = "6.1"
 once_cell = "1.21"
 num_cpus = "1.16"
 ndarray = { version = "0.16", optional = true }
-rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "light", default-features = false }
+## Update version to 0.16.1+ffmpeg.7.1 (#215), branch: light
+rsmpeg = { git = "https://github.com/phial3/rsmpeg", rev = "7e9911ebf8adfd7ea8bcaf00073acfa81bc3a1a2", default-features = false }
 
 [dev-dependencies]
 libc = "0.2"

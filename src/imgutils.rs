@@ -95,28 +95,7 @@ pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
         .collect())
 }
 
-pub fn get_buffer_size(frame: &AVFrame, align: i32) -> Result<usize> {
-    if align <= 0 {
-        return Err(anyhow::anyhow!("Invalid alignment"));
-    }
-
-    unsafe {
-        let size = ffi::av_image_get_buffer_size(
-            frame.format,
-            frame.width,
-            frame.height,
-            align, // alignment
-        );
-
-        if size <= 0 {
-            Err(anyhow::anyhow!("Failed to get buffer size: {}", size))
-        } else {
-            Ok(size as usize)
-        }
-    }
-}
-
-/// frame => Vec<u8>
+/// frame data => Vec<u8>
 pub fn copy_frame_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
     let frame_width: i32 = frame.width;
     let frame_height: i32 = frame.height;
@@ -124,26 +103,14 @@ pub fn copy_frame_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
         return Err(anyhow::anyhow!("Invalid frame dimensions"));
     }
 
-    unsafe {
-        let buf_size = get_buffer_size(frame, 1)?;
-        let mut buffer = vec![0u8; buf_size as usize];
-        let bytes = ffi::av_image_copy_to_buffer(
-            buffer.as_mut_ptr(),
-            buf_size as i32,
-            (*frame.as_ptr()).data.as_ptr() as *const *const u8,
-            (*frame.as_ptr()).linesize.as_ptr(),
-            frame.format,
-            frame.width,
-            frame.height,
-            1,
-        );
-
-        if bytes > 0 {
-            buffer.truncate(bytes as usize);
-            Ok(buffer)
-        } else {
-            Err(Error::msg(format!("Failed to copy image:{}", bytes)))
-        }
+    let buf_size = frame.image_get_buffer_size(1)?;
+    let mut buffer = vec![0u8; buf_size];
+    let bytes = frame.image_copy_to_buffer(buffer.as_mut_slice(), 1)?;
+    if bytes > 0 {
+        buffer.truncate(bytes);
+        Ok(buffer)
+    } else {
+        Err(Error::msg(format!("Failed to copy image:{}", bytes)))
     }
 }
 
@@ -406,7 +373,7 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()
     }
 
     // 2. Calculate the expected size of the contiguous buffer for the given format/dims
-    let expected_size = get_buffer_size(frame, 1)?;
+    let expected_size = frame.image_get_buffer_size(1)?;
 
     // 3. Validate input buffer size
     if buffer.len() < expected_size {
@@ -778,12 +745,12 @@ mod tests {
     fn test_get_buffer_size() -> Result<()> {
         // 正确的尺寸和格式
         let frame = create_test_frame(640, 480, ffi::AV_PIX_FMT_RGB24)?;
-        let size = get_buffer_size(&frame, 1)?;
+        let size = frame.image_get_buffer_size(1)?;
         assert_eq!(size, 640 * 480 * 3);
 
         // 测试YUV420P格式
         let frame = create_test_frame(640, 480, ffi::AV_PIX_FMT_YUV420P)?;
-        let size = get_buffer_size(&frame, 1)?;
+        let size = frame.image_get_buffer_size(1)?;
         assert_eq!(size, 640 * 480 * 3 / 2); // YUV420P 大小是 RGB24 的3/2
 
         Ok(())
@@ -982,7 +949,7 @@ mod tests {
         let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
 
         // 创建正确大小的buffer
-        let buffer_size = get_buffer_size(&frame, 1)?;
+        let buffer_size = frame.image_get_buffer_size(1)?;
         let buffer = vec![128u8; buffer_size];
 
         // 测试正常填充

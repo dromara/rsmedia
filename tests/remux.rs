@@ -23,12 +23,12 @@ fn log_packet(time_base: AVRational, pkt: &AVPacket, tag: &str) {
 }
 
 fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
-    let mut input_format_context = AVFormatContextInput::open(input_path, None, &mut None)
-        .context("Create input format context failed.")?;
+    let mut input_format_context =
+        AVFormatContextInput::open(input_path).context("Create input format context failed.")?;
     input_format_context
         .dump(0, input_path)
         .context("Dump input format context failed.")?;
-    let mut output_format_context = AVFormatContextOutput::create(output_path, None)
+    let mut output_format_context = AVFormatContextOutput::create(output_path)
         .context("Create output format context failed.")?;
     let stream_mapping: Vec<_> = {
         let mut stream_index = 0usize;
@@ -83,6 +83,7 @@ fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
         .context("Write trailer failed.")
 }
 
+/// Remux MP4 to MOV, with h.264 codec.
 #[test]
 #[ignore = "Remux MP4 to MOV, with h.264 codec 测试运行依赖测试文件，暂时忽略"]
 fn remux_test0() {

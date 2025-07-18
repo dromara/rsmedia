@@ -13,7 +13,7 @@ impl<'codec> CodecConfig {
         let codec = unsafe {
             let codec = AVCodec::find_encoder(id)
                 .or_else(|| AVCodec::find_decoder(id))
-                .ok_or_else(|| Error::msg(format!("Codec not found: {}", id)))
+                .ok_or_else(|| Error::msg(format!("Codec not found: {id}")))
                 .unwrap();
             NonNull::new_unchecked(codec.as_ptr() as *mut _)
         };
@@ -23,7 +23,7 @@ impl<'codec> CodecConfig {
     pub fn new_with_name(codec_name: &CStr) -> Result<Self> {
         let codec = AVCodec::find_encoder_by_name(codec_name)
             .or_else(|| AVCodec::find_decoder_by_name(codec_name))
-            .ok_or_else(|| Error::msg(format!("Codec not found: '{:?}'", codec_name)))?;
+            .ok_or_else(|| Error::msg(format!("Codec not found: '{codec_name:?}'")))?;
         Ok(Self::new(codec.id))
     }
 
@@ -107,8 +107,7 @@ impl<'codec> CodecConfig {
 
         if ret < 0 {
             return Err(Error::msg(format!(
-                "Failed to get codec supported config:{}",
-                ret
+                "Failed to get codec supported config:{ret}"
             )));
         }
 

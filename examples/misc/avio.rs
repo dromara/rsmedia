@@ -114,7 +114,7 @@ impl Decoder {
 pub fn open_input_file(
     filename: &CStr,
 ) -> anyhow::Result<(usize, AVFormatContextInput, AVCodecContext)> {
-    let mut input_format_context = AVFormatContextInput::open(filename, None, &mut None)?;
+    let mut input_format_context = AVFormatContextInput::open(filename)?;
     input_format_context.dump(0, filename)?;
 
     let (video_index, decoder) = input_format_context
@@ -182,8 +182,10 @@ pub fn open_output_file(
         )),
     );
 
-    let mut output_format_context =
-        AVFormatContextOutput::create(filename, Some(AVIOContextContainer::Custom(io_context)))?;
+    let mut output_format_context = AVFormatContextOutput::builder()
+        .filename(filename)
+        .io_context(AVIOContextContainer::Custom(io_context))
+        .build()?;
 
     let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_H264)
         .with_context(|| anyhow!("encoder({}) not found.", ffi::AV_CODEC_ID_H264))?;
@@ -272,8 +274,10 @@ pub fn open_output_file_custom(
         )),
     );
 
-    let mut output_format_context =
-        AVFormatContextOutput::create(filename, Some(AVIOContextContainer::Custom(io_context)))?;
+    let mut output_format_context = AVFormatContextOutput::builder()
+        .filename(filename)
+        .io_context(AVIOContextContainer::Custom(io_context))
+        .build()?;
 
     let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_H264)
         .with_context(|| anyhow!("encoder({}) not found.", ffi::AV_CODEC_ID_H264))?;

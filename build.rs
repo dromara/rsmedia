@@ -56,7 +56,7 @@ fn configure_linux(target_arch: &str) {
         _ => vec![],
     };
     for path in arch_specific_paths {
-        println!("cargo:rustc-link-search=native={}", path);
+        println!("cargo:rustc-link-search=native={path}");
     }
 
     // 1. To link prebuilt libraries:
@@ -115,7 +115,7 @@ fn configure_windows(target_arch: &str) {
             "arm64-windows-static-md",
         ]
     } else {
-        panic!("Unsupported target architecture: {}", target_arch);
+        panic!("Unsupported target architecture: {target_arch}");
     };
 
     // 查找可用的 triplet
@@ -123,7 +123,7 @@ fn configure_windows(target_arch: &str) {
     for triplet in triplets.iter() {
         let lib_path = vcpkg_root.join("installed").join(triplet).join("lib");
         if lib_path.exists() {
-            println!("cargo:warning=Found triplet: {}", triplet);
+            println!("cargo:warning=Found triplet: {triplet}");
             found_triplet = Some((triplet, lib_path));
             break;
         }
@@ -214,7 +214,7 @@ fn configure_windows(target_arch: &str) {
     ];
 
     for lib in system_libs.iter() {
-        println!("cargo:rustc-link-lib={}", lib);
+        println!("cargo:rustc-link-lib={lib}");
     }
 
     // 链接器选项
@@ -270,7 +270,7 @@ fn configure_windows(target_arch: &str) {
         linker_flags.push("/GUARD:CF"); // ARM64 支持 CFG，但不支持 CET
     }
     for flag in linker_flags.iter() {
-        println!("cargo:rustc-link-arg={}", flag);
+        println!("cargo:rustc-link-arg={flag}");
     }
 
     // Windows SDK 和 Visual Studio 路径

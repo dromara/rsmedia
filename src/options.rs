@@ -292,7 +292,7 @@ impl From<Options> for HashMap<String, String> {
 impl std::fmt::Debug for Options {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let dict: HashMap<String, String> = self.into();
-        write!(f, "{:?}", dict)
+        write!(f, "{dict:?}")
     }
 }
 

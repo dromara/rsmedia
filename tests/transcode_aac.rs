@@ -19,8 +19,8 @@ const OUTPUT_BIT_RATE: i64 = 96000;
 const OUTPUT_CHANNELS: i32 = 2;
 
 fn open_input_file(input_file: &CStr) -> Result<(AVFormatContextInput, AVCodecContext, usize)> {
-    let input_format_context = AVFormatContextInput::open(input_file, None, &mut None)
-        .context("Could not open input file")?;
+    let input_format_context =
+        AVFormatContextInput::open(input_file).context("Could not open input file")?;
     let (audio_index, decoder) = input_format_context
         .find_best_stream(ffi::AVMEDIA_TYPE_AUDIO)?
         .context("Failed to find audio stream")?;
@@ -41,7 +41,7 @@ fn open_output_file(
 ) -> Result<(AVFormatContextOutput, AVCodecContext)> {
     // Create a new format context for the output container format.
     let mut output_format_context =
-        AVFormatContextOutput::create(output_file, None).context("Failed to open output file.")?;
+        AVFormatContextOutput::create(output_file).context("Failed to open output file.")?;
 
     // Find the encoder to be used by its name.
     let encode_codec =

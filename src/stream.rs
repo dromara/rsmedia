@@ -134,8 +134,7 @@ impl StreamInfo {
             .streams()
             .get(stream_index)
             .ok_or(Error::msg(format!(
-                "reader stream: {} not found!",
-                stream_index
+                "reader stream: {stream_index} not found!"
             )))?;
 
         Self::from_stream(stream)
@@ -147,8 +146,7 @@ impl StreamInfo {
             .streams()
             .get(stream_index)
             .ok_or(Error::msg(format!(
-                "writer stream: {} not found!",
-                stream_index
+                "writer stream: {stream_index} not found!"
             )))?;
 
         Self::from_stream(stream)

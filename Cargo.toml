@@ -15,7 +15,7 @@ exclude = [".github/*", "assets/*", "data/*", "examples/*", "tests/*", "benches/
 [features]
 default = ["ndarray", "ffmpeg7", "link_system_ffmpeg"]
 ffmpeg6 = ["rsmpeg/ffmpeg6"]
-ffmpeg7 = ["rsmpeg/ffmpeg7"]
+ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/ffmpeg7_1"]
 ## unxi linking ffmpeg with pkg-config.
 link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg", "pkg-config"]
 ## windows linking ffmpeg with vcpkg.
@@ -24,7 +24,7 @@ link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg", "vcpkg"]
 [dependencies]
 pix = "0.14"
 rgb = "0.8"
-yuv = {version = "0.8", features = ["rayon", "professional_mode"]}
+yuv = { version = "0.8", features = ["rayon", "professional_mode"] }
 color = "0.3"
 colorous = "1.0"
 colorutils-rs = "0.7"
@@ -42,8 +42,7 @@ dashmap = "6.1"
 once_cell = "1.21"
 num_cpus = "1.16"
 ndarray = { version = "0.16", optional = true }
-## Update version to 0.16.1+ffmpeg.7.1 (#215), branch: light
-rsmpeg = { git = "https://github.com/phial3/rsmpeg", rev = "7e9911ebf8adfd7ea8bcaf00073acfa81bc3a1a2", default-features = false }
+rsmpeg = { git = "https://github.com/larksuite/rsmpeg", default-features = false }
 
 [dev-dependencies]
 libc = "0.2"
@@ -55,7 +54,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono
 ab_glyph = "0.2"
 libblur = "0.19"
 pic-scale = "0.6"
-fast_image_resize = "=5.1"
+fast_image_resize = "5.1"
 histogram_equalization = "0.2"
 ## security & async
 futures = "0.3"

@@ -111,14 +111,14 @@ impl<W: Writer> Muxer<W> {
         self.streams
             .iter()
             .find(|s| s.stream_index == index)
-            .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
+            .ok_or_else(|| Error::msg(format!("Stream index: {index} not found")))
     }
 
     pub fn get_stream_mut(&mut self, index: usize) -> Result<&mut MuxerStream> {
         self.streams
             .iter_mut()
             .find(|s| s.stream_index == index)
-            .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
+            .ok_or_else(|| Error::msg(format!("Stream index: {index} not found")))
     }
 
     /// Mux a single packet. This will mux a single packet.
@@ -271,14 +271,14 @@ impl<R: Reader> Demuxer<R> {
         self.streams
             .iter()
             .find(|s| s.stream_index == index)
-            .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
+            .ok_or_else(|| Error::msg(format!("Stream index: {index} not found")))
     }
 
     pub fn get_stream_mut(&mut self, index: usize) -> Result<&mut DemuxerStream> {
         self.streams
             .iter_mut()
             .find(|s| s.stream_index == index)
-            .ok_or_else(|| Error::msg(format!("Stream index: {} not found", index)))
+            .ok_or_else(|| Error::msg(format!("Stream index: {index} not found")))
     }
 
     fn set_flushed(&self, stream_index: usize) {
@@ -314,7 +314,7 @@ impl<R: Reader> Demuxer<R> {
                         continue;
                     }
                     Err(e) => {
-                        log::error!("Error reading packet: {}", e);
+                        log::error!("Error reading packet: {e}");
                         return Err(e);
                     }
                 }
@@ -335,12 +335,12 @@ impl<R: Reader> Demuxer<R> {
                             return Ok(Some((demuxer_stream.stream_index, frame)));
                         }
                         Ok(None) => {
-                            log::debug!("Stream: [{}] Decoder flushed. EOF reached.", stream_idx);
+                            log::debug!("Stream: [{stream_idx}] Decoder flushed. EOF reached.");
                             self.set_flushed(stream_idx);
                             continue;
                         }
                         Err(e) => {
-                            log::error!("Stream: [{}] Decoder Drain Error: {}", stream_idx, e);
+                            log::error!("Stream: [{stream_idx}] Decoder Drain Error: {e}");
                             return Err(e);
                         }
                     }

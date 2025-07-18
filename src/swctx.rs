@@ -154,7 +154,7 @@ pub fn scale(
         ffi::sws_scale_frame(sws_ctx.as_mut_ptr(), dst_frame_ptr, src_frame.as_ptr())
     };
     if ret < 0 {
-        return Err(Error::msg(format!("Failed to scale frame, ret: {}", ret)));
+        return Err(Error::msg(format!("Failed to scale frame, ret: {ret}")));
     }
 
     log::debug!(
@@ -294,8 +294,7 @@ pub fn convert(
     };
     if ret < 0 {
         return Err(Error::msg(format!(
-            "Failed to convert input samples, ret: {}",
-            ret
+            "Failed to convert input samples, ret: {ret}"
         )));
     }
 

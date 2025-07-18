@@ -73,7 +73,7 @@ fn open_input_file(
     hw_format: AVPixelFormat,
     sw_format: AVPixelFormat,
 ) -> Result<(AVCodecContext, AVFormatContextInput, usize)> {
-    let mut ifmt_ctx = AVFormatContextInput::open(filename, None, &mut None)?;
+    let mut ifmt_ctx = AVFormatContextInput::open(filename)?;
     let (video_index, _decode_codec) = ifmt_ctx
         .find_best_stream(ffi::AVMEDIA_TYPE_VIDEO)?
         .context("Failed to find video stream")?;
@@ -119,7 +119,7 @@ fn open_output_file(
     hw_format: AVPixelFormat,
     sw_format: AVPixelFormat,
 ) -> Result<(AVCodecContext, AVFormatContextOutput, usize)> {
-    let mut ofmt_ctx = AVFormatContextOutput::create(filename, None)?;
+    let mut ofmt_ctx = AVFormatContextOutput::create(filename)?;
 
     let encode_codec = AVCodec::find_encoder_by_name(encode_codec_name).with_context(|| {
         anyhow!(

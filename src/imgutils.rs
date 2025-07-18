@@ -19,7 +19,7 @@ pub fn fill_linesizes(pix_fmt: PixelFormat, width: i32) -> Result<[i32; 4]> {
 
     // >= 0 in case of success, a negative error code otherwise
     if ret < 0 {
-        return Err(Error::msg(format!("Failed to fill linesizes: {}", ret)));
+        return Err(Error::msg(format!("Failed to fill linesizes: {ret}")));
     }
 
     Ok(linesizes)
@@ -39,7 +39,7 @@ pub fn get_linesize(pix_fmt: PixelFormat, width: u32, plane: usize) -> Result<us
 
     // returns the computed size in bytes
     if ret <= 0 {
-        return Err(Error::msg(format!("Failed to get line size, ret: {}", ret)));
+        return Err(Error::msg(format!("Failed to get line size, ret: {ret}")));
     }
 
     Ok(ret as usize)
@@ -83,8 +83,7 @@ pub fn fill_plane_sizes<I: IntoIterator<Item = u32>>(
     // >= 0 in case of success, a negative error code otherwise
     if ret < 0 {
         return Err(Error::msg(format!(
-            "Failed to fill plane sizes, ret: {}",
-            ret
+            "Failed to fill plane sizes, ret: {ret}"
         )));
     }
 
@@ -110,7 +109,7 @@ pub fn copy_frame_to_buffer(frame: &AVFrame) -> Result<Vec<u8>> {
         buffer.truncate(bytes);
         Ok(buffer)
     } else {
-        Err(Error::msg(format!("Failed to copy image:{}", bytes)))
+        Err(Error::msg(format!("Failed to copy image:{bytes}")))
     }
 }
 
@@ -277,16 +276,14 @@ pub fn fill_plane_from_buffer(
     // 检查平面索引
     if plane_idx >= planes as usize {
         return Err(Error::msg(format!(
-            "Invalid plane index: {}, max planes: {}",
-            plane_idx, planes
+            "Invalid plane index: {plane_idx}, max planes: {planes}"
         )));
     }
 
     // 检查目标平面指针是否有效
     if frame.data[plane_idx].is_null() {
         return Err(Error::msg(format!(
-            "Null plane data pointer for plane {}",
-            plane_idx
+            "Null plane data pointer for plane {plane_idx}"
         )));
     }
 
@@ -419,8 +416,7 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()
 
         if ret_fill < 0 {
             return Err(Error::msg(format!(
-                "Failed to calculate source layout using av_image_fill_arrays: {}",
-                ret_fill
+                "Failed to calculate source layout using av_image_fill_arrays: {ret_fill}"
             )));
         }
 

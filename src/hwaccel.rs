@@ -60,7 +60,7 @@ impl HWDeviceConfig {
             HWDeviceType::CUDA,
             PixelFormat::CUDA,
             PixelFormat::NV12,
-            id.map(|id| format!("{}", id)),
+            id.map(|id| format!("{id}")),
             None,
         )
     }
@@ -175,10 +175,7 @@ impl HWContext {
         let mut cache = HW_CTX_CACHE.lock().unwrap();
 
         if let Some(ctx) = cache.get(&config) {
-            log::debug!(
-                "Reusing existing hardware device context. config:{:?}",
-                config
-            );
+            log::debug!("Reusing existing hardware device context. config:{config:?}");
             return Ok(ctx.clone());
         }
 
@@ -190,10 +187,7 @@ impl HWContext {
                 .context("Failed to create hardware device context")?
         };
 
-        log::debug!(
-            "Created hardware device context successfully. config:{}",
-            config
-        );
+        log::debug!("Created hardware device context successfully. config:{config}");
 
         let ctx = Arc::new(Self {
             config: config.clone(),

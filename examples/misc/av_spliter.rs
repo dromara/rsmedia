@@ -11,7 +11,7 @@ use std::{ffi::CStr, fs::File, io::Write};
 fn av_spliter(file_path: &CStr, out_video: &str, out_audio: &CStr) -> Result<()> {
     let mut out_video = File::create(out_video)?;
 
-    let mut input_format_context = AVFormatContextInput::open(file_path, None, &mut None)?;
+    let mut input_format_context = AVFormatContextInput::open(file_path)?;
     input_format_context.dump(0, file_path)?;
 
     let video_index = input_format_context
@@ -36,7 +36,7 @@ fn av_spliter(file_path: &CStr, out_video: &str, out_audio: &CStr) -> Result<()>
         bsf_context.init()?
     };
 
-    let mut out_audio_format_context = AVFormatContextOutput::create(out_audio, None)?;
+    let mut out_audio_format_context = AVFormatContextOutput::create(out_audio)?;
     {
         let mut new_audio_stream = out_audio_format_context.new_stream();
         let audio_stream = &input_format_context.streams()[audio_index];

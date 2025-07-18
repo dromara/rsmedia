@@ -90,8 +90,7 @@ where
         let (h, w, c) = data.dim();
         if h != height || w != width || c != 3 {
             return Err(Error::msg(format!(
-                "Invalid dimensions: expected ({}, {}, 3), got ({}, {}, {})",
-                height, width, h, w, c
+                "Invalid dimensions: expected ({height}, {width}, 3), got ({h}, {w}, {c})"
             )));
         }
 
@@ -137,8 +136,7 @@ where
         let (frames, samples, ch) = data.dim();
         if frames != 1 || samples != nb_samples as usize || ch != nb_channels as usize {
             return Err(Error::msg(format!(
-                "Invalid dimensions: expected (1, {}, {}), got ({}, {}, {})",
-                nb_samples, nb_channels, frames, samples, ch
+                "Invalid dimensions: expected (1, {nb_samples}, {nb_channels}), got ({frames}, {samples}, {ch})"
             )));
         }
 
@@ -355,7 +353,7 @@ where
             colorspace,
             YuvConversionMode::Professional,
         )
-        .map_err(|e| Error::msg(format!("convert rgb24 to yuv420p error:{}", e)))?;
+        .map_err(|e| Error::msg(format!("convert rgb24 to yuv420p error:{e}")))?;
 
         // 6. 构建YUV数据
         let mut yuv_data = ndarray::Array3::<T>::zeros((height, width, 3));
@@ -472,7 +470,7 @@ where
             YuvRange::Full,
             colorspace,
         )
-        .map_err(|e| Error::msg(format!("convert yuv420p to rgb24 error:{}", e)))?;
+        .map_err(|e| Error::msg(format!("convert yuv420p to rgb24 error:{e}")))?;
 
         // 6. 构建RGB数据
         let mut rgb_data = ndarray::Array3::<T>::zeros((height, width, 3));
@@ -497,8 +495,7 @@ fn validate_format_type_size<T>(format: i32, expected_size: usize) -> Result<()>
     let type_size = std::mem::size_of::<T>();
     if type_size != expected_size {
         return Err(Error::msg(format!(
-            "format:{}, expected {}, got {}",
-            format, expected_size, type_size
+            "format:{format}, expected {expected_size}, got {type_size}"
         )));
     }
     Ok(())
@@ -568,8 +565,7 @@ where
         }
 
         _ => Err(Error::msg(format!(
-            "Unsupported to_frame video format: {:?}",
-            frame
+            "Unsupported to_frame video format: {frame:?}"
         ))),
     }
 }
@@ -689,8 +685,7 @@ where
         }
 
         _ => Err(Error::msg(format!(
-            "Unsupported from_frame video format: {:?}",
-            frame
+            "Unsupported from_frame video format: {frame:?}"
         ))),
     }
 }
@@ -728,7 +723,7 @@ where
         // 检查所有通道
         for ch in 0..channels {
             if frame.data[ch].is_null() {
-                return Err(Error::msg(format!("Channel {} data pointer is null", ch)));
+                return Err(Error::msg(format!("Channel {ch} data pointer is null")));
             }
         }
 

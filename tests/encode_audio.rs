@@ -305,8 +305,8 @@ fn encode_audio(
         .context("Failed to initialize encoder")?;
 
     // 初始化输出容器
-    let mut format_ctx = AVFormatContextOutput::create(output_path, None)
-        .context("Failed to create output context")?;
+    let mut format_ctx =
+        AVFormatContextOutput::create(output_path).context("Failed to create output context")?;
     {
         // 创建音频流
         let mut stream = format_ctx.new_stream();

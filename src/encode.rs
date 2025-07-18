@@ -283,8 +283,7 @@ impl EncoderBuilder {
             encoder.set_time_base(time::new_rational(1, self.sample_rate));
         } else {
             return Err(Error::msg(format!(
-                "Unsupported media type: {:?}",
-                media_type
+                "Unsupported media type: {media_type:?}"
             )));
         }
 
@@ -338,15 +337,14 @@ impl EncoderBuilder {
                     MediaType::VIDEO => Self::VIDEO_CODEC_NAME,
                     MediaType::AUDIO => Self::AUDIO_CODEC_NAME,
                     _ => {
-                        return Err(Error::msg(format!(
-                            "Unsupported media type:{:?}",
-                            media_type
-                        )))
+                        return Err(Error::msg(
+                            format!("Unsupported media type:{media_type:?}",),
+                        ))
                     }
                 }
             };
             AVCodec::find_encoder_by_name(&utils::from_str(codec_name))
-                .context(format!("Failed to find encoder by name: '{}'", codec_name))?
+                .context(format!("Failed to find encoder by name: '{codec_name}'"))?
         };
 
         let mut encode_ctx = AVCodecContext::new(&codec);
@@ -407,15 +405,14 @@ impl EncoderBuilder {
                     })
                 }
                 _ => {
-                    panic!("Unsupported filter for media type: {:?}", media_type);
+                    panic!("Unsupported filter for media type: {media_type:?}");
                 }
             };
             let mut graph = FilterGraph::new();
             // check Filter media type
             if !filters.iter().all(|f| f.media_type() == media_type) {
                 return Err(Error::msg(format!(
-                    "Filter media type mismatch for encoder type {:?}",
-                    media_type
+                    "Filter media type mismatch for encoder type {media_type:?}"
                 )));
             }
             graph
@@ -903,7 +900,7 @@ impl Encoder {
                     }
                 }
                 Err(e) => {
-                    log::debug!("Encode packet error: {}", e);
+                    log::debug!("Encode packet error: {e}");
                     break;
                 }
             }

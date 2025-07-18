@@ -998,7 +998,7 @@ impl From<ffi::AVPixelFormat> for PixelFormat {
             ffi::AV_PIX_FMT_D3D12 => Self::D3D12,
 
             // unsupported pixel formats not included in ffmpeg
-            _ => panic!("Invalid pixel format: {}", value),
+            _ => panic!("Invalid pixel format: {value}"),
         }
     }
 }
@@ -1265,7 +1265,7 @@ impl PixelFormat {
     pub fn count_planes(&self) -> Result<i32> {
         let cnt = unsafe { ffi::av_pix_fmt_count_planes((*self).into()) };
         if cnt < 0 {
-            return Err(Error::msg(format!("Failed to get plane count:{}", cnt)));
+            return Err(Error::msg(format!("Failed to get plane count:{cnt}")));
         }
         Ok(cnt)
     }
@@ -1292,7 +1292,7 @@ pub fn find_best_pix_fmt(
     };
 
     match PixelFormat::from(flags) {
-        PixelFormat::NONE => Err(Error::msg(format!("Failed to find best pix fmt:{}", flags))),
+        PixelFormat::NONE => Err(Error::msg(format!("Failed to find best pix fmt:{flags}"))),
         fmt => Ok(fmt),
     }
 }
@@ -1317,8 +1317,7 @@ pub fn find_codec_best_pix_fmt(
     };
     if ret < 0 {
         return Err(Error::msg(format!(
-            "Failed to find codec best pix fmt, ret: {}",
-            ret
+            "Failed to find codec best pix fmt, ret: {ret}"
         )));
     }
     Ok(PixelFormat::from(ret))
@@ -1344,8 +1343,7 @@ pub fn get_pix_fmt_loss(
 
     if loss < 0 {
         return Err(Error::msg(format!(
-            "Failed to get pix fmt loss, ret: {}",
-            loss
+            "Failed to get pix fmt loss, ret: {loss}"
         )));
     }
 

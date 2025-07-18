@@ -36,7 +36,7 @@ struct FilterContext<'graph> {
 /// context corresponds to each stream, if the stream is neither audio nor
 /// audio, decode context at this index is set to `None`.
 fn open_input_file(filename: &CStr) -> Result<(Vec<Option<AVCodecContext>>, AVFormatContextInput)> {
-    let mut ifmt_ctx = AVFormatContextInput::open(filename, None, &mut None)?;
+    let mut ifmt_ctx = AVFormatContextInput::open(filename)?;
     let mut stream_ctx = Vec::with_capacity(ifmt_ctx.nb_streams as usize);
 
     for (i, input_stream) in ifmt_ctx.streams().into_iter().enumerate() {
@@ -81,7 +81,7 @@ fn open_output_file(
     dec_ctx: Vec<Option<AVCodecContext>>,
     dict: &mut Option<AVDictionary>,
 ) -> Result<(Vec<Option<StreamContext>>, AVFormatContextOutput)> {
-    let mut ofmt_ctx = AVFormatContextOutput::create(filename, None)?;
+    let mut ofmt_ctx = AVFormatContextOutput::create(filename)?;
     let mut stream_ctx = vec![];
 
     for (i, dec_ctx) in dec_ctx.into_iter().enumerate() {
@@ -98,14 +98,30 @@ fn open_output_file(
             enc_ctx.set_height(dec_ctx.height);
             enc_ctx.set_width(dec_ctx.width);
             enc_ctx.set_sample_aspect_ratio(dec_ctx.sample_aspect_ratio);
-            // take first format from list of supported formats
+            #[cfg(not(feature = "ffmpeg7_1"))]
             enc_ctx.set_pix_fmt(encoder.pix_fmts().unwrap()[0]);
+            #[cfg(feature = "ffmpeg7_1")]
+            enc_ctx.set_pix_fmt(
+                dec_ctx
+                    .get_supported_pix_fmts(None)
+                    .ok()
+                    .and_then(|x| x.get(0).copied())
+                    .unwrap_or(dec_ctx.pix_fmt),
+            );
             enc_ctx.set_time_base(av_inv_q(dec_ctx.framerate));
         } else if dec_ctx.codec_type == ffi::AVMEDIA_TYPE_AUDIO {
             enc_ctx.set_sample_rate(dec_ctx.sample_rate);
             enc_ctx.set_ch_layout(dec_ctx.ch_layout().clone().into_inner());
-            // take first format from list of supported formats
+            #[cfg(not(feature = "ffmpeg7_1"))]
             enc_ctx.set_sample_fmt(encoder.sample_fmts().unwrap()[0]);
+            #[cfg(feature = "ffmpeg7_1")]
+            enc_ctx.set_sample_fmt(
+                dec_ctx
+                    .get_supported_sample_fmts(None)
+                    .ok()
+                    .and_then(|x| x.get(0).copied())
+                    .unwrap_or(dec_ctx.sample_fmt),
+            );
             enc_ctx.set_time_base(ra(1, dec_ctx.sample_rate));
         } else {
             bail!(
@@ -155,8 +171,10 @@ fn init_filter<'graph>(
     filter_spec: &CStr,
 ) -> Result<FilterContext<'graph>> {
     let (mut buffersrc_ctx, mut buffersink_ctx) = if dec_ctx.codec_type == ffi::AVMEDIA_TYPE_VIDEO {
-        let buffersrc = AVFilter::get_by_name(c"buffer").unwrap();
-        let buffersink = AVFilter::get_by_name(c"buffersink").unwrap();
+        let buffersrc =
+            AVFilter::get_by_name(c"buffer").context("filtering source element not found")?;
+        let buffersink =
+            AVFilter::get_by_name(c"buffersink").context("filtering sink element not found")?;
 
         let args = format!(
             "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
@@ -176,12 +194,16 @@ fn init_filter<'graph>(
             .context("Cannot create buffer source")?;
 
         let mut buffer_sink_context = filter_graph
-            .create_filter_context(&buffersink, c"out", None)
+            .alloc_filter_context(&buffersink, c"out")
             .context("Cannot create buffer sink")?;
 
         buffer_sink_context
             .opt_set_bin(c"pix_fmts", &enc_ctx.pix_fmt)
             .context("Cannot set output pixel format")?;
+
+        buffer_sink_context
+            .init_dict(&mut None)
+            .context("Cannot initialize buffer sink")?;
 
         (buffer_src_context, buffer_sink_context)
     } else if dec_ctx.codec_type == ffi::AVMEDIA_TYPE_AUDIO {
@@ -213,7 +235,7 @@ fn init_filter<'graph>(
             .context("Cannot create audio buffer source")?;
 
         let mut buffersink_ctx = filter_graph
-            .create_filter_context(&buffersink, c"out", None)
+            .alloc_filter_context(&buffersink, c"out")
             .context("Cannot create audio buffer sink")?;
         buffersink_ctx
             .opt_set_bin(c"sample_fmts", &enc_ctx.sample_fmt)
@@ -224,6 +246,19 @@ fn init_filter<'graph>(
         buffersink_ctx
             .opt_set_bin(c"sample_rates", &enc_ctx.sample_rate)
             .context("Cannot set output sample rate")?;
+
+        // `av_buffersink_set_frame_size` will SIGSEGV even on FFmpeg 7.1, problem persists until
+        // https://github.com/FFmpeg/FFmpeg/commit/6b402cdbf46e4398b3285277f3ff7c3654d57ce6.
+        // Waiting for FFmpeg 7.2 release.
+        /*
+        if enc_ctx.frame_size > 0 {
+            buffersink_ctx.buffersink_set_frame_size(enc_ctx.frame_size as u32);
+        }
+         */
+
+        buffersink_ctx
+            .init_dict(&mut None)
+            .context("Cannot initialize audio buffer sink")?;
 
         (buffersrc_ctx, buffersink_ctx)
     } else {
@@ -252,7 +287,7 @@ fn init_filter<'graph>(
 fn init_filters(
     filter_graphs: &mut [AVFilterGraph],
     stream_contexts: Vec<Option<StreamContext>>,
-) -> Result<Vec<Option<FilteringContext>>> {
+) -> Result<Vec<Option<FilteringContext<'_>>>> {
     let mut filter_ctx = Vec::with_capacity(stream_contexts.len());
 
     for (filter_graph, stream_context) in filter_graphs.iter_mut().zip(stream_contexts.into_iter())
@@ -411,7 +446,7 @@ pub fn transcode(
                 let mut frame = match decode_context.receive_frame() {
                     Ok(frame) => frame,
                     Err(RsmpegError::DecoderDrainError) | Err(RsmpegError::DecoderFlushedError) => {
-                        break;
+                        break
                     }
                     Err(e) => bail!(e),
                 };

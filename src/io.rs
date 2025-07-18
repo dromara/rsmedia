@@ -46,8 +46,7 @@ pub trait Reader {
             .find_best_stream(media_type as _)?
             .map(|(index, codec)| (index, utils::to_string(codec.name()).unwrap()))
             .ok_or(Error::msg(format!(
-                "No stream found for MediaType:{:?}",
-                media_type
+                "No stream found for MediaType:{media_type:?}"
             )))
     }
 }
@@ -115,8 +114,7 @@ impl<'a> StreamReaderBuilder<'a> {
             unsafe { ffi::avio_find_protocol_name(utils::to_c_char(src_path) as *const _) };
         if protocol.is_null() {
             return Err(Error::msg(format!(
-                "Unsupported input source protocol: {}",
-                src_path
+                "Unsupported input source protocol: {src_path}"
             )));
         }
         log::debug!(
@@ -130,7 +128,11 @@ impl<'a> StreamReaderBuilder<'a> {
             .format
             .and_then(|str| AVInputFormat::find(&utils::from_str(str)));
         let mut dict = self.options.map(|opts| opts.into_dict());
-        let mut ctx_input = AVFormatContextInput::open(&filename, fmt_opt.as_deref(), &mut dict)
+        let mut ctx_input = AVFormatContextInput::builder()
+            .url(&filename)
+            .format(fmt_opt.unwrap().deref())
+            .options(&mut dict)
+            .open()
             .context("Create input format context failed.")?;
         ctx_input
             .dump(0, &filename)
@@ -209,7 +211,7 @@ impl StreamReader {
                 flags,
             );
             if res < 0 {
-                return Err(Error::msg(format!("Seek to frame failed: {}", res)));
+                return Err(Error::msg(format!("Seek to frame failed: {res}")));
             }
             Ok(())
         }
@@ -232,7 +234,7 @@ impl StreamReader {
             let res = ffi::avformat_seek_file(self.input.as_mut_ptr(), -1, start, ts, end, 0);
             if res < 0 {
                 // >=0 on success, error code otherwise
-                return Err(Error::msg(format!("Seek file failed: {}", res)));
+                return Err(Error::msg(format!("Seek file failed: {res}")));
             }
             Ok(())
         }
@@ -323,9 +325,12 @@ impl<'a> StreamWriterBuilder<'a> {
         let filename = utils::from_path(&self.destination.as_path());
         let format = self.format.map(utils::from_str);
         let mut dict = self.options.map(|opts| opts.into_dict());
-        let output_ctx =
-            AVFormatContextOutput::create2(filename.as_c_str(), format.as_deref(), &mut dict, None)
-                .context("Create output format context failed.")?;
+        let output_ctx = AVFormatContextOutput::builder()
+            .filename(&filename)
+            .format_name(format.unwrap().as_ref())
+            .options(&mut dict)
+            .build()
+            .context("Create output format context failed.")?;
         Ok(StreamWriter {
             destination: self.destination,
             output: output_ctx,

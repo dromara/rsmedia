@@ -138,7 +138,7 @@ impl DecoderBuilder {
             .input()
             .streams()
             .get(stream_index)
-            .ok_or(Error::msg(format!("stream: {} not found!", stream_index)))?;
+            .ok_or(Error::msg(format!("stream: {stream_index} not found!")))?;
 
         let codec = {
             let codec_name = if let Some(ref codec_name) = self.codec_name {
@@ -147,7 +147,7 @@ impl DecoderBuilder {
                 codec_name.as_str()
             };
             AVCodec::find_decoder_by_name(&utils::from_str(codec_name))
-                .context(format!("Failed to find decoder by name: '{}'", codec_name))?
+                .context(format!("Failed to find decoder by name: '{codec_name}'"))?
         };
 
         let duration = Time::new(Some(input_stream.duration), input_stream.time_base);
@@ -206,7 +206,7 @@ impl DecoderBuilder {
             .context("Failed to open decoder for stream")?;
 
         let stream_info = StreamInfo::from_stream(input_stream)?;
-        log::info!("{}", stream_info);
+        log::info!("{stream_info}");
 
         let filter_graph = if let Some(filters) = self.filters {
             let filter_params = match media_type {
@@ -226,15 +226,14 @@ impl DecoderBuilder {
                     format: SampleFormat::from(decode_ctx.sample_fmt),
                     time_base: decode_ctx.time_base,
                 }),
-                _ => panic!("Unsupported filter for media type: {:?}", media_type),
+                _ => panic!("Unsupported filter for media type: {media_type:?}"),
             };
 
             let mut graph = FilterGraph::new();
             // 验证 Filter 链的媒体类型是否与当前流匹配
             if !filters.iter().all(|f| f.media_type() == media_type) {
                 return Err(Error::msg(format!(
-                    "Filter media type mismatch for stream type {:?}",
-                    media_type
+                    "Filter media type mismatch for stream type {media_type:?}"
                 )));
             }
             graph
@@ -440,7 +439,7 @@ impl Decoder {
                         continue;
                     }
                     Err(e) => {
-                        log::error!("Error reading packet: {}", e);
+                        log::error!("Error reading packet: {e}");
                         return Err(e);
                     }
                 }
@@ -456,7 +455,7 @@ impl Decoder {
                         break None;
                     }
                     Err(e) => {
-                        log::error!("Error to drain decoder: {}", e);
+                        log::error!("Error to drain decoder: {e}");
                         return Err(e);
                     }
                 }
@@ -503,7 +502,7 @@ impl Decoder {
                         continue;
                     }
                     Err(e) => {
-                        log::error!("Error reading packet: {}", e);
+                        log::error!("Error reading packet: {e}");
                         return Err(e);
                     }
                 }
@@ -519,7 +518,7 @@ impl Decoder {
                         break None;
                     }
                     Err(e) => {
-                        log::error!("Error to drain decoder: {}", e);
+                        log::error!("Error to drain decoder: {e}");
                         return Err(e);
                     }
                 }
@@ -723,7 +722,7 @@ impl Decoder {
                 Ok(None)
             }
             Err(e) => {
-                log::warn!("Failed to receive frame from decoder: {}", e);
+                log::warn!("Failed to receive frame from decoder: {e}");
                 Err(Error::new(e))
             }
         }
@@ -746,7 +745,7 @@ impl Drop for Decoder {
                     }
                     log::debug!("Filter graph flushed during Decoder drop.");
                 }
-                Err(e) => log::error!("Failed to flush filter graph during Decoder drop: {}", e),
+                Err(e) => log::error!("Failed to flush filter graph during Decoder drop: {e}"),
             }
         }
 
@@ -770,14 +769,14 @@ impl Drop for Decoder {
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to drain decoder: {}", e);
+                            log::error!("Failed to drain decoder: {e}");
                             break;
                         }
                     }
                 }
             }
             Err(e) => {
-                log::warn!("Failed to send flush packet to decoder: {}", e)
+                log::warn!("Failed to send flush packet to decoder: {e}")
             }
         }
 

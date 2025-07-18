@@ -230,7 +230,7 @@ impl TryFrom<&str> for Color {
     fn try_from(x: &str) -> Result<Self, Self::Error> {
         let hex = x.trim_start_matches('#');
         let hex = match hex.len() {
-            6 => format!("{}ff", hex),
+            6 => format!("{hex}ff"),
             8 => hex.to_string(),
             _ => return Err("Failed to convert `Color` from str: invalid length"),
         };

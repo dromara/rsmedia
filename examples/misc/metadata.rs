@@ -8,7 +8,7 @@ pub fn metadata(file: &str) -> Result<Vec<(String, String)>> {
     result.push(("file_path".into(), file.to_string()));
 
     let file = CString::new(file).unwrap();
-    let input_format_context = AVFormatContextInput::open(&file, None, &mut None).unwrap();
+    let input_format_context = AVFormatContextInput::open(&file)?;
 
     // Get `duration` and `bit_rate` from `input_format_context`.
     result.push(("duration".into(), input_format_context.duration.to_string()));

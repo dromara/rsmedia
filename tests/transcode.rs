@@ -98,9 +98,9 @@ fn open_output_file(
             enc_ctx.set_height(dec_ctx.height);
             enc_ctx.set_width(dec_ctx.width);
             enc_ctx.set_sample_aspect_ratio(dec_ctx.sample_aspect_ratio);
-            #[cfg(not(feature = "ffmpeg7_1"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             enc_ctx.set_pix_fmt(encoder.pix_fmts().unwrap()[0]);
-            #[cfg(feature = "ffmpeg7_1")]
+            #[cfg(feature = "ffmpeg7")]
             enc_ctx.set_pix_fmt(
                 dec_ctx
                     .get_supported_pix_fmts(None)
@@ -112,9 +112,9 @@ fn open_output_file(
         } else if dec_ctx.codec_type == ffi::AVMEDIA_TYPE_AUDIO {
             enc_ctx.set_sample_rate(dec_ctx.sample_rate);
             enc_ctx.set_ch_layout(dec_ctx.ch_layout().clone().into_inner());
-            #[cfg(not(feature = "ffmpeg7_1"))]
+            #[cfg(not(feature = "ffmpeg7"))]
             enc_ctx.set_sample_fmt(encoder.sample_fmts().unwrap()[0]);
-            #[cfg(feature = "ffmpeg7_1")]
+            #[cfg(feature = "ffmpeg7")]
             enc_ctx.set_sample_fmt(
                 dec_ctx
                     .get_supported_sample_fmts(None)

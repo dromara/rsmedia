@@ -64,7 +64,7 @@ cpal = "0.16"
 wavers = "1.5"
 rubato = "0.16"
 dasp = { version = "0.11", features = ["all"] }
-rodio = { version = "0.20", features = ["symphonia-all", "tracing"] }
+rodio = { version = "0.21", features = ["symphonia-all", "tracing"] }
 
 [build-dependencies]
 vcpkg = { version = "0.2", optional = true }

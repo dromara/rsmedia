@@ -81,13 +81,13 @@ fn configure_linux(target_arch: &str) {
         // println!("cargo:rustc-link-lib={}", lib);
         match pkg_config::probe_library(lib) {
             Ok(lib_info) => {
-                println!("Found library: {}", lib);
+                println!("Found library: {lib}");
                 for path in lib_info.link_paths.iter() {
                     println!("cargo:rustc-link-search=native={}", path.display());
                 }
             }
             Err(e) => {
-                panic!("Could not find {} via pkg-config: {:?}", lib, e);
+                panic!("Could not find {lib} via pkg-config: {e:?}");
             }
         }
     }
@@ -159,7 +159,7 @@ fn configure_windows(target_arch: &str) {
                 } else {
                     lib_name.to_string()
                 };
-                println!("cargo:rustc-link-lib={}={}", lib_type, lib_base_name);
+                println!("cargo:rustc-link-lib={lib_type}={lib_base_name}");
             }
         };
 

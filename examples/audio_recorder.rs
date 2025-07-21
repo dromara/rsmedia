@@ -259,8 +259,8 @@ impl RecordingController {
         println!("时长: {:.2} 秒", wav.duration());
 
         // 使用 rodio 播放音频
-        let (_stream, stream_handle) = rodio::OutputStream::try_default()?;
-        let sink = Sink::try_new(&stream_handle)?;
+        let stream_handle = rodio::OutputStreamBuilder::open_default_stream().unwrap();
+        let sink = Sink::connect_new(&stream_handle.mixer());
 
         let file = File::open(filename)?;
         let source = Decoder::new(BufReader::new(file))?;

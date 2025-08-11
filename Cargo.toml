@@ -49,7 +49,7 @@ libc = "0.2"
 camino = "1.1"
 chrono = "0.4"
 ringbuf = "0.4"
-ctor = "0.4"
+ctor = "0.5"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
 ab_glyph = "0.2"
 libblur = "0.19"
@@ -64,7 +64,7 @@ cpal = "0.16"
 wavers = "1.5"
 rubato = "0.16"
 dasp = { version = "0.11", features = ["all"] }
-rodio = { version = "0.20", features = ["symphonia-all", "tracing"] }
+rodio = { version = "0.21", features = ["symphonia-all", "tracing"] }
 
 [build-dependencies]
 vcpkg = { version = "0.2", optional = true }

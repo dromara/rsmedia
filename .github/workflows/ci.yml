@@ -127,6 +127,7 @@ jobs:
           libsdl2-dev \
           liblzma-dev \
           libzvbi-dev \
+          libpostproc-dev \
           librubberband-dev \
           libfrei0r-ocaml-dev
 ## ffmpeg
@@ -397,6 +398,7 @@ jobs:
           libsdl2-dev \
           liblzma-dev \
           libzvbi-dev \
+          libpostproc-dev \
           librubberband-dev \
           libfrei0r-ocaml-dev
 ## ffmpeg

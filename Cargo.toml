@@ -13,7 +13,7 @@ repository = "https://github.com/dromara/rsmedia.git"
 exclude = [".github/*", "assets/*", "data/*", "examples/*", "tests/*", "benches/*", "docs/*", ]
 
 [features]
-default = ["ndarray", "ffmpeg7", "link_system_ffmpeg"]
+default = ["ndarray", "ffmpeg8", "link_system_ffmpeg"]
 ffmpeg6 = ["rsmpeg/ffmpeg6"]
 ffmpeg7 = ["rsmpeg/ffmpeg7_1"]
 ffmpeg8 = ["rsmpeg/ffmpeg8"]

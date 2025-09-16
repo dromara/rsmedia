@@ -34,12 +34,14 @@ jobs:
       fail-fast: false
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
-        ffmpeg_version: ["6.1", "7.1"]
+        ffmpeg_version: ["6.1", "7.1", "8.0"]
         include:
           - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           - ffmpeg_version: "7.1"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
+          - ffmpeg_version: "8.0"
+            feature: "ndarray,ffmpeg8,link_system_ffmpeg"
 
     steps:
       - name: Checkout
@@ -302,12 +304,14 @@ jobs:
       fail-fast: false
       matrix:
         platform: ["linux/amd64", "linux/arm64"]
-        ffmpeg_version: ["6.1", "7.1"]
+        ffmpeg_version: ["6.1", "7.1", "8.0"]
         include:
           - ffmpeg_version: "6.1"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           - ffmpeg_version: "7.1"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
+          - ffmpeg_version: "8.0"
+            feature: "ndarray,ffmpeg8,link_system_ffmpeg"
 
     steps:
       - name: Checkout

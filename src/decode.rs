@@ -340,7 +340,7 @@ impl Decoder {
     }
 
     #[inline]
-    pub fn ch_layout(&self) -> AVChannelLayoutRef {
+    pub fn ch_layout(&self) -> AVChannelLayoutRef<'_> {
         self.context.ch_layout()
     }
 

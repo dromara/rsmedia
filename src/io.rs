@@ -19,7 +19,7 @@ pub trait Reader {
     fn input(&self) -> &AVFormatContextInput;
     fn input_mut(&mut self) -> &mut AVFormatContextInput;
 
-    fn read_packet(&mut self) -> Result<Option<(Stream, AVPacket)>> {
+    fn read_packet(&mut self) -> Result<Option<(Stream<'_>, AVPacket)>> {
         match self.input_mut().read_packet() {
             Ok(Some(pkt)) => {
                 let av_stream = self

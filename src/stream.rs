@@ -578,11 +578,11 @@ impl Stream<'_> {
         self.av_stream.avg_frame_rate
     }
 
-    pub fn parameters(&self) -> AVCodecParametersRef {
+    pub fn parameters(&self) -> AVCodecParametersRef<'_> {
         self.av_stream.codecpar()
     }
 
-    pub fn metadata(&self) -> Option<AVDictionaryRef> {
+    pub fn metadata(&self) -> Option<AVDictionaryRef<'_>> {
         self.av_stream.metadata()
     }
 }

@@ -996,7 +996,7 @@ mod tests {
                     let diff =
                         (converted.data[[y, x, c]] as i16 - original.data[[y, x, c]] as i16).abs();
                     assert!(
-                        diff <= 10,
+                        diff <= 5,
                         "Color difference too large: {} at [{}, {}, {}]",
                         diff,
                         y,

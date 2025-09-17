@@ -1387,8 +1387,8 @@ mod tests {
     #[test]
     fn test_audio_planar_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 480;       // 10ms 帧 (48000 × 0.01)
-        let sample_rate = 48000;    // 48kHz
+        let nb_samples = 480; // 10ms 帧 (48000 × 0.01)
+        let sample_rate = 48000; // 48kHz
 
         // 创建测试音频帧
         let mut frame = AVFrame::new();

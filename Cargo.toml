@@ -15,7 +15,7 @@ exclude = [".github/*", "assets/*", "data/*", "examples/*", "tests/*", "benches/
 [features]
 default = ["ndarray", "ffmpeg8", "link_system_ffmpeg"]
 ffmpeg6 = ["rsmpeg/ffmpeg6"]
-ffmpeg7 = ["rsmpeg/ffmpeg7_1"]
+ffmpeg7 = ["rsmpeg/ffmpeg7", "rsmpeg/ffmpeg7_1"]
 ffmpeg8 = ["rsmpeg/ffmpeg8"]
 ## unxi linking ffmpeg with pkg-config.
 link_system_ffmpeg = ["rsmpeg/link_system_ffmpeg", "pkg-config"]

@@ -58,6 +58,7 @@ pub enum AvFormatFlags {
     NO_BINSEARCH = ffi::AVFMT_NOBINSEARCH,
     NO_GENSEARCH = ffi::AVFMT_NOGENSEARCH,
     NO_BYTE_SEEK = ffi::AVFMT_NO_BYTE_SEEK,
+    #[cfg(not(feature = "ffmpeg8"))]
     ALLOW_FLUSH = ffi::AVFMT_ALLOW_FLUSH,
     TS_NONSTRICT = ffi::AVFMT_TS_NONSTRICT,
     TS_NEGATIVE = ffi::AVFMT_TS_NEGATIVE,
@@ -81,6 +82,7 @@ pub enum AvFormatContextFlags {
     BITEXACT = ffi::AVFMT_FLAG_BITEXACT,
     SORT_DTS = ffi::AVFMT_FLAG_SORT_DTS,
     FAST_SEEK = ffi::AVFMT_FLAG_FAST_SEEK,
+    #[cfg(not(feature = "ffmpeg8"))]
     SHORTEST = ffi::AVFMT_FLAG_SHORTEST,
     AUTO_BSF = ffi::AVFMT_FLAG_AUTO_BSF,
 }

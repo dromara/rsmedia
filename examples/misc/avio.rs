@@ -199,13 +199,7 @@ pub fn open_output_file(
     } else {
         decode_context.pix_fmt
     });
-    encode_context.set_time_base(avutil::av_inv_q(avutil::av_mul_q(
-        decode_context.framerate,
-        AVRational {
-            num: decode_context.ticks_per_frame,
-            den: 1,
-        },
-    )));
+    encode_context.set_time_base(avutil::av_inv_q(decode_context.framerate));
 
     // Some formats want stream headers to be separate.
     if output_format_context.oformat().flags & ffi::AVFMT_GLOBALHEADER as i32 != 0 {

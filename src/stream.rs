@@ -241,7 +241,7 @@ impl StreamInfo {
         })
     }
 
-    fn get_stream_display_rotation(stream: &AVStream, map: &HashMap<String, String>) -> f64 {
+    fn get_stream_display_rotation(_stream: &AVStream, map: &HashMap<String, String>) -> f64 {
         fn get_rotation_from_metadata(map: &HashMap<String, String>) -> f64 {
             if let Some(value) = map.get("rotate") {
                 value.parse::<f64>().unwrap_or(0.0)
@@ -250,58 +250,9 @@ impl StreamInfo {
             }
         }
 
-        /// av_stream_new_side_data
-        /// av_stream_add_side_data
-        /// av_stream_get_side_data
-        unsafe fn get_rotation_from_side_data(stream: &AVStream) -> f64 {
-            for i in 0..stream.nb_side_data {
-                let side_data = stream.side_data.offset(i as isize);
-                if (*side_data).type_ == ffi::AV_PKT_DATA_DISPLAYMATRIX {
-                    let matrix = ffi::av_stream_get_side_data(
-                        stream.as_ptr(),
-                        (*side_data).type_,
-                        std::ptr::null_mut(),
-                    ) as *const i32;
-                    if !matrix.is_null() {
-                        return ffi::av_display_rotation_get(matrix);
-                    }
-                }
-            }
-            0.0
-        }
-
-        let rotation = unsafe { get_rotation_from_side_data(stream) };
-        if rotation != 0.0 {
-            return rotation;
-        }
+        // FIXME:
+        // firstly, should get side_data from stream, and find rotation side_data
         get_rotation_from_metadata(map)
-    }
-
-    #[allow(dead_code)]
-    fn set_stream_display_rotation(stream: &mut AVStream, angle: f64) {
-        // Display matrix in libavcodec is [i32; 9] where each point is 16.16
-        // fixed point, but all this is opaque here.
-        const MATRIX_LEN: usize = 9 * size_of::<i32>();
-        let mut matrix = [0u8; MATRIX_LEN];
-
-        unsafe {
-            ffi::av_display_rotation_set(matrix.as_mut_ptr() as *mut i32, angle);
-
-            let mut data_size: usize = 0;
-            let mut side_data = ffi::av_stream_get_side_data(
-                stream.as_ptr(),
-                ffi::AV_PKT_DATA_DISPLAYMATRIX,
-                &mut data_size,
-            );
-            if side_data.is_null() || data_size != MATRIX_LEN {
-                side_data = ffi::av_stream_new_side_data(
-                    stream.as_mut_ptr(),
-                    ffi::AV_PKT_DATA_DISPLAYMATRIX,
-                    MATRIX_LEN,
-                );
-            }
-            side_data.copy_from(matrix.as_ptr(), MATRIX_LEN);
-        }
     }
 
     fn get_extra_data(stream: &AVStream) -> Option<Vec<u8>> {
@@ -566,10 +517,6 @@ impl Stream<'_> {
         self.av_stream.discard
     }
 
-    pub fn side_data(&self) -> SideDataIter<'_> {
-        SideDataIter::new(self)
-    }
-
     pub fn r_frame_rate(&self) -> ffi::AVRational {
         self.av_stream.r_frame_rate
     }
@@ -629,48 +576,3 @@ impl PacketSideData<'_> {
         unsafe { std::slice::from_raw_parts((*self.as_ptr()).data, (*self.as_ptr()).size) }
     }
 }
-
-/////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////
-
-pub struct SideDataIter<'a> {
-    stream: &'a Stream<'a>,
-    index: usize,
-    len: usize,
-}
-
-impl SideDataIter<'_> {
-    pub fn new<'sd, 's: 'sd>(stream: &'s Stream) -> SideDataIter<'sd> {
-        let len = stream.av_stream.nb_side_data as usize;
-        SideDataIter {
-            stream,
-            index: 0,
-            len,
-        }
-    }
-}
-
-impl<'a> Iterator for SideDataIter<'a> {
-    type Item = PacketSideData<'a>;
-
-    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        unsafe {
-            if self.index >= self.len {
-                return None;
-            }
-
-            self.index += 1;
-
-            Some(PacketSideData::wrap(
-                self.stream.av_stream.side_data.add(self.index - 1),
-            ))
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let hint = self.len - self.index;
-        (hint, Some(hint))
-    }
-}
-
-impl ExactSizeIterator for SideDataIter<'_> {}

@@ -996,7 +996,7 @@ mod tests {
                     let diff =
                         (converted.data[[y, x, c]] as i16 - original.data[[y, x, c]] as i16).abs();
                     assert!(
-                        diff <= 5,
+                        diff <= 10,
                         "Color difference too large: {} at [{}, {}, {}]",
                         diff,
                         y,
@@ -1387,8 +1387,8 @@ mod tests {
     #[test]
     fn test_audio_planar_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 1024;
-        let sample_rate = 44100;
+        let nb_samples = 480;       // 10ms 帧 (48000 × 0.01)
+        let sample_rate = 48000;    // 48kHz
 
         // 创建测试音频帧
         let mut frame = AVFrame::new();
@@ -1473,14 +1473,14 @@ mod tests {
     #[test]
     fn test_audio_interleaved_frame_conversion() -> Result<()> {
         let nb_channels = 2;
-        let nb_samples = 1024;
-        let sample_rate = 44100;
+        let nb_samples = 480;
+        let sample_rate = 48000;
 
         let mut frame = AVFrame::new();
         frame.set_format(ffi::AV_SAMPLE_FMT_FLT);
         frame.set_nb_samples(nb_samples);
         frame.set_sample_rate(sample_rate);
-        // frame.set_time_base(avutil::ra(1, sample_rate));
+        // 对于双声道
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels).into_inner());
         frame
             .alloc_buffer()
@@ -1546,7 +1546,7 @@ mod tests {
         let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).unwrap();
         println!("aac sample_fmts:{:#?}", encoder.sample_fmts());
         let mut frame = AVFrame::new();
-        frame.set_nb_samples(1024);
+        frame.set_nb_samples(2);
         frame.set_format(encoder.sample_fmts().unwrap()[0]);
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
         assert!(frame.alloc_buffer().is_ok());

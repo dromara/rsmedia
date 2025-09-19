@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install dependencies
         run: |
@@ -155,12 +155,28 @@ jobs:
         run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-macos:
-    name: build / macos / latest ffmpeg
+    name: build / macos / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["linux/amd64"]
+        ffmpeg_version: ["6", "7", "8"]
+        include:
+          - ffmpeg_version: "6"
+            feature: "ndarray,ffmpeg6,link_system_ffmpeg"
+          - ffmpeg_version: "7"
+            feature: "ndarray,ffmpeg7,link_system_ffmpeg"
+          - ffmpeg_version: "8"
+            feature: "ndarray,ffmpeg8,link_system_ffmpeg"
+
+    env:
+      FFMPEG_PKG_CONFIG_PATH: /opt/homebrew/opt/ffmpeg@${{ matrix.ffmpeg_version }}/lib/pkgconfig
+      FFMPEG_INCLUDE_DIR: /opt/homebrew/opt/ffmpeg@${{ matrix.ffmpeg_version }}/include
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -177,17 +193,16 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install dependencies
-        run: |
-          brew install ffmpeg pkg-config
+        run: brew install pkg-config ffmpeg@${{ matrix.ffmpeg_version }}
 
       - name: Clippy check
-        run: cargo clippy --all --all-features -- -D warnings
+        run: cargo clippy --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
       - name: Build
-        run: cargo build --all --all-features --verbose
+        run: cargo build --no-default-features --features ${{ matrix.feature }} --verbose
 
       - name: Run Test
-        run: cargo test --all --all-features --verbose -- --nocapture
+        run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-windows:
     name: build / windows-${{ matrix.config.vcpkg_triplet }} / ffmpeg-7.1
@@ -212,7 +227,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -316,7 +331,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install dependencies
         run: |
@@ -433,7 +448,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

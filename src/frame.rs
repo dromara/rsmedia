@@ -1542,7 +1542,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_audio_buffer() {
+    fn test_get_buffer() {
         let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).unwrap();
         println!("aac sample_fmts:{:#?}", encoder.sample_fmts());
         let mut frame = AVFrame::new();

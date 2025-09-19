@@ -81,7 +81,9 @@ jobs:
           libdrm-dev \
           libv4l-dev \
           libx264-dev \
+          libx264-164 \
           libx265-dev \
+          libx265-199 \
           libzimg-dev \
           libdav1d-dev \
           libwebp-dev \
@@ -102,6 +104,7 @@ jobs:
           libfdk-aac-dev \
           libasound2-dev \
           libmp3lame-dev \
+          libmp3lame0 \
           libtwolame-dev \
           libjack-jackd2-dev \
           libopencore-amrnb-dev \

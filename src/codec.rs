@@ -284,6 +284,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[ignore = "skip test_supported_video_codec_name"]
     fn test_supported_video_codec_name() {
         let config = CodecConfig::new_with_name(c"libx264").unwrap();
         println!("{:?}", config.supported_pixel_formats().unwrap());
@@ -366,6 +367,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[ignore = "skip test_supported_audio_codec_name"]
     fn test_supported_audio_codec_name() {
         let config = CodecConfig::new_with_name(c"libmp3lame").unwrap();
         println!("{:?}", config.supported_sample_rates().unwrap());

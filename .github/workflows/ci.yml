@@ -64,6 +64,12 @@ jobs:
           binutils \
           pkg-config \
           llvm-dev \
+          libc++1 \
+          libva2 \
+          libva-drm2 \
+          libva-x11-2 \
+          libvdpau1 \
+          libxv1 \
           libclang-dev \
           linux-libc-dev \
           build-essential \

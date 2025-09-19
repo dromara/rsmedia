@@ -22,13 +22,6 @@ jobs:
   build-linux:
     name: build / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
-    container:
-      image: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
-
-    env:
-      DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
-      FFMPEG_INCLUDE_DIR: /usr/local/include
-      FFMPEG_PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
     strategy:
       fail-fast: false
@@ -37,10 +30,16 @@ jobs:
         ffmpeg_version: ["6.1", "7.1", "8.0"]
         include:
           - ffmpeg_version: "6.1"
+            lib_subdir: "amd64"
+            file: "ffmpeg-6.1-linux-clang-default.tar.xz"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           - ffmpeg_version: "7.1"
+            lib_subdir: "amd64"
+            file: "ffmpeg-7.1-linux-clang-default.tar.xz"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
           - ffmpeg_version: "8.0"
+            lib_subdir: "amd64"
+            file: "ffmpeg-8.0-linux-clang-default.tar.xz"
             feature: "ndarray,ffmpeg8,link_system_ffmpeg"
 
     steps:
@@ -50,7 +49,7 @@ jobs:
       - name: Install dependencies
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           nasm \
           yasm \
           curl \
@@ -139,6 +138,17 @@ jobs:
 ## libswscale-dev \
 ## libswresample-dev \
 
+      - name: Download FFmpeg-${{ matrix.ffmpeg_version }}
+        shell: bash
+        run: |
+          mkdir ffmpeg_home
+          curl -L "https://sourceforge.net/projects/avbuild/files/linux/${{ matrix.file }}/download" \
+          | tar xJf - --strip 1 -C ffmpeg_home
+          
+          echo "FFMPEG_INCLUDE_DIR=$PWD/ffmpeg_home/include" >> "$GITHUB_ENV"
+          echo "FFMPEG_PKG_CONFIG_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}/pkgconfig" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}" >> "$GITHUB_ENV"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -155,12 +165,12 @@ jobs:
         run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-macos:
-    name: build / macos / ffmpeg-${{ matrix.ffmpeg_version }}
+    name: build / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
-        platform: ["linux/amd64"]
+        platform: ["macos/amd64"]
         ffmpeg_version: ["6", "7", "8"]
         include:
           - ffmpeg_version: "6"

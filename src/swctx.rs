@@ -543,7 +543,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "ignore audio formats convert test"]
     fn test_format_conversion() -> Result<()> {
         let sample_rate = 44100;
         let nb_samples = 1024;

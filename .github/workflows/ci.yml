@@ -356,6 +356,7 @@ jobs:
         run: |
           DEBIAN_FRONTEND=noninteractive apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          jq \
           nasm \
           yasm \
           curl \
@@ -454,7 +455,10 @@ jobs:
         run: cargo clippy --all --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
       - name: Test
-        run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
+        #run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
+        run: |
+          cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --format=json | tee test-results.json
+          cat test-results.json | jq -r 'select(.type == "test" and .event != "ignored") | "\(.file):\(.name) - \(.event)"' | sort
 
   lints:
     name: Rust fmt / ${{ matrix.os }}

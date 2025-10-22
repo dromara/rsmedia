@@ -155,7 +155,7 @@ jobs:
           | tar xJf - --strip 1 -C ffmpeg_home
           
           echo "FFMPEG_INCLUDE_DIR=$PWD/ffmpeg_home/include" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}/pkgconfig" >> "$GITHUB_ENV"
+          echo "FFMPEG_PKG_CONFIG_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}/pkgconfig" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}" >> "$GITHUB_ENV"
 
       - name: Setup Rust

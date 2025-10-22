@@ -50,7 +50,7 @@ libc = "0.2"
 camino = "1.1"
 chrono = "0.4"
 ringbuf = "0.4"
-ctor = "0.5"
+ctor = "0.6"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
 ab_glyph = "0.2"
 libblur = "0.20"

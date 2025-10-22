@@ -455,10 +455,7 @@ jobs:
         run: cargo clippy --all --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
       - name: Test
-        #run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
-        run: |
-          cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- -Z unstable-options --format=json | tee test-results.json
-          cat test-results.json | jq -r 'select(.type == "test" and .event != "ignored") | "\(.file):\(.name) - \(.event)"' | sort
+        run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   lints:
     name: Rust fmt / ${{ matrix.os }}

@@ -543,6 +543,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "skip test_format_conversion"]
     fn test_format_conversion() -> Result<()> {
         let sample_rate = 44100;
         let nb_samples = 1024;

@@ -30,11 +30,11 @@ impl AudioRecorder {
             .default_input_device()
             .ok_or_else(|| anyhow::anyhow!("未找到输入设备"))?;
 
-        println!("使用输入设备: {}", device.name()?);
+        println!("使用输入设备: {}", device.description()?);
 
         let config: StreamConfig = device.default_input_config()?.into();
 
-        println!("采样率: {} Hz", config.sample_rate.0);
+        println!("采样率: {} Hz", config.sample_rate);
         println!("通道数: {}", config.channels);
 
         Ok(Self {
@@ -124,7 +124,7 @@ impl AudioRecorder {
     /// 保存录音到WAV文件
     pub fn save_to_wav(&self, filename: &str) -> Result<()> {
         let samples = self.recording_buffer.lock().unwrap();
-        let sample_rate = self.config.sample_rate.0 as i32;
+        let sample_rate = self.config.sample_rate as i32;
         let n_channels = self.config.channels;
 
         // 使用 wavers 的 write 函数保存 WAV 文件

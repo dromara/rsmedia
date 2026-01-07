@@ -104,8 +104,18 @@ fn escape_filter_str(input: &str) -> String {
             ffi::AV_ESCAPE_FLAG_WHITESPACE as i32,
         );
 
-        if result < 0 || escaped_ptr.is_null() {
-            panic!("Invalid input spec: {input}");
+        // 检查返回值是否为错误
+        if result < 0 {
+            eprintln!("av_escape failed with error code: {}", result);
+            // 使用安全的回退方案
+            return input.replace('\0', "").to_string();
+        }
+
+        // 检查返回的指针是否为空
+        if escaped_ptr.is_null() {
+            eprintln!("av_escape returned null pointer");
+            // 使用安全的回退方案
+            return input.replace('\0', "").to_string();
         }
 
         // Convert back to Rust String and free the memory

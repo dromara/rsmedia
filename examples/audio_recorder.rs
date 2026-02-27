@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Local;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream, StreamConfig};
-use rodio::{Decoder, Sink};
+use rodio::{Decoder, DeviceSinkBuilder};
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::Path;
@@ -259,15 +259,15 @@ impl RecordingController {
         println!("时长: {:.2} 秒", wav.duration());
 
         // 使用 rodio 播放音频
-        let stream_handle = rodio::OutputStreamBuilder::open_default_stream().unwrap();
-        let sink = Sink::connect_new(&stream_handle.mixer());
+        let stream_handle = DeviceSinkBuilder::open_default_sink().unwrap();
+        let player = rodio::Player::connect_new(stream_handle.mixer());
 
         let file = File::open(filename)?;
         let source = Decoder::new(BufReader::new(file))?;
-        sink.append(source);
+        player.append(source);
 
         println!("播放中... (按 Ctrl+C 停止)");
-        sink.sleep_until_end();
+        player.sleep_until_end();
         Ok(())
     }
 }

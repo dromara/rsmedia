@@ -77,7 +77,7 @@ impl Color {
     }
 
     pub fn palette_rand(n: usize) -> Vec<Self> {
-        use rand::Rng;
+        use rand::RngExt;
         use rayon::prelude::*;
         let xs: Vec<(u8, u8, u8)> = (0..n)
             .into_par_iter()

@@ -192,6 +192,8 @@ jobs:
     env:
       FFMPEG_PKG_CONFIG_PATH: /opt/homebrew/opt/ffmpeg@${{ matrix.ffmpeg_version }}/lib/pkgconfig
       FFMPEG_INCLUDE_DIR: /opt/homebrew/opt/ffmpeg@${{ matrix.ffmpeg_version }}/include
+      CPPFLAGS: "-I/opt/homebrew/opt/ffmpeg@${{ matrix.ffmpeg_version }}/include"
+      LDFLAGS: "-L/opt/homebrew/opt/ffmpeg@${{ matrix.ffmpeg_version }}/lib"
 
     steps:
       - name: Checkout

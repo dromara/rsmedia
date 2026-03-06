@@ -1637,7 +1637,7 @@ mod tests {
         let mut frame = AVFrame::new();
         frame.set_format(encoder.sample_fmts().unwrap()[0]);
         frame.set_nb_samples(1024);
-        frame.set_sample_rate(48000);
+        // frame.set_sample_rate(48000);
         frame.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
         assert!(frame.alloc_buffer().is_ok());
     }

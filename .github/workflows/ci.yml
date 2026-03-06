@@ -22,6 +22,13 @@ jobs:
   build-linux:
     name: build / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}
     runs-on: ubuntu-latest
+    container:
+      image: jrottenberg/ffmpeg:${{ matrix.ffmpeg_version }}-ubuntu
+
+    env:
+      DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
+      FFMPEG_INCLUDE_DIR: /usr/local/include
+      FFMPEG_PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
     strategy:
       fail-fast: false
@@ -30,16 +37,10 @@ jobs:
         ffmpeg_version: ["6.1", "7.1", "8.0"]
         include:
           - ffmpeg_version: "6.1"
-            lib_subdir: "amd64"
-            file: "ffmpeg-6.1-linux-clang-default.tar.xz"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
           - ffmpeg_version: "7.1"
-            lib_subdir: "amd64"
-            file: "ffmpeg-7.1-linux-clang-default.tar.xz"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
           - ffmpeg_version: "8.0"
-            lib_subdir: "amd64"
-            file: "ffmpeg-8.0-linux-clang-default.tar.xz"
             feature: "ndarray,ffmpeg8,link_system_ffmpeg"
 
     steps:
@@ -147,17 +148,6 @@ jobs:
 ## libswscale-dev \
 ## libswresample-dev \
 
-      - name: Download FFmpeg-${{ matrix.ffmpeg_version }}
-        shell: bash
-        run: |
-          mkdir ffmpeg_home
-          curl -L "https://sourceforge.net/projects/avbuild/files/linux/${{ matrix.file }}/download" \
-          | tar xJf - --strip 1 -C ffmpeg_home
-          
-          echo "FFMPEG_INCLUDE_DIR=$PWD/ffmpeg_home/include" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}/pkgconfig" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$PWD/ffmpeg_home/lib/${{ matrix.lib_subdir }}" >> "$GITHUB_ENV"
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -165,7 +155,7 @@ jobs:
           components: rustfmt, clippy, rust-src, llvm-tools-preview, rust-analysis
 
       - name: Clippy check
-        run: cargo clippy --no-default-features --features ${{ matrix.feature }} -- -D warnings
+        run: cargo clippy --all --no-default-features --features ${{ matrix.feature }} -- -D warnings
 
       - name: Build
         run: cargo build --no-default-features --features ${{ matrix.feature }} --verbose
@@ -226,105 +216,42 @@ jobs:
         run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-windows:
-    name: build / windows-${{ matrix.config.vcpkg_triplet }} / ffmpeg-7.1
+    name: build / windows / ffmpeg-8.0
     runs-on: windows-latest
 
     env:
-      FFMPEG_VERSION: "7.1"
-      BUILD_FEATURES: "ndarray,ffmpeg7,link_vcpkg_ffmpeg"
-
-    strategy:
-      matrix:
-        config:
-          - target: "x86_64-pc-windows-msvc"
-            vcpkg_triplet: "x64-windows-static"
-            rustflags: "-Ctarget-feature=+crt-static"
-          - target: "x86_64-pc-windows-msvc"
-            vcpkg_triplet: "x64-windows-static-md"
-          - target: "x86_64-pc-windows-msvc"
-            vcpkg_triplet: "x64-windows"
-            dynamic: true
-      fail-fast: false
+      FFMPEG_VERSION: "8.0"
+      BUILD_FEATURES: "ndarray,ffmpeg8,link_vcpkg_ffmpeg"
+      FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Cache Cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install dependencies
+        run: |
+          $VCINSTALLDIR = $(& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath)
+          Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=${VCINSTALLDIR}\VC\Tools\LLVM\x64\bin"
+          Invoke-WebRequest "${env:FFMPEG_DOWNLOAD_URL}" -OutFile ffmpeg-8.0.0-full_build-shared.7z
+          7z x ffmpeg-8.0.0-full_build-shared.7z
+          mkdir ffmpeg
+          mv ffmpeg-*/* ffmpeg/
+          Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg"
+          Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
           components: rustfmt, clippy
-          targets: ${{ matrix.config.target }}
-
-      # Using this since it's used by clang-sys's CI
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "10.0"
-          directory: ${{ github.workspace }}/clang
-
-      - name: Cache vcpkg
-        id: cache
-        uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/vcpkg
-          key: vcpkg-${{ runner.os }}-${{ matrix.config.vcpkg_triplet }}
-
-      - name: Build vcpkg
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          git clone https://github.com/microsoft/vcpkg --depth 1
-          ./vcpkg/bootstrap-vcpkg.bat
-
-      - name: Install Dependencies
-        run: |
-          ./vcpkg/vcpkg.exe install ffmpeg:${{ matrix.config.vcpkg_triplet }}
-
-      - name: Set env
-        shell: bash
-        run: |
-          if [ '${{ matrix.config.dynamic }}' != '' ]; then
-            echo "VCPKGRS_DYNAMIC=1" >> $GITHUB_ENV
-          fi
-
-      - name: Clippy check
-        shell: bash
-        env:
-          RUSTFLAGS: ${{ matrix.config.rustflags }}
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_DEFAULT_TRIPLET: ${{ matrix.config.vcpkg_triplet }}
-          LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
-          LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo clippy --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} -- -D warnings
 
       - name: Build
         shell: bash
-        env:
-          RUSTFLAGS: ${{ matrix.config.rustflags }}
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_DEFAULT_TRIPLET: ${{ matrix.config.vcpkg_triplet }}
-          LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
-          LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo build --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} --verbose
+        run: cargo build --no-default-features --features ${{ env.BUILD_FEATURES }} --verbose
 
       - name: Run Test
         shell: bash
-        env:
-          RUSTFLAGS: ${{ matrix.config.rustflags }}
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKG_DEFAULT_TRIPLET: ${{ matrix.config.vcpkg_triplet }}
-          LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
-          LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo test --no-default-features --features ${{ env.BUILD_FEATURES }} --target ${{ matrix.config.target }} --verbose -- --nocapture
+        run: cargo test --no-default-features --features ${{ env.BUILD_FEATURES }} --verbose -- --nocapture
 
   test_and_clippy:
     name: Clippy & Test / ${{ matrix.platform }} / ffmpeg-${{ matrix.ffmpeg_version }}

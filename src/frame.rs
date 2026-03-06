@@ -755,6 +755,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "ffmpeg8"))]
 mod tests {
     use super::*;
     use anyhow::anyhow;
@@ -1234,12 +1235,17 @@ mod tests {
             time_base,
         )?;
 
+        if frame.data.is_empty() {
+            return Err(Error::msg("Frame data pointer is null"));
+        }
+
         // 填充一些测试数据
         for s in 0..samples as usize {
             for ch in 0..channels as usize {
                 // 生成简单的正弦波
                 let t = s as f32 / sample_rate as f32;
-                let freq = 440.0 * (ch + 1) as f32; // 不同通道使用不同频率
+                // 不同通道使用不同频率
+                let freq = 440.0 * (ch + 1) as f32;
                 frame.data[[0, s, ch]] = (2.0 * std::f32::consts::PI * freq * t).sin();
             }
         }

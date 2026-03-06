@@ -247,11 +247,9 @@ jobs:
           components: rustfmt, clippy
 
       - name: Build
-        shell: bash
         run: cargo build --no-default-features --features ${{ env.BUILD_FEATURES }} --verbose
 
       - name: Run Test
-        shell: bash
         run: cargo test --no-default-features --features ${{ env.BUILD_FEATURES }} --verbose -- --nocapture
 
   test_and_clippy:

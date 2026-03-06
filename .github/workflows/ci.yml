@@ -236,8 +236,9 @@ jobs:
           7z x ffmpeg-8.0.0-full_build-shared.7z
           mkdir ffmpeg
           mv ffmpeg-*/* ffmpeg/
-          Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg"
           Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin"
+          Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg"
+          Add-Content $env:GITHUB_ENV "FFMPEG_INCLUDE_DIR=${FFMPEG_DIR}\include"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

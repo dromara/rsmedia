@@ -100,11 +100,13 @@ fn configure_linux(target_arch: &str) {
 
 fn configure_windows(target_arch: &str) {
     // 获取 VCPKG_ROOT 并检查 triplet
-    if !env::var("VCPKG_ROOT").is_ok() {
-        eprintln!("VCPKG_ROOT environment variable is not set");
-        return;
-    }
-    let vcpkg_root = PathBuf::from(env::var("VCPKG_ROOT").expect("VCPKG_ROOT not found"));
+    let vcpkg_root = match env::var("VCPKG_ROOT") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => {
+            eprintln!("VCPKG_ROOT environment variable is not set");
+            return;
+        }
+    };
     let triplets = if target_arch == "x86_64" {
         vec![
             "x64-windows",

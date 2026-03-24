@@ -238,6 +238,7 @@ jobs:
           mv ffmpeg-*/* ffmpeg/
           Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin"
           Add-Content $env:GITHUB_ENV "FFMPEG_DIR=${pwd}\ffmpeg"
+          Add-Content $env:GITHUB_ENV "FFMPEG_LIBS_DIR=$${FFMPEG_DIR}\lib"
           Add-Content $env:GITHUB_ENV "FFMPEG_INCLUDE_DIR=${FFMPEG_DIR}\include"
 
       - name: Setup Rust

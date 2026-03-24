@@ -87,33 +87,34 @@ pub enum AvFormatContextFlags {
     AUTO_BSF = ffi::AVFMT_FLAG_AUTO_BSF,
 }
 
-#[repr(u32)]
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AvScalerFlags {
-    FAST_BILINEAR = ffi::SWS_FAST_BILINEAR,
-    BILINEAR = ffi::SWS_BILINEAR,
-    BICUBIC = ffi::SWS_BICUBIC,
-    X = ffi::SWS_X,
-    POINT = ffi::SWS_POINT,
-    AREA = ffi::SWS_AREA,
-    BICUBLIN = ffi::SWS_BICUBLIN,
-    GAUSS = ffi::SWS_GAUSS,
-    SINC = ffi::SWS_SINC,
-    LANCZOS = ffi::SWS_LANCZOS,
-    SPLINE = ffi::SWS_SPLINE,
-    SRC_V_CHR_DROP_MASK = ffi::SWS_SRC_V_CHR_DROP_MASK,
-    // alias POINT=16
-    // SRC_V_CHR_DROP_SHIFT = ffi::SWS_SRC_V_CHR_DROP_SHIFT,
-    PARAM_DEFAULT = ffi::SWS_PARAM_DEFAULT,
-    PRINT_INFO = ffi::SWS_PRINT_INFO,
-    FULL_CHR_H_INT = ffi::SWS_FULL_CHR_H_INT,
-    FULL_CHR_H_INP = ffi::SWS_FULL_CHR_H_INP,
-    DIRECT_BGR = ffi::SWS_DIRECT_BGR,
-    ACCURATE_RND = ffi::SWS_ACCURATE_RND,
-    BITEXACT = ffi::SWS_BITEXACT,
-    ERROR_DIFFUSION = ffi::SWS_ERROR_DIFFUSION,
-}
+// compile error on win32:  expected `u32`, found `i32`
+// #[repr(u32)]
+// #[allow(non_camel_case_types)]
+// #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+// pub enum AvScalerFlags {
+//     FAST_BILINEAR = ffi::SWS_FAST_BILINEAR,
+//     BILINEAR = ffi::SWS_BILINEAR,
+//     BICUBIC = ffi::SWS_BICUBIC,
+//     X = ffi::SWS_X,
+//     POINT = ffi::SWS_POINT,
+//     AREA = ffi::SWS_AREA,
+//     BICUBLIN = ffi::SWS_BICUBLIN,
+//     GAUSS = ffi::SWS_GAUSS,
+//     SINC = ffi::SWS_SINC,
+//     LANCZOS = ffi::SWS_LANCZOS,
+//     SPLINE = ffi::SWS_SPLINE,
+//     SRC_V_CHR_DROP_MASK = ffi::SWS_SRC_V_CHR_DROP_MASK,
+//     // alias POINT=16
+//     // SRC_V_CHR_DROP_SHIFT = ffi::SWS_SRC_V_CHR_DROP_SHIFT,
+//     PARAM_DEFAULT = ffi::SWS_PARAM_DEFAULT,
+//     PRINT_INFO = ffi::SWS_PRINT_INFO,
+//     FULL_CHR_H_INT = ffi::SWS_FULL_CHR_H_INT,
+//     FULL_CHR_H_INP = ffi::SWS_FULL_CHR_H_INP,
+//     DIRECT_BGR = ffi::SWS_DIRECT_BGR,
+//     ACCURATE_RND = ffi::SWS_ACCURATE_RND,
+//     BITEXACT = ffi::SWS_BITEXACT,
+//     ERROR_DIFFUSION = ffi::SWS_ERROR_DIFFUSION,
+// }
 
 #[repr(u32)]
 #[allow(non_camel_case_types)]

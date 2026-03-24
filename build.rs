@@ -8,7 +8,7 @@ fn main() {
     match target_os.as_str() {
         "macos" => configure_macos(&target_arch),
         "linux" => configure_linux(&target_arch),
-        //"windows" => configure_windows(&target_arch),
+        "windows" => configure_windows(&target_arch),
         _ => panic!("Unsupported operating system"),
     }
 }
@@ -98,9 +98,12 @@ fn configure_linux(target_arch: &str) {
     println!("cargo:rustc-link-search=native=/lib");
 }
 
-#[allow(dead_code)]
 fn configure_windows(target_arch: &str) {
     // 获取 VCPKG_ROOT 并检查 triplet
+    if !env::var("VCPKG_ROOT").is_ok() {
+        eprintln!("VCPKG_ROOT environment variable is not set");
+        return;
+    }
     let vcpkg_root = PathBuf::from(env::var("VCPKG_ROOT").expect("VCPKG_ROOT not found"));
     let triplets = if target_arch == "x86_64" {
         vec![

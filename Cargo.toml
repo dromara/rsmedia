@@ -54,7 +54,7 @@ ctor = "0.6"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "chrono"] }
 ab_glyph = "0.2"
 libblur = "0.23"
-pic-scale = "0.6"
+pic-scale = "0.7"
 fast_image_resize = "6.0"
 histogram_equalization = "0.2"
 ## security & async

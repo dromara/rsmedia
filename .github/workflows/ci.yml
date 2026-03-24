@@ -216,11 +216,11 @@ jobs:
         run: cargo test --all --no-default-features --features ${{ matrix.feature }} --verbose -- --nocapture
 
   build-windows:
-    name: build / windows / ffmpeg-8.0
+    name: build / windows / ffmpeg-8.1
     runs-on: windows-latest
 
     env:
-      FFMPEG_VERSION: "8.0"
+      FFMPEG_VERSION: "8.1"
       BUILD_FEATURES: "ndarray,ffmpeg8,link_vcpkg_ffmpeg"
       FFMPEG_DOWNLOAD_URL: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z
 
@@ -232,8 +232,8 @@ jobs:
         run: |
           $VCINSTALLDIR = $(& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath)
           Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=${VCINSTALLDIR}\VC\Tools\LLVM\x64\bin"
-          Invoke-WebRequest "${env:FFMPEG_DOWNLOAD_URL}" -OutFile ffmpeg-8.0.0-full_build-shared.7z
-          7z x ffmpeg-8.0.0-full_build-shared.7z
+          Invoke-WebRequest "${env:FFMPEG_DOWNLOAD_URL}" -OutFile ffmpeg-release-full-shared.7z
+          7z x ffmpeg-release-full-shared.7z
           mkdir ffmpeg
           mv ffmpeg-*/* ffmpeg/
           Add-Content $env:GITHUB_PATH "${pwd}\ffmpeg\bin"
@@ -246,6 +246,9 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt, clippy
+
+      - name: Clippy check
+        run: cargo clippy --no-default-features --features ${{ env.BUILD_FEATURES }} -- -D warnings
 
       - name: Build
         run: cargo build --no-default-features --features ${{ env.BUILD_FEATURES }} --verbose

@@ -8,9 +8,9 @@
 //! /// 水印 + 缩放 + 淡入淡出组合
 //! /// [buffer] -> scale -> fifo -> drawtext -> [buffersink]
 //! let video_watermark_preset_filters = vec![
-//!     scale(1280, 720, Some(PixelFormat::YUV420P)),
+//!     scale(1280, 720, None),
 //!     fifo(MediaType::VIDEO), // 避免 drawtext 卡住
-//!     drawtext("Hello Text", 20, 20, 24, "white"),
+//!     DrawText::new("Hello Text", 20, 20, 24, "white").build(),
 //!     fade_in(30),
 //!     fade_out(270, 30),
 //! ];
@@ -129,6 +129,28 @@ fn escape_filter_str(input: &str) -> String {
     }
 }
 
+/// 转义文本，但保留 FFmpeg 的 `%{...}` 展开块（如 `%{localtime}`、`%{pts:hms}`）。
+///
+/// 用于 `drawtext` 等需要显示动态时间/帧号的场景，避免 `{` `}` 被转义后无法展开。
+fn escape_filter_expr(input: &str) -> String {
+    let mut result = String::new();
+    let mut rest = input;
+    while let Some(pos) = rest.find("%{") {
+        // 转义 `%{` 之前的部分
+        result.push_str(&escape_filter_str(&rest[..pos]));
+        // 找到匹配的 `}`，整体保留
+        if let Some(end_rel) = rest[pos..].find('}') {
+            result.push_str(&rest[pos..pos + end_rel + 1]);
+            rest = &rest[pos + end_rel + 1..];
+        } else {
+            result.push_str(&escape_filter_str(&rest[pos..]));
+            rest = "";
+        }
+    }
+    result.push_str(&escape_filter_str(rest));
+    result
+}
+
 pub mod video {
     use super::*;
 
@@ -191,24 +213,109 @@ pub mod video {
         )
     }
 
-    /// Draws text on video. Requires `fontfile`.
-    pub fn drawtext(
-        text: &str,
+    /// 在视频上绘制文字的 Builder，对应 FFmpeg `drawtext` 滤镜。
+    ///
+    /// `fontfile` 可选，缺省时使用 FFmpeg 默认字体；也支持给文字加描边盒子（`boxed`）。
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rsmedia::filter::video::DrawText;
+    /// let f = DrawText::new("Hello", 10, 10, 24, "white")
+    ///     .fontfile("fonts/Arial.ttf")
+    ///     .boxed("black@0.5")
+    ///     .build();
+    /// ```
+    pub struct DrawText {
+        text: String,
         x: i32,
         y: i32,
-        fontfile: &str,
+        fontfile: Option<String>,
         fontsize: u32,
-        fontcolor: &str,
-    ) -> Filter {
-        let escaped_text = escape_filter_str(text);
-        let escaped_font_file = escape_filter_str(fontfile);
-        Filter::new(
-            "drawtext",
-            MediaType::VIDEO,
-            format!(
-                "drawtext=text='{escaped_text}':fontfile='{escaped_font_file}':x={x}:y={y}:fontsize={fontsize}:fontcolor={fontcolor}",
-            ),
-        )
+        fontcolor: String,
+        box_enabled: bool,
+        box_color: String,
+        box_border_w: u32,
+        raw_text: bool,
+    }
+
+    impl DrawText {
+        /// 创建文字水印。
+        ///
+        /// * `text` - 要绘制的文本。
+        /// * `x` / `y` - 文字左上角坐标。
+        /// * `fontsize` - 字号。
+        /// * `fontcolor` - 文字颜色（如 `"white"`、`"white@0.5"`）。
+        pub fn new(text: &str, x: i32, y: i32, fontsize: u32, fontcolor: &str) -> Self {
+            Self {
+                text: text.to_string(),
+                x,
+                y,
+                fontfile: None,
+                fontsize,
+                fontcolor: fontcolor.to_string(),
+                box_enabled: false,
+                box_color: "black@0.5".to_string(),
+                box_border_w: 0,
+                raw_text: false,
+            }
+        }
+
+        /// 指定字体文件路径。
+        pub fn fontfile(mut self, path: &str) -> Self {
+            self.fontfile = Some(path.to_string());
+            self
+        }
+
+        /// 开启文字背景盒子（描边效果）。
+        pub fn boxed(mut self, color: &str) -> Self {
+            self.box_enabled = true;
+            self.box_color = color.to_string();
+            self
+        }
+
+        /// 使用 FFmpeg 文本展开表达式显示动态内容（如当前时间、帧号）。
+        ///
+        /// 常用表达式：`%{localtime}`（本地时间）、`%{pts:hms}`（时间戳时分秒）、
+        /// `%{frame_num}`（帧号）。表达式中的 `%{...}` 不会被转义。
+        ///
+        /// # Examples
+        ///
+        /// 在右上角显示当前时间：
+        /// ```
+        /// use rsmedia::filter::video::DrawText;
+        /// let f = DrawText::new("", 0, 0, 24, "white")
+        ///     .time_text("%{localtime}")
+        ///     .build();
+        /// ```
+        pub fn time_text(mut self, fmt: &str) -> Self {
+            self.text = fmt.to_string();
+            self.raw_text = true;
+            self
+        }
+
+        /// 生成最终的 [`Filter`]。
+        pub fn build(self) -> Filter {
+            let text_spec = if self.raw_text {
+                escape_filter_expr(&self.text)
+            } else {
+                escape_filter_str(&self.text)
+            };
+            let mut spec = format!(
+                "drawtext=text='{}':x={}:y={}:fontsize={}:fontcolor={}",
+                text_spec, self.x, self.y, self.fontsize, self.fontcolor
+            );
+            if let Some(fontfile) = self.fontfile {
+                spec.push_str(&format!(":fontfile='{}'", escape_filter_str(&fontfile)));
+            }
+            if self.box_enabled {
+                spec.push_str(&format!(
+                    ":box=1:boxcolor={}:boxborderw={}",
+                    self.box_color, self.box_border_w
+                ));
+            }
+            Filter::new("drawtext", MediaType::VIDEO, spec)
+        }
     }
 
     /// 画矩形框
@@ -245,6 +352,78 @@ pub mod video {
             MediaType::VIDEO,
             format!("delogo=x={x}:y={y}:w={w}:h={h}"),
         )
+    }
+
+    /// 去除水印（delogo）的 Builder：支持**多个区域**串联及可选参数。
+    ///
+    /// FFmpeg 的 `delogo` 通过周围像素插值填补指定矩形区域，适合去除固定位置的
+    /// 简单文字/logo 水印。对半透明、异形或复杂背景的水印效果有限。
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use rsmedia::filter::video::Delogo;
+    /// // 去除两处水印并开启调试可视化
+    /// let filters = Delogo::new()
+    ///     .add_region(10, 10, 120, 30)
+    ///     .add_region(640, 10, 120, 30)
+    ///     .band(2)
+    ///     .show()
+    ///     .build();
+    /// ```
+    pub struct Delogo {
+        regions: Vec<(i32, i32, u32, u32)>,
+        band: i32,
+        show: bool,
+    }
+
+    impl Default for Delogo {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl Delogo {
+        /// 创建一个空的水印去除器（需通过 [`add_region`](Delogo::add_region) 添加区域）。
+        pub fn new() -> Self {
+            Self {
+                regions: Vec::new(),
+                band: 1,
+                show: false,
+            }
+        }
+
+        /// 添加一个待去除的水印区域（左上角坐标 + 宽高）。
+        pub fn add_region(mut self, x: i32, y: i32, w: u32, h: u32) -> Self {
+            self.regions.push((x, y, w, h));
+            self
+        }
+
+        /// 扫描带宽度（插值取样宽度，默认 1）。
+        pub fn band(mut self, band: i32) -> Self {
+            self.band = band;
+            self
+        }
+
+        /// 显示去除区域（调试用），将待去除区域标记出来再输出。
+        pub fn show(mut self) -> Self {
+            self.show = true;
+            self
+        }
+
+        /// 生成滤镜列表，每个水印区域对应一个 `delogo` 滤镜（按顺序串联）。
+        pub fn build(self) -> Vec<Filter> {
+            self.regions
+                .into_iter()
+                .map(|(x, y, w, h)| {
+                    let mut params = format!("delogo=x={x}:y={y}:w={w}:h={h}:band={}", self.band);
+                    if self.show {
+                        params.push_str(":show=1");
+                    }
+                    Filter::new("delogo", MediaType::VIDEO, params)
+                })
+                .collect()
+        }
     }
 
     /// zoompan - 平移和缩放效果
@@ -294,7 +473,7 @@ pub mod video {
         Filter::new(
             "fade",
             MediaType::VIDEO,
-            format!("fade=t=in:st=0:d={duration_frames}"),
+            format!("fade=t=in:st=0:d={duration_frames}:units=frames"),
         )
     }
 
@@ -305,7 +484,7 @@ pub mod video {
         Filter::new(
             "fade",
             MediaType::VIDEO,
-            format!("fade=t=out:st={start_frame}:d={duration_frames}"),
+            format!("fade=t=out:st={start_frame}:d={duration_frames}:units=frames"),
         )
     }
 
@@ -321,7 +500,11 @@ pub mod video {
     /// `luma_radius`: Radius of the luma blur.
     pub fn blur(radius: f32) -> Filter {
         // Consider adding other boxblur params: luma_power, chroma_radius, chroma_power, alpha_radius, alpha_power
-        Filter::new("boxblur", MediaType::VIDEO, format!("luma_radius={radius}"))
+        Filter::new(
+            "boxblur",
+            MediaType::VIDEO,
+            format!("boxblur=luma_radius={radius}"),
+        )
     }
 
     /// 亮度/对比度调节
@@ -336,6 +519,113 @@ pub mod video {
     /// 帧率控制
     pub fn fps(fps: f32) -> Filter {
         Filter::new("fps", MediaType::VIDEO, format!("fps={fps}"))
+    }
+
+    /// 去交错（Deinterlace），将隔行扫描转为逐行扫描。
+    /// `mode`: `send_frame`(默认), `send_field`, `send_frame_nospatial`, `send_field_nospatial`.
+    pub fn yadif(mode: &str) -> Filter {
+        Filter::new("yadif", MediaType::VIDEO, format!("yadif=mode={mode}"))
+    }
+
+    /// 补边（Pad），在视频周围添加指定颜色的边。
+    ///
+    /// * `w` / `h` - 输出尺寸（不包含负值表达式）。
+    /// * `x` / `y` - 原视频在输出画布上的偏移。
+    /// * `color` - 填充颜色，如 `"black"`。
+    pub fn pad(w: u32, h: u32, x: i32, y: i32, color: &str) -> Filter {
+        Filter::new(
+            "pad",
+            MediaType::VIDEO,
+            format!("pad=w={w}:h={h}:x={x}:y={y}:color={color}"),
+        )
+    }
+
+    /// 烧录字幕（Subtitles）。
+    /// `path`: 字幕文件路径（`srt`/`ass` 等）。
+    pub fn subtitles(path: &str) -> Filter {
+        let escaped = escape_filter_str(path);
+        Filter::new(
+            "subtitles",
+            MediaType::VIDEO,
+            format!("subtitles={escaped}"),
+        )
+    }
+
+    /// 设置显示宽高比（DAR）。
+    /// `ratio` 为宽高比，如 `16`/`9`。
+    pub fn setdar(num: i32, den: i32) -> Filter {
+        Filter::new("setdar", MediaType::VIDEO, format!("setdar={num}/{den}"))
+    }
+
+    /// 设置采样宽高比（SAR）。
+    pub fn setsar(num: i32, den: i32) -> Filter {
+        Filter::new("setsar", MediaType::VIDEO, format!("setsar={num}/{den}"))
+    }
+
+    /// 色相/饱和度/亮度调节。
+    /// `hue` 为色相偏移（度，-180 ~ 180）。
+    pub fn hue(hue: i32) -> Filter {
+        Filter::new("hue", MediaType::VIDEO, format!("hue=h={hue}"))
+    }
+
+    /// 反相（负片效果）。
+    pub fn negate() -> Filter {
+        Filter::new("negate", MediaType::VIDEO, "negate".to_string())
+    }
+
+    /// 添加噪点。
+    /// `amount` 为噪点强度（0-100）。
+    pub fn noise(amount: u32) -> Filter {
+        Filter::new("noise", MediaType::VIDEO, format!("noise=alls={amount}"))
+    }
+
+    /// 视频降噪（hqdn3d），减少亮度/色度噪声。
+    ///
+    /// * `luma` - 亮度空间降噪强度（0-4，默认 4）。
+    /// * `chroma` - 色度空间降噪强度（0-3，默认 3）。
+    pub fn hqdn3d(luma: f32, chroma: f32) -> Filter {
+        Filter::new(
+            "hqdn3d",
+            MediaType::VIDEO,
+            format!("hqdn3d=luma_spatial={luma}:chroma_spatial={chroma}"),
+        )
+    }
+
+    /// 视频降噪（nlmeans），非局部均值降噪，降噪效果更好但更耗时。
+    /// `strength` 为降噪强度（建议 0-20，默认 1.0）。
+    pub fn nlmeans(strength: f32) -> Filter {
+        Filter::new("nlmeans", MediaType::VIDEO, format!("nlmeans=s={strength}"))
+    }
+
+    /// Gamma 校正（画质增强）。
+    /// `gamma` 为 gamma 值（通常 0.5-2.0，1.0 表示不变）。
+    pub fn gamma(gamma: f32) -> Filter {
+        Filter::new("gamma", MediaType::VIDEO, format!("gamma=g={gamma}"))
+    }
+
+    /// 饱和度调节（画质增强）。
+    /// `saturation` 为饱和度倍数（1.0 表示不变，0 为黑白）。
+    pub fn saturation(saturation: f32) -> Filter {
+        Filter::new(
+            "eq",
+            MediaType::VIDEO,
+            format!("eq=saturation={saturation}"),
+        )
+    }
+
+    /// 鲜艳度调节（画质增强）。
+    /// `vibrance` 为鲜艳度（-1.0 ~ 1.0，0 表示不变）。
+    pub fn vibrance(vibrance: f32) -> Filter {
+        Filter::new(
+            "vibrance",
+            MediaType::VIDEO,
+            format!("vibrance=vibrance={vibrance}"),
+        )
+    }
+
+    /// 去块效应（画质增强），减轻压缩产生的马赛克/块状伪影。
+    pub fn deblock() -> Filter {
+        Filter::new("deblock", MediaType::VIDEO, "deblock".to_string())
     }
 }
 
@@ -431,9 +721,11 @@ pub mod audio {
     /// `attack`: Attack time in ms (optional, default 20).
     /// `release`: Release time in ms (optional, default 250).
     /// See: <https://ffmpeg.org/ffmpeg-filters.html#acompressor>
-    pub fn compressor(ratio: f32, attack: Option<f32>, release: Option<f32>) -> Filter {
+    pub fn compressor(ratio: f32, attack: Option<f32>, release: Option<f32>) -> Result<Filter> {
         if ratio < 1.0 {
-            panic!("{}", format!("Compressor ratio must be >= 1.0: {ratio}"));
+            return Err(Error::msg(format!(
+                "Compressor ratio must be >= 1.0: {ratio}"
+            )));
         }
         let mut spec = format!("acompressor=ratio={ratio}");
         if let Some(a) = attack {
@@ -443,7 +735,7 @@ pub mod audio {
             spec.push_str(&format!(":release={r}"));
         }
         // Add other params: makeup, knee, link, detection, mix...
-        Filter::new("acompressor", MediaType::AUDIO, spec)
+        Ok(Filter::new("acompressor", MediaType::AUDIO, spec))
     }
 
     /// 高通滤波
@@ -529,44 +821,48 @@ pub mod audio {
         };
         Filter::new("anlmdn", MediaType::AUDIO, spec)
     }
+
+    /// 音频降噪（便捷方法），使用 FFT 降噪并自动估计噪声特征。
+    /// `strength` 为降噪强度（dB，建议 10-30）。
+    pub fn denoise(strength: f32) -> Filter {
+        Filter::new(
+            "afftdn",
+            MediaType::AUDIO,
+            format!("afftdn=nr={strength}:nt=w"),
+        )
+    }
 }
 
-/// 过滤器工厂 - 用于创建具体的过滤器描述
-pub struct FilterFactory;
+/// 创建 FIFO 过滤器，避免后面的滤镜因缓冲不足而阻塞。
+pub fn fifo(media_type: MediaType) -> Filter {
+    #[rustfmt::skip]
+    let name = if media_type == MediaType::AUDIO { "afifo" } else { "fifo" };
+    Filter::new(name, media_type, name.to_string())
+}
 
-impl FilterFactory {
-    /// 创建 FIFO 过滤器
-    pub fn fifo(media_type: MediaType) -> Filter {
-        #[rustfmt::skip]
-        let name = if media_type == MediaType::AUDIO { "afifo" } else { "fifo" };
-        Filter::new(name, media_type, name.to_string())
-    }
+/// 分支滤镜，将一个输入流分成多个相同的输出流。
+/// See: <https://ffmpeg.org/ffmpeg-filters.html#split_002c-asplit>
+pub fn split(media_type: MediaType, n: i32) -> Filter {
+    #[rustfmt::skip]
+    let name = if media_type == MediaType::AUDIO { "asplit" } else { "split" };
+    Filter::new(name, media_type, format!("{name}={n}"))
+}
 
-    /// 分支滤镜，将一个输入流分成多个相同的输出流
-    /// See: <https://ffmpeg.org/ffmpeg-filters.html#split_002c-asplit>
-    pub fn split(media_type: MediaType, n: i32) -> Filter {
-        #[rustfmt::skip]
-        let name = if media_type == MediaType::AUDIO { "asplit" } else { "split" };
-        Filter::new(name, media_type, format!("{name}={n}"))
-    }
+/// 修改时间戳表达式（加速、减速、对齐等）。
+/// 典型值：`"0.5*PTS"`（2倍速）、`"1.5*PTS"`（慢放）、`"PTS-STARTPTS"`。
+/// `expr`: FFmpeg expression (e.g., "0.5*PTS", "PTS-STARTPTS").
+pub fn setpts(media_type: MediaType, expr: &str) -> Filter {
+    #[rustfmt::skip]
+    let name = if media_type == MediaType::AUDIO { "asetpts" } else { "setpts" };
+    let escaped_expr = escape_filter_str(expr);
+    Filter::new(name, media_type, format!("{name}={escaped_expr}"))
+}
 
-    /// 修改时间戳表达式（加速、减速、对齐等）
-    /// 典型值：`setpts=0.5*PTS`（2倍速），`1.5*PTS`（慢放）
-    /// Modifies presentation timestamp (PTS). Use with caution.
-    /// `expr`: FFmpeg expression (e.g., "0.5*PTS", "PTS-STARTPTS").
-    pub fn setpts(media_type: MediaType, expr: &str) -> Filter {
-        #[rustfmt::skip]
-        let name = if media_type == MediaType::AUDIO { "asetpts" } else { "setpts" };
-        let escaped_expr = escape_filter_str(expr);
-        Filter::new(name, media_type, format!("{name}={escaped_expr}"))
-    }
-
-    /// Trim video/audio to a specific time range.
-    pub fn trim(media_type: MediaType, start: f32, end: f32) -> Filter {
-        #[rustfmt::skip]
-        let name = if media_type == MediaType::AUDIO { "atrim" } else { "trim" };
-        Filter::new(name, media_type, format!("{name}={start}:{end}"))
-    }
+/// 将视频/音频裁剪到指定的时间范围。
+pub fn trim(media_type: MediaType, start: f32, end: f32) -> Filter {
+    #[rustfmt::skip]
+    let name = if media_type == MediaType::AUDIO { "atrim" } else { "trim" };
+    Filter::new(name, media_type, format!("{name}={start}:{end}"))
 }
 
 /// 过滤器参数配置
@@ -710,12 +1006,16 @@ impl FilterGraph {
 
         let mut sink_ctx = self
             .graph
-            .create_filter_context(&buffersink, c"out", None)
-            .context("Failed to create video buffer sink")?;
+            .alloc_filter_context(&buffersink, c"out")
+            .context("Failed to allocate video buffer sink")?;
 
+        // 先分配再设置选项、最后初始化，兼容 FFmpeg 8 中 `pix_fmts` 为非运行时选项的限制
         sink_ctx
             .opt_set_bin(c"pix_fmts", &(ffi::AVPixelFormat::from(params.format)))
             .context("Failed to set video sink filter context pixel format")?;
+        sink_ctx
+            .init_str(None)
+            .context("Failed to init video buffer sink")?;
 
         // Create endpoints
         let outputs = AVFilterInOut::new(c"in", &mut src_ctx, 0);
@@ -761,12 +1061,16 @@ impl FilterGraph {
 
         let mut sink_ctx = self
             .graph
-            .create_filter_context(&buffersink, c"out", None)
-            .context("Failed to create audio buffer sink")?;
+            .alloc_filter_context(&buffersink, c"out")
+            .context("Failed to allocate audio buffer sink")?;
 
+        // 先分配再设置选项、最后初始化，兼容 FFmpeg 8 中 sink 选项为非运行时选项的限制
         sink_ctx.opt_set_bin(c"sample_fmts", &(params.format as i32))?;
         sink_ctx.opt_set_bin(c"sample_rates", &params.sample_rate)?;
         sink_ctx.opt_set(c"ch_layouts", &channel_desc)?;
+        sink_ctx
+            .init_str(None)
+            .context("Failed to init audio buffer sink")?;
 
         // Create endpoints
         let outputs = AVFilterInOut::new(c"in", &mut src_ctx, 0);
@@ -1075,6 +1379,242 @@ mod tests {
             escape_filter_str("[in1][in2]overlay=format=rgb[out]"),
             "\\[in1\\]\\[in2\\]overlay\\=format\\=rgb\\[out\\]",
             "Filter with pad names should be properly escaped"
+        );
+    }
+
+    #[test]
+    fn test_escape_filter_expr() {
+        // 保留 `%{localtime}` 展开块，其余部分正常转义
+        assert_eq!(
+            escape_filter_expr("%{localtime}"),
+            "%{localtime}",
+            "Time expansion block should be preserved"
+        );
+        assert_eq!(
+            escape_filter_expr("T %{pts:hms}"),
+            "T\\ %{pts:hms}",
+            "Surrounding text should be escaped but block preserved"
+        );
+        // 多个展开块
+        assert_eq!(
+            escape_filter_expr("%{frame_num}/%{n}"),
+            "%{frame_num}/%{n}",
+            "Multiple expansion blocks should be preserved"
+        );
+        // 无展开块时退化为普通转义
+        assert_eq!(
+            escape_filter_expr("plain: text"),
+            escape_filter_str("plain: text"),
+            "Without expansion blocks it should match plain escaping"
+        );
+    }
+
+    #[test]
+    fn test_drawtext_time_text() {
+        // 静态文本正常转义
+        let static_spec = video::DrawText::new("Hello", 10, 20, 24, "white")
+            .build()
+            .spec()
+            .to_string();
+        assert!(
+            static_spec.contains("drawtext=text='Hello':x=10:y=20:fontsize=24:fontcolor=white"),
+            "static drawtext spec mismatch: {static_spec}"
+        );
+
+        // 时间表达式不被转义
+        let time_spec = video::DrawText::new("", 10, 20, 24, "white")
+            .time_text("%{localtime}")
+            .build()
+            .spec()
+            .to_string();
+        assert!(
+            time_spec.contains("text='%{localtime}'"),
+            "time expression should not be escaped: {time_spec}"
+        );
+    }
+
+    #[test]
+    fn test_filter_spec_generation() {
+        use MediaType::*;
+
+        // ---- Video filters ----
+        let cases: Vec<(String, String, MediaType)> = vec![
+            (
+                "scale=w=640:h=360:flags=bicubic".into(),
+                video::scale(640, 360, Some("bicubic")).spec(),
+                VIDEO,
+            ),
+            (
+                "scale=w=640:h=360:flags=fast_bilinear".into(),
+                video::scale(640, 360, None).spec(),
+                VIDEO,
+            ),
+            (
+                "crop=x=10:y=20:w=100:h=50".into(),
+                video::crop(10, 20, 100, 50).spec(),
+                VIDEO,
+            ),
+            (
+                "fade=t=in:st=0:d=30:units=frames".into(),
+                video::fade_in(30).spec(),
+                VIDEO,
+            ),
+            (
+                "fade=t=out:st=30:d=30:units=frames".into(),
+                video::fade_out(30, 30).spec(),
+                VIDEO,
+            ),
+            ("unsharp".into(), video::unsharp().spec(), VIDEO),
+            (
+                "boxblur=luma_radius=2".into(),
+                video::blur(2.0).spec(),
+                VIDEO,
+            ),
+            (
+                "eq=brightness=0.2:contrast=1.5".into(),
+                video::eq(0.2, 1.5).spec(),
+                VIDEO,
+            ),
+            ("fps=30".into(), video::fps(30.0).spec(), VIDEO),
+            (
+                "yadif=mode=send_frame".into(),
+                video::yadif("send_frame").spec(),
+                VIDEO,
+            ),
+            (
+                "pad=w=1280:h=720:x=0:y=0:color=black".into(),
+                video::pad(1280, 720, 0, 0, "black").spec(),
+                VIDEO,
+            ),
+            (
+                "subtitles=sub.srt".into(),
+                video::subtitles("sub.srt").spec(),
+                VIDEO,
+            ),
+            ("setdar=16/9".into(), video::setdar(16, 9).spec(), VIDEO),
+            ("setsar=1/1".into(), video::setsar(1, 1).spec(), VIDEO),
+            ("hue=h=30".into(), video::hue(30).spec(), VIDEO),
+            ("negate".into(), video::negate().spec(), VIDEO),
+            ("noise=alls=10".into(), video::noise(10).spec(), VIDEO),
+            (
+                "hqdn3d=luma_spatial=3:chroma_spatial=2".into(),
+                video::hqdn3d(3.0, 2.0).spec(),
+                VIDEO,
+            ),
+            ("nlmeans=s=1.5".into(), video::nlmeans(1.5).spec(), VIDEO),
+            ("gamma=g=1.2".into(), video::gamma(1.2).spec(), VIDEO),
+            (
+                "eq=saturation=1.5".into(),
+                video::saturation(1.5).spec(),
+                VIDEO,
+            ),
+            (
+                "vibrance=vibrance=0.4".into(),
+                video::vibrance(0.4).spec(),
+                VIDEO,
+            ),
+            ("deblock".into(), video::deblock().spec(), VIDEO),
+            (
+                "delogo=x=0:y=0:w=100:h=50".into(),
+                video::delogo(0, 0, 100, 50).spec(),
+                VIDEO,
+            ),
+            ("transpose=1".into(), video::transpose(1).spec(), VIDEO),
+            (
+                "drawbox=x=1:y=2:w=10:h=10:color=red:t=2".into(),
+                video::drawbox(1, 2, 10, 10, "red", 2).spec(),
+                VIDEO,
+            ),
+        ];
+
+        for (expected, actual, media_type) in cases {
+            assert_eq!(actual, expected, "spec mismatch");
+            assert_eq!(
+                Filter::new("x", media_type, String::new()).media_type(),
+                media_type
+            );
+        }
+
+        // ---- Audio filters ----
+        let audio_cases: Vec<(String, String)> = vec![
+            ("volume=1.5".into(), audio::volume(1.5).spec()),
+            (
+                "loudnorm=I=-16:TP=-1.5:LRA=11".into(),
+                audio::loudnorm(-16.0).spec(),
+            ),
+            ("highpass=f=80".into(), audio::highpass(80).spec()),
+            ("lowpass=f=4000".into(), audio::lowpass(4000).spec()),
+            ("atempo=1.25".into(), audio::atempo(1.25).spec()),
+            (
+                "afftdn=nr=20:nf=-50:nt=w".into(),
+                audio::fft_denoise(20, -50).spec(),
+            ),
+            ("afftdn=nr=15:nt=w".into(), audio::denoise(15.0).spec()),
+        ];
+        for (expected, actual) in audio_cases {
+            assert_eq!(actual, expected, "audio spec mismatch");
+        }
+
+        // compressor 返回 Result
+        let comp = audio::compressor(3.0, Some(30.0), Some(200.0)).unwrap();
+        assert_eq!(comp.spec(), "acompressor=ratio=3:attack=30:release=200");
+        // 非法 ratio 返回错误而非 panic
+        assert!(audio::compressor(0.5, None, None).is_err());
+    }
+
+    #[test]
+    fn test_delogo_builder() {
+        use MediaType::*;
+
+        // 单区域便捷方法
+        let simple = video::delogo(0, 0, 100, 50);
+        assert_eq!(simple.name(), "delogo");
+        assert_eq!(simple.media_type(), VIDEO);
+        assert_eq!(simple.spec(), "delogo=x=0:y=0:w=100:h=50");
+
+        // Builder：多区域 + band + show
+        let filters = video::Delogo::new()
+            .add_region(10, 10, 120, 30)
+            .add_region(640, 10, 120, 30)
+            .band(2)
+            .show()
+            .build();
+        assert_eq!(filters.len(), 2, "one delogo per region");
+        assert_eq!(
+            filters[0].spec(),
+            "delogo=x=10:y=10:w=120:h=30:band=2:show=1"
+        );
+        assert_eq!(
+            filters[1].spec(),
+            "delogo=x=640:y=10:w=120:h=30:band=2:show=1"
+        );
+        for f in &filters {
+            assert_eq!(f.media_type(), VIDEO);
+        }
+
+        // 空 Builder 生成空列表
+        assert!(video::Delogo::new().build().is_empty());
+    }
+
+    #[test]
+    fn test_drawtext_boxed_and_fontfile() {
+        let f = video::DrawText::new("Hi", 1, 2, 20, "white")
+            .fontfile("fonts/A.ttf")
+            .boxed("black@0.5")
+            .build()
+            .spec()
+            .to_string();
+        assert!(
+            f.contains("drawtext=text='Hi':x=1:y=2:fontsize=20:fontcolor=white"),
+            "base mismatch: {f}"
+        );
+        assert!(
+            f.contains("fontfile='fonts/A.ttf'"),
+            "fontfile missing: {f}"
+        );
+        assert!(
+            f.contains("box=1:boxcolor=black@0.5:boxborderw=0"),
+            "box missing: {f}"
         );
     }
 }

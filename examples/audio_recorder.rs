@@ -90,7 +90,7 @@ impl AudioRecorder {
         let running = Arc::clone(running);
 
         let stream = self.device.build_input_stream(
-            &self.config,
+            self.config,
             move |data: &[T], _: &_| {
                 if running.load(Ordering::SeqCst) {
                     let mut buffer = recording_buffer.lock().unwrap();
@@ -168,7 +168,7 @@ impl AudioRecorder {
         // 将分贝值归一化到0-1范围
         // 假设-60dB是最小可听值，0dB是最大值
         let normalized = (db + 60.0) / 60.0;
-        normalized.max(0.0).min(1.0)
+        normalized.clamp(0.0, 1.0)
     }
 }
 
@@ -242,9 +242,8 @@ impl RecordingController {
     /// 创建音量条
     fn create_volume_bar(volume: f32) -> String {
         let bar_length = (volume * 50.0) as usize;
-        let bar: String = std::iter::repeat('█')
-            .take(bar_length)
-            .chain(std::iter::repeat('░').take(50 - bar_length))
+        let bar: String = std::iter::repeat_n('█', bar_length)
+            .chain(std::iter::repeat_n('░', 50 - bar_length))
             .collect();
         bar
     }

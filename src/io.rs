@@ -102,8 +102,8 @@ impl<'a> StreamReaderBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to input.
-    pub fn with_options(mut self, options: Option<Options>) -> Self {
-        self.options = options;
+    pub fn with_options(mut self, options: impl Into<Option<Options>>) -> Self {
+        self.options = options.into();
         self
     }
 
@@ -130,7 +130,7 @@ impl<'a> StreamReaderBuilder<'a> {
         let mut dict = self.options.map(|opts| opts.into_dict());
         let mut ctx_input = AVFormatContextInput::builder()
             .url(&filename)
-            .format(fmt_opt.unwrap().deref())
+            .maybe_format(fmt_opt.as_deref())
             .options(&mut dict)
             .open()
             .context("Create input format context failed.")?;
@@ -315,8 +315,8 @@ impl<'a> StreamWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Option<Options>) -> Self {
-        self.options = options;
+    pub fn with_options(mut self, options: impl Into<Option<Options>>) -> Self {
+        self.options = options.into();
         self
     }
 
@@ -327,7 +327,7 @@ impl<'a> StreamWriterBuilder<'a> {
         let mut dict = self.options.map(|opts| opts.into_dict());
         let output_ctx = AVFormatContextOutput::builder()
             .filename(&filename)
-            .format_name(format.unwrap().as_ref())
+            .maybe_format_name(format.as_deref())
             .options(&mut dict)
             .build()
             .context("Create output format context failed.")?;
@@ -408,8 +408,8 @@ impl<'a> BufferWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Option<Options>) -> Self {
-        self.options = options;
+    pub fn with_options(mut self, options: impl Into<Option<Options>>) -> Self {
+        self.options = options.into();
         self
     }
 
@@ -491,8 +491,8 @@ impl<'a> PacketizedBufWriterBuilder<'a> {
     /// # Arguments
     ///
     /// * `options` - Options to pass on to output.
-    pub fn with_options(mut self, options: Option<Options>) -> Self {
-        self.options = options;
+    pub fn with_options(mut self, options: impl Into<Option<Options>>) -> Self {
+        self.options = options.into();
         self
     }
 

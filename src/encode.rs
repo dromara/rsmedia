@@ -11,7 +11,7 @@ use crate::stream::StreamInfo;
 use crate::{swctx, time, utils, Location, MediaType, SampleFormat, StreamWriter};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters, AVPacket};
-use rsmpeg::avutil::{AVChannelLayout, AVChannelLayoutRef, AVFrame};
+use rsmpeg::avutil::{self, AVChannelLayout, AVChannelLayoutRef, AVFrame};
 use rsmpeg::ffi;
 
 use anyhow::{Context, Error, Result};
@@ -52,7 +52,10 @@ impl EncoderBuilder {
 
     /// This is the assumed FPS for the encoder to use.
     /// Note that this does not need to be correct exactly.
-    const FRAME_RATE: i32 = 24;
+    const FRAME_RATE: i32 = 30;
+
+    /// Max numerator/denominator when converting a float fps via `av_d2q`.
+    const FPS_MAX: i32 = 100_000;
 
     /// Default bit rate.
     /// 分辨率(width, height) + 推荐比特率（单位：bps）
@@ -76,7 +79,6 @@ impl EncoderBuilder {
     ///
     /// * `width` - The width of the video stream.
     /// * `height` - The height of the video stream.
-    /// * `pixel_format` - The desired pixel format for the video stream.
     pub fn new_video(width: usize, height: usize) -> Self {
         Self::default().with_width(width).with_height(height)
     }
@@ -121,8 +123,8 @@ impl EncoderBuilder {
     /// Set the codec name.
     /// video codec default is `libx264`
     /// audio codec default is `aac`
-    pub fn with_codec_name(mut self, codec_name: Option<String>) -> Self {
-        self.codec_name = codec_name;
+    pub fn with_codec_name(mut self, codec_name: impl Into<Option<String>>) -> Self {
+        self.codec_name = codec_name.into();
         self
     }
 
@@ -152,6 +154,18 @@ impl EncoderBuilder {
 
     pub fn with_frame_rate(mut self, num: i32, den: i32) -> Self {
         self.frame_rate = time::new_rational(num, den);
+        self
+    }
+
+    /// Set the video frame rate from a floating-point number of frames per second.
+    ///
+    /// Convenience for [`with_frame_rate`](Self::with_frame_rate) that accepts a
+    /// plain `fps` value (e.g. `30.0`, `29.97`). The value is converted to a
+    /// reduced rational via FFmpeg's `av_d2q` and used as the encoder frame rate.
+    pub fn with_fps(mut self, fps: f32) -> Self {
+        if fps > 0.0 && fps.is_finite() {
+            self.frame_rate = avutil::av_d2q(fps as f64, Self::FPS_MAX);
+        }
         self
     }
 
@@ -196,14 +210,14 @@ impl EncoderBuilder {
     }
 
     /// codec options used for encoder
-    pub fn with_options(mut self, options: Option<Options>) -> Self {
-        self.codec_opts = options;
+    pub fn with_options(mut self, options: impl Into<Option<Options>>) -> Self {
+        self.codec_opts = options.into();
         self
     }
 
     /// filters used for encoder
-    pub fn with_filters(mut self, filters: Option<Vec<Filter>>) -> Self {
-        self.filters = filters;
+    pub fn with_filters(mut self, filters: impl Into<Option<Vec<Filter>>>) -> Self {
+        self.filters = filters.into();
         self
     }
 
@@ -692,7 +706,7 @@ impl Encoder {
                 if let Some(pix_fmts) = pix_fmts_opt {
                     if !pix_fmts.contains(&frame.format) {
                         return Err(Error::msg(format!(
-                            "Unsupported encode frame pixel format: {:?}",
+                            "Unsupported video encoder frame pixel format: {:?}",
                             frame.format
                         )));
                     }
@@ -707,8 +721,8 @@ impl Encoder {
                         .find(|ch_layout| ch_layout.nb_channels == frame.ch_layout.nb_channels)
                         .ok_or_else(|| {
                             Error::msg(format!(
-                                "Unsupported encode frame channel layout: {:?}",
-                                frame.ch_layout
+                                "Unsupported audio encoder frame channel layout: {:?}",
+                                frame.ch_layout.nb_channels
                             ))
                         })?;
                 }
@@ -941,12 +955,29 @@ pub struct EncoderWrapper<W: Writer> {
     stream_info: StreamInfo,
     have_written_header: bool,
     have_written_trailer: bool,
+    /// 自动时间戳的当前位置，由 [`write_frame`](Self::write_frame) 维护。
+    position: time::Time,
+    frame_duration: time::Time,
 }
 
 impl<W: Writer> EncoderWrapper<W> {
     /// 创建一个新的编码器包装器
     pub fn new(encoder: Encoder, writer: W, stream_index: usize, interleaved: bool) -> Self {
         let stream_info = StreamInfo::from_writer(&writer, stream_index).unwrap();
+        // 当前帧时长：视频按帧率，音频按采样数/采样率
+        let duration = match encoder.media_type {
+            // 帧时长 = 1 / frame_rate，即取帧率(fr.num / fr.den)的倒数 (fr.den / fr.num)
+            MediaType::VIDEO => {
+                let fr = encoder.frame_rate();
+                time::Time::new(Some(1), time::new_rational(fr.den, fr.num.max(1)))
+            }
+            // 帧时长 = nb_samples / sample_rate
+            MediaType::AUDIO => time::Time::new(
+                Some(encoder.frame_size() as i64),
+                time::new_rational(1, encoder.sample_rate().max(1)),
+            ),
+            _ => panic!("No supported encoder for media_type."),
+        };
         Self {
             writer,
             encoder,
@@ -955,6 +986,8 @@ impl<W: Writer> EncoderWrapper<W> {
             stream_info,
             have_written_header: false,
             have_written_trailer: false,
+            position: time::Time::zero(),
+            frame_duration: duration,
         }
     }
 
@@ -984,6 +1017,27 @@ impl<W: Writer> EncoderWrapper<W> {
         }
 
         Ok(())
+    }
+
+    /// 写入一帧，并自动维护时间戳（pts）。
+    ///
+    /// 与 [`encode`](Self::encode) 不同，`write_frame` 会按帧率（视频）或
+    /// 采样率/采样数（音频）自动递增 pts，用户无需手动
+    /// [`set_pts`](MediaFrame::set_pts)。适合需要"开箱即用"地逐帧写出时使用。
+    ///
+    /// 若需要完全控制时间戳，请使用 [`encode`](Self::encode)。
+    #[cfg(feature = "ndarray")]
+    pub fn write_frame<T: MediaFrameType>(&mut self, mut frame: MediaFrame<T>) -> Result<()> {
+        let pts = self
+            .position
+            .aligned_with_rational(self.encoder.time_base())
+            .into_value()
+            .unwrap_or(0);
+        frame.set_pts(pts);
+
+        self.position = self.position.aligned_with(self.frame_duration).add();
+
+        self.encode(frame)
     }
 
     /// Signal to the encoder that writing has finished. This will cause any packets in the encoder
@@ -1039,10 +1093,8 @@ impl<W: Writer> EncoderWrapper<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::filter;
 
     use std::collections::HashMap;
-    use std::path::Path;
 
     /// 定义视频格式参数结构体
     #[allow(dead_code)]
@@ -1077,7 +1129,9 @@ mod tests {
     /// | MPEG     | 1/90_000        | 90kHz，MPEG标准           |
     #[cfg(feature = "ndarray")]
     fn test_encode_video_for_container(container_type: &str, fps: f64) -> Result<()> {
+        use crate::filter;
         use crate::time::Time;
+        use std::path::Path;
 
         // 使用单一match获取基本参数
         let (codec_name, time_base, codec_options, format_options) = match container_type {
@@ -1265,7 +1319,7 @@ mod tests {
 
         let filters = vec![
             filter::video::scale(1920, 1080, None),
-            filter::video::drawtext("Watermark", 50, 50, "", 24, "white@0.5"),
+            filter::video::DrawText::new("Watermark", 50, 50, 24, "white@0.5").build(),
             filter::video::crop(0, 0, 640, 360),
         ];
 
@@ -1279,9 +1333,9 @@ mod tests {
         // 创建编码器
         let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)
             .with_time_base(time_base.0, time_base.1)
-            .with_codec_name(Some(config.codec_name))
+            .with_codec_name(config.codec_name)
             .with_options(config.codec_options.map(|opts| opts.into()))
-            .with_filters(Some(filters))
+            .with_filters(filters)
             .build_wrapped(output_path)?;
 
         fn rainbow_frame(w: usize, h: usize, p: f32) -> MediaFrame<u8> {
@@ -1344,6 +1398,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "ndarray")]
     #[test]
     #[rustfmt::skip]
     #[ignore = "ignore video output file"]

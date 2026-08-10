@@ -56,7 +56,7 @@ pub struct MediaFrame<T> {
     pub duration: i64,
     /// Video: [`PixelFormat`]
     /// Audio: [`SampleFormat`]
-    pub format: i32,
+    format: i32,
     /// Video: `[height, width, channels]`
     /// Audio: `[frames, nb_samples, nb_channels]`
     pub data: ndarray::Array3<T>,
@@ -182,6 +182,18 @@ where
         self.pts = pts;
     }
 
+    /// Returns the pixel format if this is a video frame, otherwise `None`.
+    #[inline]
+    pub fn video_format(&self) -> Option<PixelFormat> {
+        (self.media_type == MediaType::VIDEO).then(|| PixelFormat::from(self.format))
+    }
+
+    /// Returns the sample format if this is an audio frame, otherwise `None`.
+    #[inline]
+    pub fn audio_format(&self) -> Option<SampleFormat> {
+        (self.media_type == MediaType::AUDIO).then(|| SampleFormat::from(self.format))
+    }
+
     pub fn set_dts(&mut self, dts: i64) {
         self.dts = dts;
     }
@@ -279,7 +291,8 @@ where
     ///////////////////////////// convert //////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////
 
-    pub fn convert_rgb_to_yuv(&self) -> Result<Self> {
+    /// 校验当前帧是否为可转换的 RGB24 视频帧。
+    fn check_rgb24_supported(&self) -> Result<()> {
         if self.media_type != MediaType::VIDEO {
             return Err(Error::msg("Only video frames can be color space converted"));
         }
@@ -287,6 +300,41 @@ where
         if self.format != ffi::AV_PIX_FMT_RGB24 {
             return Err(Error::msg("Only RGB24 format video frames are supported"));
         }
+        Ok(())
+    }
+
+    pub fn convert_rgb_to_yuv(&self) -> Result<Self> {
+        self.check_rgb24_supported()?;
+
+        // 根据分辨率自动选择色彩矩阵：SD -> BT.601 / HD -> BT.709 / UHD -> BT.2020
+        let colorspace = if self.height < 720 {
+            YuvStandardMatrix::Bt601
+        } else if self.height < 1080 {
+            YuvStandardMatrix::Bt709
+        } else {
+            YuvStandardMatrix::Bt2020
+        };
+
+        self.convert_rgb_to_yuv_with_matrix(colorspace)
+    }
+
+    /// 用**指定**的色彩矩阵将 RGB24 帧转换为 YUV420P。
+    ///
+    /// 相比自动按分辨率判断的 [`convert_rgb_to_yuv`](Self::convert_rgb_to_yuv)，
+    /// 此方法允许用户显式选择 BT.601 / BT.709 / BT.2020，用于需要精确控制
+    /// 色彩矩阵的专业场景（例如与源视频的色彩标准保持一致）。
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use rsmedia::MediaFrame;
+    /// # fn d(mut f: MediaFrame<u8>) -> anyhow::Result<()> {
+    /// let yuv = f.convert_rgb_to_yuv_with_matrix(yuv::YuvStandardMatrix::Bt709)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn convert_rgb_to_yuv_with_matrix(&self, colorspace: YuvStandardMatrix) -> Result<Self> {
+        self.check_rgb24_supported()?;
 
         let height = self.height;
         let width = self.width;
@@ -330,21 +378,7 @@ where
             height: height as u32,
         };
 
-        // 4. 选择转换参数
-        let colorspace = {
-            if height < 720 {
-                // SD color space
-                YuvStandardMatrix::Bt601
-            } else if height < 1080 {
-                // HD color space
-                YuvStandardMatrix::Bt709
-            } else {
-                // UHD color space
-                YuvStandardMatrix::Bt2020
-            }
-        };
-
-        // 5. 使用Full Range进行转换
+        // 4. 使用指定的色彩矩阵进行转换（Full Range）
         yuv::rgb_to_yuv420(
             &mut planar_image,
             &rgb_bytes,
@@ -591,8 +625,9 @@ where
                 // 平面布局：每个声道单独存储
                 for ch in 0..channels {
                     let dst = std::slice::from_raw_parts_mut(frame.data[ch] as *mut T, samples);
-                    let src = &buffer[ch * samples..(ch + 1) * samples];
-                    dst.copy_from_slice(src);
+                    for s in 0..samples {
+                        dst[s] = buffer[s * channels + ch];
+                    }
                 }
             } else {
                 // 交错布局：单块内存存储所有声道
@@ -755,7 +790,6 @@ where
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "ffmpeg8"))]
 mod tests {
     use super::*;
     use anyhow::anyhow;
@@ -934,6 +968,37 @@ mod tests {
     }
 
     #[test]
+    fn test_rgb_yuv_conversion_with_matrix() -> Result<()> {
+        let mut rgb_frame = MediaFrame::<u8>::new_video_frame(
+            TEST_WIDTH,
+            TEST_HEIGHT,
+            PixelFormat::RGB24,
+            TIME_BASE,
+        )?;
+        let (r, g, b) = create_test_pattern(TEST_WIDTH, TEST_HEIGHT);
+        for y in 0..TEST_HEIGHT {
+            for x in 0..TEST_WIDTH {
+                let idx = y * TEST_WIDTH + x;
+                rgb_frame.data[[y, x, 0]] = r[idx];
+                rgb_frame.data[[y, x, 1]] = g[idx];
+                rgb_frame.data[[y, x, 2]] = b[idx];
+            }
+        }
+
+        // 显式指定不同色彩矩阵，均应输出 YUV420P
+        let yuv709 = rgb_frame.convert_rgb_to_yuv_with_matrix(YuvStandardMatrix::Bt709)?;
+        assert_eq!(yuv709.format, ffi::AV_PIX_FMT_YUV420P);
+
+        let yuv2020 = rgb_frame.convert_rgb_to_yuv_with_matrix(YuvStandardMatrix::Bt2020)?;
+        assert_eq!(yuv2020.format, ffi::AV_PIX_FMT_YUV420P);
+
+        // 不同色彩矩阵导致不同的 YUV 转换结果
+        assert_ne!(yuv709.data, yuv2020.data);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_different_pixel_types() -> Result<()> {
         // 测试不同像素类型
         let frame_u8 = MediaFrame::<u8>::new_video_frame(
@@ -1100,7 +1165,10 @@ mod tests {
         );
 
         // 验证数组是否可写
-        assert_eq!(frame.data.view_mut().is_empty(), false);
+        assert!(
+            !frame.data.view_mut().is_empty(),
+            "Array should be writable"
+        );
 
         // 填充测试数据（使用安全访问方法）
         for y in 0..height {
@@ -1271,7 +1339,7 @@ mod tests {
         // 填充测试数据
         unsafe {
             let data = std::slice::from_raw_parts_mut(
-                frame.data[0] as *mut u8,
+                frame.data[0].cast::<u8>(),
                 frame.height as usize * frame.width as usize * 3,
             );
             for (i, byte) in data.iter_mut().enumerate() {
@@ -1312,7 +1380,7 @@ mod tests {
         unsafe {
             // Y 平面 (全分辨率)
             let y_data = std::slice::from_raw_parts_mut(
-                frame.data[0] as *mut u8,
+                frame.data[0].cast::<u8>(),
                 height as usize * width as usize,
             );
             for (i, byte) in y_data.iter_mut().enumerate() {
@@ -1321,7 +1389,7 @@ mod tests {
 
             // U 平面 (1/4分辨率)
             let u_data = std::slice::from_raw_parts_mut(
-                frame.data[1] as *mut u8,
+                frame.data[1].cast::<u8>(),
                 (height as usize / 2) * (width as usize / 2),
             );
             for (i, byte) in u_data.iter_mut().enumerate() {
@@ -1330,7 +1398,7 @@ mod tests {
 
             // V 平面 (1/4分辨率)
             let v_data = std::slice::from_raw_parts_mut(
-                frame.data[2] as *mut u8,
+                frame.data[2].cast::<u8>(),
                 (height as usize / 2) * (width as usize / 2),
             );
             for (i, byte) in v_data.iter_mut().enumerate() {
@@ -1349,18 +1417,18 @@ mod tests {
         // 验证数据
         unsafe {
             // 验证 Y 分量
-            let y_val = *frame.data[0] as u8;
+            let y_val = *frame.data[0];
             assert_eq!(media_frame.data[[0, 0, 0]], y_val);
 
             // 验证 U 分量 (2x2块使用相同的值)
-            let u_val = *frame.data[1] as u8;
+            let u_val = *frame.data[1];
             assert_eq!(media_frame.data[[0, 0, 1]], u_val);
             assert_eq!(media_frame.data[[0, 1, 1]], u_val);
             assert_eq!(media_frame.data[[1, 0, 1]], u_val);
             assert_eq!(media_frame.data[[1, 1, 1]], u_val);
 
             // 验证 V 分量 (2x2块使用相同的值)
-            let v_val = *frame.data[2] as u8;
+            let v_val = *frame.data[2];
             assert_eq!(media_frame.data[[0, 0, 2]], v_val);
             assert_eq!(media_frame.data[[0, 1, 2]], v_val);
             assert_eq!(media_frame.data[[1, 0, 2]], v_val);
@@ -1490,8 +1558,9 @@ mod tests {
         frame.set_format(ffi::AV_SAMPLE_FMT_FLTP);
         frame.set_nb_samples(nb_samples);
         frame.set_sample_rate(sample_rate);
-        // frame.set_time_base(avutil::ra(1, sample_rate));
-        frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels).into_inner());
+        // 对于双声道
+        let stereo_layout = AVChannelLayout::from_string(c"stereo").unwrap();
+        frame.set_ch_layout(stereo_layout.into_inner());
         frame
             .alloc_buffer()
             .context("Failed to allocate buffer for AVFrame")?;
@@ -1503,10 +1572,12 @@ mod tests {
         let total_samples = (nb_samples * nb_channels) as usize;
         unsafe {
             for ch in 0..nb_channels as usize {
-                let data =
-                    std::slice::from_raw_parts_mut(frame.data[ch] as *mut f32, nb_samples as usize);
-                for i in 0..data.len() {
-                    data[i] = (i * nb_channels as usize + ch) as f32 / total_samples as f32;
+                let data = std::slice::from_raw_parts_mut(
+                    frame.data[ch].cast::<f32>(),
+                    nb_samples as usize,
+                );
+                for (i, sample) in data.iter_mut().enumerate() {
+                    *sample = (i * nb_channels as usize + ch) as f32 / total_samples as f32;
                 }
             }
         }
@@ -1524,17 +1595,20 @@ mod tests {
 
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
-        println!("{:#?}", first_sample);
-        assert_eq!(first_sample.to_vec(), vec![0.0, 1.0 / total_samples as f32]);
+        assert_eq!(
+            first_sample.to_vec(),
+            vec![0.0f32, 1.0f32 / total_samples as f32]
+        );
 
         let converted_frame = media_frame.to_avframe().unwrap();
         assert_eq!(converted_frame.format, ffi::AV_SAMPLE_FMT_FLTP);
         assert_eq!(converted_frame.nb_samples, nb_samples);
         assert_eq!(converted_frame.sample_rate, sample_rate);
-        assert_eq!(converted_frame.linesize, frame.linesize);
-        assert_eq!(converted_frame.data.len(), frame.data.len());
 
         // 验证转换后的数据
+        // 注：不比较 linesize / data.len()，因为 FFmpeg 7+ on Linux 的
+        // av_frame_get_buffer 会因 SIMD 对齐而 padding 出不同的 linesize 值；
+        // data 是固定大小数组 [u8; 8] 没有意义。改用逐采样点比较确保数据完整性。
         unsafe {
             for ch in 0..nb_channels as usize {
                 let original_data =
@@ -1550,7 +1624,7 @@ mod tests {
                     let conv = converted_data[i];
                     let diff = (orig - conv).abs();
                     assert!(
-                        diff < 1.0,
+                        diff < 1e-6,
                         "Mismatch at channel {} sample {}: expected {}, got {}, diff {}",
                         ch,
                         i,
@@ -1576,7 +1650,8 @@ mod tests {
         frame.set_nb_samples(nb_samples);
         frame.set_sample_rate(sample_rate);
         // 对于双声道
-        frame.set_ch_layout(AVChannelLayout::from_nb_channels(nb_channels).into_inner());
+        let stereo_layout = AVChannelLayout::from_string(c"stereo").unwrap();
+        frame.set_ch_layout(stereo_layout.into_inner());
         frame
             .alloc_buffer()
             .context("Failed to allocate buffer for AVFrame")?;
@@ -1586,10 +1661,10 @@ mod tests {
         // data[0]: [L1 R1 L2 R2 L3 R3 ...] (左右声道交错)
         let total_samples = (nb_samples * nb_channels) as usize;
         unsafe {
-            let data = std::slice::from_raw_parts_mut(frame.data[0] as *mut f32, total_samples);
-            for i in 0..data.len() {
+            let data = std::slice::from_raw_parts_mut(frame.data[0].cast::<f32>(), total_samples);
+            for (i, sample) in data.iter_mut().enumerate() {
                 // 交错格式本身就是按照样本点交错排列的
-                data[i] = (i / total_samples) as f32;
+                *sample = i as f32 / total_samples as f32;
             }
         }
 
@@ -1606,17 +1681,20 @@ mod tests {
 
         // 验证数据
         let first_sample = media_frame.data.slice(ndarray::s![0, 0, ..]);
-        println!("{:#?}", first_sample);
-        assert_eq!(first_sample.to_vec(), vec![0.0, 0.0]);
+        assert_eq!(
+            first_sample.to_vec(),
+            vec![0.0f32, 1.0f32 / total_samples as f32]
+        );
 
         let converted_frame = media_frame.to_avframe().unwrap();
         assert_eq!(converted_frame.format, ffi::AV_SAMPLE_FMT_FLT);
         assert_eq!(converted_frame.nb_samples, nb_samples);
         assert_eq!(converted_frame.sample_rate, sample_rate);
-        assert_eq!(converted_frame.linesize, frame.linesize);
-        assert_eq!(converted_frame.data.len(), frame.data.len());
 
         // 验证转换后的数据
+        // 注：不比较 linesize / data.len()，因为 FFmpeg 7+ on Linux 的
+        // av_frame_get_buffer 会因 SIMD 对齐而 padding 出不同的 linesize 值；
+        // data 是固定大小数组 [u8; 8] 没有意义。改用逐采样点比较确保数据完整性。
         unsafe {
             let original_data =
                 std::slice::from_raw_parts(frame.data[0] as *const f32, total_samples);
@@ -1639,11 +1717,16 @@ mod tests {
     #[test]
     fn test_get_buffer() {
         let encoder = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).unwrap();
-        println!("aac sample_fmts:{:#?}", encoder.sample_fmts());
+        // 校验编码器至少声明了一种采样格式
+        assert!(
+            encoder.sample_fmts().is_some_and(|fmts| !fmts.is_empty()),
+            "AAC encoder should expose at least one supported sample format"
+        );
         let mut frame = AVFrame::new();
         frame.set_nb_samples(2);
-        frame.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
         frame.set_format(encoder.sample_fmts().unwrap()[0]);
+        let stereo_layout = AVChannelLayout::from_string(c"stereo").unwrap();
+        frame.set_ch_layout(stereo_layout.into_inner());
         assert!(frame.alloc_buffer().is_ok());
     }
 }

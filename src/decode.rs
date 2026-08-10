@@ -6,6 +6,7 @@ use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Reader;
 use crate::options::Options;
 use crate::stream::StreamInfo;
+use crate::swctx::ScaleAlgorithm;
 use crate::{swctx, utils, Location, MediaType, PixelFormat, SampleFormat, StreamReader, Time};
 
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVPacket};
@@ -26,6 +27,7 @@ pub struct DecoderBuilder {
     codec_opts: Option<Options>,
     filters: Option<Vec<Filter>>,
     hw_device_config: Option<HWDeviceConfig>,
+    scale_algorithm: ScaleAlgorithm,
 }
 
 impl DecoderBuilder {
@@ -43,6 +45,7 @@ impl DecoderBuilder {
             hw_device_config: None,
             thread_count: num_cpus::get(),
             flags: AvCodecFlags::LOW_DELAY,
+            scale_algorithm: ScaleAlgorithm::default(),
         }
     }
 
@@ -54,14 +57,14 @@ impl DecoderBuilder {
 
     /// Set the codec name to use for decoding.
     /// If not set, the decoder will try to guess the codec based on the input.
-    pub fn with_codec_name(mut self, codec_name: Option<String>) -> Self {
-        self.codec_name = codec_name;
+    pub fn with_codec_name(mut self, codec_name: impl Into<Option<String>>) -> Self {
+        self.codec_name = codec_name.into();
         self
     }
 
     /// codec options to use for decoding.
-    pub fn with_options(mut self, options: Option<Options>) -> Self {
-        self.codec_opts = options;
+    pub fn with_options(mut self, options: impl Into<Option<Options>>) -> Self {
+        self.codec_opts = options.into();
         self
     }
 
@@ -72,8 +75,8 @@ impl DecoderBuilder {
     }
 
     /// set the filters to apply to decoded frames.
-    pub fn with_filters(mut self, filters: Option<Vec<Filter>>) -> Self {
-        self.filters = filters;
+    pub fn with_filters(mut self, filters: impl Into<Option<Vec<Filter>>>) -> Self {
+        self.filters = filters.into();
         self
     }
 
@@ -82,6 +85,17 @@ impl DecoderBuilder {
     /// * `device_config` - Device to use for hardware acceleration.
     pub fn with_hardware_device(mut self, device_config: Option<HWDeviceConfig>) -> Self {
         self.hw_device_config = device_config;
+        self
+    }
+
+    /// Set the scaling algorithm used when converting decoded frames to a
+    /// canonical pixel format (e.g. YUV420P).
+    ///
+    /// Defaults to [`ScaleAlgorithm::Bicubic`]. Use
+    /// [`ScaleAlgorithm::Bilinear`] for output consistent with FFmpeg's command
+    /// line default, or [`ScaleAlgorithm::Area`] when downscaling.
+    pub fn with_scale_algorithm(mut self, algorithm: ScaleAlgorithm) -> Self {
+        self.scale_algorithm = algorithm;
         self
     }
 
@@ -109,13 +123,22 @@ impl DecoderBuilder {
         Ok(())
     }
 
-    /// Build [`Decoder`].
+    /// 构建一个**裸** [`Decoder`]（不持有 reader）。
+    ///
+    /// 适合需要精细控制 reader 生命周期的高级场景：解码时需每帧传入 reader
+    /// （`decoder.decode(&mut reader)`），且**不支持 seek**（seek 需要 reader，
+    /// 请改用 [`build_wrapped`](DecoderBuilder::build_wrapped)）。
     pub fn build(self, source: impl Into<Location>) -> Result<Decoder> {
         let reader = StreamReader::new(source)?;
         self.build_from_reader(&reader)
     }
 
-    /// 创建一个包装的解码器
+    /// 构建一个持有 reader 的 [`DecoderWrapper`]（**推荐入口**）。
+    ///
+    /// 返回的 [`DecoderWrapper`] 封装了 reader，解码无需每帧传参
+    /// （`decoder.decode()` / `decoder.decode_frame()`），并支持直接
+    /// [`seek_to_frame`](DecoderWrapper::seek_to_frame) /
+    /// [`seek_to_timestamp`](DecoderWrapper::seek_to_timestamp)。
     pub fn build_wrapped(
         self,
         source: impl Into<Location>,
@@ -124,13 +147,19 @@ impl DecoderBuilder {
         self.build_wrapped_with_reader(reader)
     }
 
-    /// a reader be required to get input stream, and build a decoder.
+    /// 用自定义 reader 构建持有 reader 的 [`DecoderWrapper`]。
+    ///
+    /// 当需要从自定义 [`Reader`]（如网络流、内存缓冲）解码时使用，行为与
+    /// [`build_wrapped`](DecoderBuilder::build_wrapped) 一致。
     pub fn build_wrapped_with_reader<R: Reader>(self, reader: R) -> Result<DecoderWrapper<R>> {
         let decoder = self.build_from_reader(&reader)?;
         Ok(DecoderWrapper::new(decoder, reader))
     }
 
-    /// a reader be required to get input stream, and build a decoder.
+    /// 用给定的 reader 构建**裸** [`Decoder`]（不持有 reader）。
+    ///
+    /// 高级/内部场景使用（如 mux 多流共享同一 reader）。解码时需每帧传入
+    /// reader，且不支持 seek。日常使用请优先 [`build_wrapped`](DecoderBuilder::build_wrapped)。
     pub fn build_from_reader<R: Reader>(self, reader: &R) -> Result<Decoder> {
         let media_type = self.media_type;
         let (stream_index, codec_name) = reader.find_best_stream(media_type)?;
@@ -255,6 +284,7 @@ impl DecoderBuilder {
             filter_graph,
             context: decode_ctx,
             state: DecoderState::Normal,
+            scale_algorithm: self.scale_algorithm,
         })
     }
 }
@@ -289,6 +319,7 @@ pub struct Decoder {
     stream_index: usize,
     media_type: MediaType,
     state: DecoderState,
+    scale_algorithm: ScaleAlgorithm,
 }
 
 impl Decoder {
@@ -404,7 +435,7 @@ impl Decoder {
     ///
     /// ```ignore
     /// loop {
-    ///     let (ts, frame) = decoder.decode()?;
+    ///     let (ts, frame) = decoder.decode::<u8>()?;
     ///     // Do something with frame...
     /// }
     /// ```
@@ -461,6 +492,18 @@ impl Decoder {
                 }
             }
         })
+    }
+
+    /// Decode a single frame as a `MediaFrame<u8>` (video) or `MediaFrame<f32>` (audio).
+    ///
+    /// Convenience for `decode::<u8>()` which is the common video path.
+    ///
+    /// # Return value
+    ///
+    /// The decoded frame, or [`None`] at end of stream.
+    #[cfg(feature = "ndarray")]
+    pub fn decode_frame(&mut self, reader: &mut impl Reader) -> Result<Option<MediaFrame<u8>>> {
+        self.decode::<u8>(reader)
     }
 
     /// Decode a single frame and return the raw ffmpeg `AvFrame`.
@@ -661,15 +704,19 @@ impl Decoder {
         // 例如：
         // 无硬件加速，默认解码格式 YUV420P
         // 存在硬件加速帧，则转换 NV12 -> YUV420P
+        // 注意：这里无论是否有 Filter，都会统一转成 YUV420P（因为
+        // `MediaFrame` 视频目前主要支持 YUV420P/RGB24）。因此即使源是
+        // yuv444p / nv12 / 10-bit，解码输出也会被转成 YUV420P，不会颜色错乱。
         let raw_frame = match self.media_type {
             MediaType::VIDEO => {
                 let target_sw_pix_fmt = PixelFormat::YUV420P;
                 if sw_frame.format != target_sw_pix_fmt.into() {
-                    swctx::scale(
+                    swctx::scale_with_flags(
                         &sw_frame,
                         sw_frame.width,
                         sw_frame.height,
                         target_sw_pix_fmt,
+                        self.scale_algorithm,
                     )?
                 } else {
                     sw_frame
@@ -830,6 +877,12 @@ impl<R: Reader> DecoderWrapper<R> {
         self.decoder.decode(&mut self.reader)
     }
 
+    /// 解码下一帧（`MediaFrame<u8>` 便捷方法，等价于 `decode::<u8>()`）
+    #[cfg(feature = "ndarray")]
+    pub fn decode_frame(&mut self) -> Result<Option<MediaFrame<u8>>> {
+        self.decoder.decode(&mut self.reader)
+    }
+
     /// 解码下一帧（原始帧）
     pub fn decode_raw(&mut self) -> Result<Option<AVFrame>> {
         self.decoder.decode_raw(&mut self.reader)
@@ -913,15 +966,15 @@ mod tests {
     #[test]
     #[ignore = "need a video file"]
     fn test_decode_video() -> Result<()> {
-        let video_path = std::path::Path::new("/tmp/bear.mp4");
+        let video_path = std::path::Path::new("/tmp/test.mp4");
 
         let filters = vec![
             filter::video::scale(1280, 720, None),
-            filter::video::drawtext("Hello", 10, 10, "", 24, "white"),
+            filter::video::DrawText::new("Hello", 10, 10, 24, "white").build(),
         ];
 
         let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
-            .with_filters(Some(filters))
+            .with_filters(filters)
             .build_wrapped(video_path)?;
 
         loop {
@@ -946,7 +999,7 @@ mod tests {
     #[test]
     #[ignore = "need a audio file"]
     fn test_decode_audio() -> Result<()> {
-        let audio_path = std::path::Path::new("/tmp/bear.mp4");
+        let audio_path = std::path::Path::new("/tmp/test.mp4");
 
         let filters = vec![
             filter::audio::resample(2, 48000, SampleFormat::FLTP),
@@ -954,7 +1007,7 @@ mod tests {
         ];
 
         let mut decoder = DecoderBuilder::new(MediaType::AUDIO)
-            .with_filters(Some(filters))
+            .with_filters(filters)
             .build_wrapped(audio_path)?;
 
         loop {

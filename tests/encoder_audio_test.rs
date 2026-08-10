@@ -37,7 +37,7 @@ mod tests {
     /// 获取特定音频格式的详细参数
     fn get_format_parameters(container_type: &str, requested_channels: usize) -> AudioFormatParams {
         // 限制在1-8通道范围内
-        let channels = requested_channels.max(1).min(8);
+        let channels = requested_channels.clamp(1, 8);
 
         // 1、通过 container_type 获取特定的编码器和默认比特率
         let (encoder_name, default_bitrate, codec_options, format_options) =
@@ -138,7 +138,7 @@ mod tests {
 
         // 2、通过编码器获取支持的参数
         let codec = AVCodec::find_encoder_by_name(&utils::from_str(encoder_name))
-            .expect(&format!("Failed to find encoder: {}", encoder_name));
+            .unwrap_or_else(|| panic!("Failed to find encoder: {}", encoder_name));
 
         // 获取视频相关参数
         let supported_frame_rates = codec.supported_framerates().map(|rates| rates.to_vec());
@@ -263,16 +263,14 @@ mod tests {
         if is_planar {
             // 平面格式处理
             let mut planar = Vec::with_capacity(channels * total_samples);
-            for ch in 0..channels {
-                planar.extend(convert_samples::<T>(&buffers[ch], sample_format));
+            for buf in &buffers {
+                planar.extend(convert_samples::<T>(buf, sample_format));
             }
             planar
         } else {
             let mut interleaved = Vec::with_capacity(total_samples * channels);
-            for i in 0..total_samples {
-                for ch in 0..channels {
-                    interleaved.push(buffers[ch][i]);
-                }
+            for samples in (0..total_samples).flat_map(|i| buffers.iter().map(move |b| b[i])) {
+                interleaved.push(samples);
             }
             convert_samples::<T>(&interleaved, sample_format)
         }
@@ -491,19 +489,19 @@ mod tests {
         );
 
         let audio_filters = vec![
-            filter::audio::volume(1.2),                              // 音量提升
-            filter::audio::three_band_equalizer(3.0, 0.0, -2.0),     // 低音增强
-            filter::audio::compressor(3.0, Some(30.0), Some(200.0)), // 压缩器
-            filter::audio::highpass(80),                             // 切除80Hz以下低频噪声
-            filter::audio::atempo(1.25),                             // 加速25%
+            filter::audio::volume(1.2),                               // 音量提升
+            filter::audio::three_band_equalizer(3.0, 0.0, -2.0),      // 低音增强
+            filter::audio::compressor(3.0, Some(30.0), Some(200.0))?, // 压缩器
+            filter::audio::highpass(80),                              // 切除80Hz以下低频噪声
+            filter::audio::atempo(1.25),                              // 加速25%
         ];
 
         // 创建适合当前格式的编码器
         let mut encoder =
             EncoderBuilder::new_audio(bitrate, channels as i32, sample_rate, sample_format)
-                .with_codec_name(Some(audio_params.codec_name))
+                .with_codec_name(audio_params.codec_name)
                 .with_options(audio_params.codec_options.map(|opts| opts.into()))
-                .with_filters(Some(audio_filters))
+                .with_filters(audio_filters)
                 .build_wrapped(output_path)?;
         // 音频生成参数
         let duration_secs = 1.0; // 总时长5秒

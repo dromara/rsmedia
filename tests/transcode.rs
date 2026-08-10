@@ -39,7 +39,7 @@ fn open_input_file(filename: &CStr) -> Result<(Vec<Option<AVCodecContext>>, AVFo
     let mut ifmt_ctx = AVFormatContextInput::open(filename)?;
     let mut stream_ctx = Vec::with_capacity(ifmt_ctx.nb_streams as usize);
 
-    for (i, input_stream) in ifmt_ctx.streams().into_iter().enumerate() {
+    for (i, input_stream) in ifmt_ctx.streams().iter().enumerate() {
         let codecpar = input_stream.codecpar();
         let codec_type = codecpar.codec_type();
         let dec_ctx = if codec_type.is_video() || codec_type.is_audio() {
@@ -105,7 +105,7 @@ fn open_output_file(
                 dec_ctx
                     .get_supported_pix_fmts(None)
                     .ok()
-                    .and_then(|x| x.get(0).copied())
+                    .and_then(|x| x.first().copied())
                     .unwrap_or(dec_ctx.pix_fmt),
             );
             enc_ctx.set_time_base(av_inv_q(dec_ctx.framerate));
@@ -119,7 +119,7 @@ fn open_output_file(
                 dec_ctx
                     .get_supported_sample_fmts(None)
                     .ok()
-                    .and_then(|x| x.get(0).copied())
+                    .and_then(|x| x.first().copied())
                     .unwrap_or(dec_ctx.sample_fmt),
             );
             enc_ctx.set_time_base(ra(1, dec_ctx.sample_rate));
@@ -290,8 +290,7 @@ fn init_filters(
 ) -> Result<Vec<Option<FilteringContext<'_>>>> {
     let mut filter_ctx = Vec::with_capacity(stream_contexts.len());
 
-    for (filter_graph, stream_context) in filter_graphs.iter_mut().zip(stream_contexts.into_iter())
-    {
+    for (filter_graph, stream_context) in filter_graphs.iter_mut().zip(stream_contexts) {
         let Some(stream_context) = stream_context else {
             filter_ctx.push(None);
             continue;
@@ -466,29 +465,24 @@ pub fn transcode(
 
     // Flush the filter graph by pushing EOF packet to buffer_src_context.
     // Flush the encoder by pushing EOF frame to encode_context.
-    for filter_ctx in filter_ctx.iter_mut() {
-        match filter_ctx {
-            Some(FilteringContext {
-                dec_ctx: _,
-                enc_ctx,
-                stream_index,
-                buffersrc_ctx,
-                buffersink_ctx,
-            }) => {
-                filter_encode_write_frame(
-                    None,
-                    buffersrc_ctx,
-                    buffersink_ctx,
-                    enc_ctx,
-                    &mut ofmt_ctx,
-                    *stream_index,
-                )
-                .context("Flushing filter failed")?;
-                flush_encoder(enc_ctx, &mut ofmt_ctx, *stream_index)
-                    .context("Flushing encoder failed")?;
-            }
-            None => (),
-        }
+    for FilteringContext {
+        dec_ctx: _,
+        enc_ctx,
+        stream_index,
+        buffersrc_ctx,
+        buffersink_ctx,
+    } in filter_ctx.iter_mut().flatten()
+    {
+        filter_encode_write_frame(
+            None,
+            buffersrc_ctx,
+            buffersink_ctx,
+            enc_ctx,
+            &mut ofmt_ctx,
+            *stream_index,
+        )
+        .context("Flushing filter failed")?;
+        flush_encoder(enc_ctx, &mut ofmt_ctx, *stream_index).context("Flushing encoder failed")?;
     }
     ofmt_ctx.write_trailer()?;
     Ok(())

@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use tokio::task;
 
-const OUTPUT_DIR: &'static str = "output";
+const OUTPUT_DIR: &str = "output";
 static FRAME_COUNT: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 static SAVE_TASKS: Lazy<Mutex<Vec<task::JoinHandle<()>>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
 
     rsmedia::init().unwrap();
 
-    let source = std::path::Path::new("/tmp/bear.mp4");
+    let source = std::path::Path::new("/tmp/test.mp4");
 
     // 640x360 mp4
     // let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
@@ -41,8 +41,8 @@ async fn main() -> Result<()> {
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
         // decoder with CUDA acceleration
         // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
-        // .with_codec_name(Some("h264_cuvid".to_string()))
-        .with_filters(Some(filters))
+        // .with_codec_name("h264_cuvid".to_string())
+        .with_filters(filters)
         .build_wrapped(source)
         .context("failed to create decoder")?;
 
@@ -52,11 +52,16 @@ async fn main() -> Result<()> {
     decoder.seek_to_frame(20).unwrap();
 
     loop {
-        match decoder.decode::<u8>() {
+        match decoder.decode_frame() {
             Ok(Some(yuv_frame)) => {
                 println!(
                     "decoded frame pts: {}, type: {:?}, format:{:?}",
-                    yuv_frame.pts, yuv_frame.media_type, yuv_frame.format
+                    yuv_frame.pts,
+                    yuv_frame.media_type,
+                    yuv_frame
+                        .video_format()
+                        .map(|f| f.get_pix_fmt_name())
+                        .unwrap_or_else(|| "n/a".to_string())
                 );
 
                 process_frame(yuv_frame)?;

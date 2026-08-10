@@ -580,6 +580,11 @@ pub const __MAC_15_5: u32 = 150500;
 pub const __MAC_15_6: u32 = 150600;
 pub const __MAC_16_0: u32 = 160000;
 pub const __MAC_26_0: u32 = 260000;
+pub const __MAC_26_1: u32 = 260100;
+pub const __MAC_26_2: u32 = 260200;
+pub const __MAC_26_3: u32 = 260300;
+pub const __MAC_26_4: u32 = 260400;
+pub const __MAC_26_5: u32 = 260500;
 pub const __IPHONE_2_0: u32 = 20000;
 pub const __IPHONE_2_1: u32 = 20100;
 pub const __IPHONE_2_2: u32 = 20200;
@@ -669,6 +674,11 @@ pub const __IPHONE_18_5: u32 = 180500;
 pub const __IPHONE_18_6: u32 = 180600;
 pub const __IPHONE_19_0: u32 = 190000;
 pub const __IPHONE_26_0: u32 = 260000;
+pub const __IPHONE_26_1: u32 = 260100;
+pub const __IPHONE_26_2: u32 = 260200;
+pub const __IPHONE_26_3: u32 = 260300;
+pub const __IPHONE_26_4: u32 = 260400;
+pub const __IPHONE_26_5: u32 = 260500;
 pub const __WATCHOS_1_0: u32 = 10000;
 pub const __WATCHOS_2_0: u32 = 20000;
 pub const __WATCHOS_2_1: u32 = 20100;
@@ -727,6 +737,11 @@ pub const __WATCHOS_11_5: u32 = 110500;
 pub const __WATCHOS_11_6: u32 = 110600;
 pub const __WATCHOS_12_0: u32 = 120000;
 pub const __WATCHOS_26_0: u32 = 260000;
+pub const __WATCHOS_26_1: u32 = 260100;
+pub const __WATCHOS_26_2: u32 = 260200;
+pub const __WATCHOS_26_3: u32 = 260300;
+pub const __WATCHOS_26_4: u32 = 260400;
+pub const __WATCHOS_26_5: u32 = 260500;
 pub const __TVOS_9_0: u32 = 90000;
 pub const __TVOS_9_1: u32 = 90100;
 pub const __TVOS_9_2: u32 = 90200;
@@ -785,6 +800,11 @@ pub const __TVOS_18_5: u32 = 180500;
 pub const __TVOS_18_6: u32 = 180600;
 pub const __TVOS_19_0: u32 = 190000;
 pub const __TVOS_26_0: u32 = 260000;
+pub const __TVOS_26_1: u32 = 260100;
+pub const __TVOS_26_2: u32 = 260200;
+pub const __TVOS_26_3: u32 = 260300;
+pub const __TVOS_26_4: u32 = 260400;
+pub const __TVOS_26_5: u32 = 260500;
 pub const __BRIDGEOS_2_0: u32 = 20000;
 pub const __BRIDGEOS_3_0: u32 = 30000;
 pub const __BRIDGEOS_3_1: u32 = 30100;
@@ -820,6 +840,11 @@ pub const __BRIDGEOS_9_4: u32 = 90400;
 pub const __BRIDGEOS_9_5: u32 = 90500;
 pub const __BRIDGEOS_9_6: u32 = 90600;
 pub const __BRIDGEOS_10_0: u32 = 100000;
+pub const __BRIDGEOS_10_1: u32 = 100100;
+pub const __BRIDGEOS_10_2: u32 = 100200;
+pub const __BRIDGEOS_10_3: u32 = 100300;
+pub const __BRIDGEOS_10_4: u32 = 100400;
+pub const __BRIDGEOS_26_5: u32 = 260500;
 pub const __DRIVERKIT_19_0: u32 = 190000;
 pub const __DRIVERKIT_20_0: u32 = 200000;
 pub const __DRIVERKIT_21_0: u32 = 210000;
@@ -842,6 +867,11 @@ pub const __DRIVERKIT_24_4: u32 = 240400;
 pub const __DRIVERKIT_24_5: u32 = 240500;
 pub const __DRIVERKIT_24_6: u32 = 240600;
 pub const __DRIVERKIT_25_0: u32 = 250000;
+pub const __DRIVERKIT_25_1: u32 = 250100;
+pub const __DRIVERKIT_25_2: u32 = 250200;
+pub const __DRIVERKIT_25_3: u32 = 250300;
+pub const __DRIVERKIT_25_4: u32 = 250400;
+pub const __DRIVERKIT_25_5: u32 = 250500;
 pub const __VISIONOS_1_0: u32 = 10000;
 pub const __VISIONOS_1_1: u32 = 10100;
 pub const __VISIONOS_1_2: u32 = 10200;
@@ -855,6 +885,11 @@ pub const __VISIONOS_2_5: u32 = 20500;
 pub const __VISIONOS_2_6: u32 = 20600;
 pub const __VISIONOS_3_0: u32 = 30000;
 pub const __VISIONOS_26_0: u32 = 260000;
+pub const __VISIONOS_26_1: u32 = 260100;
+pub const __VISIONOS_26_2: u32 = 260200;
+pub const __VISIONOS_26_3: u32 = 260300;
+pub const __VISIONOS_26_4: u32 = 260400;
+pub const __VISIONOS_26_5: u32 = 260500;
 pub const MAC_OS_X_VERSION_10_0: u32 = 1000;
 pub const MAC_OS_X_VERSION_10_1: u32 = 1010;
 pub const MAC_OS_X_VERSION_10_2: u32 = 1020;
@@ -928,10 +963,15 @@ pub const MAC_OS_VERSION_15_5: u32 = 150500;
 pub const MAC_OS_VERSION_15_6: u32 = 150600;
 pub const MAC_OS_VERSION_16_0: u32 = 160000;
 pub const MAC_OS_VERSION_26_0: u32 = 260000;
+pub const MAC_OS_VERSION_26_1: u32 = 260100;
+pub const MAC_OS_VERSION_26_2: u32 = 260200;
+pub const MAC_OS_VERSION_26_3: u32 = 260300;
+pub const MAC_OS_VERSION_26_4: u32 = 260400;
+pub const MAC_OS_VERSION_26_5: u32 = 260500;
 pub const __AVAILABILITY_VERSIONS_VERSION_HASH: u32 = 93585900;
 pub const __AVAILABILITY_VERSIONS_VERSION_STRING: &[u8; 6] = b"Local\0";
 pub const __AVAILABILITY_FILE: &[u8; 23] = b"AvailabilityVersions.h\0";
-pub const __MAC_OS_X_VERSION_MAX_ALLOWED: u32 = 260000;
+pub const __MAC_OS_X_VERSION_MAX_ALLOWED: u32 = 260500;
 pub const __ENABLE_LEGACY_MAC_AVAILABILITY: u32 = 1;
 pub const __DARWIN_WCHAR_MIN: i32 = -2147483648;
 pub const _FORTIFY_SOURCE: u32 = 2;
@@ -1297,6 +1337,8 @@ pub const IOPOL_ATIME_UPDATES_OFF: u32 = 1;
 pub const IOPOL_MATERIALIZE_DATALESS_FILES_DEFAULT: u32 = 0;
 pub const IOPOL_MATERIALIZE_DATALESS_FILES_OFF: u32 = 1;
 pub const IOPOL_MATERIALIZE_DATALESS_FILES_ON: u32 = 2;
+pub const IOPOL_MATERIALIZE_DATALESS_FILES_ORIG: u32 = 4;
+pub const IOPOL_MATERIALIZE_DATALESS_FILES_BASIC_MASK: u32 = 3;
 pub const IOPOL_VFS_STATFS_NO_DATA_VOLUME_DEFAULT: u32 = 0;
 pub const IOPOL_VFS_STATFS_FORCE_NO_DATA_VOLUME: u32 = 1;
 pub const IOPOL_VFS_TRIGGER_RESOLVE_DEFAULT: u32 = 0;
@@ -1347,7 +1389,7 @@ pub const AVERROR_INPUT_CHANGED: i32 = -1668179713;
 pub const AVERROR_OUTPUT_CHANGED: i32 = -1668179714;
 pub const AV_ERROR_MAX_STRING_SIZE: u32 = 64;
 pub const LIBAVUTIL_VERSION_MAJOR: u32 = 60;
-pub const LIBAVUTIL_VERSION_MINOR: u32 = 8;
+pub const LIBAVUTIL_VERSION_MINOR: u32 = 26;
 pub const LIBAVUTIL_VERSION_MICRO: u32 = 100;
 pub const M_Ef: f64 = 2.718281828459045;
 pub const M_LN2f: f64 = 0.6931471805599453;
@@ -1564,13 +1606,14 @@ pub const AV_PKT_FLAG_CORRUPT: u32 = 2;
 pub const AV_PKT_FLAG_DISCARD: u32 = 4;
 pub const AV_PKT_FLAG_TRUSTED: u32 = 8;
 pub const AV_PKT_FLAG_DISPOSABLE: u32 = 16;
-pub const LIBAVCODEC_VERSION_MINOR: u32 = 11;
+pub const LIBAVCODEC_VERSION_MINOR: u32 = 28;
 pub const LIBAVCODEC_VERSION_MICRO: u32 = 100;
 pub const AV_CODEC_PROP_INTRA_ONLY: u32 = 1;
 pub const AV_CODEC_PROP_LOSSY: u32 = 2;
 pub const AV_CODEC_PROP_LOSSLESS: u32 = 4;
 pub const AV_CODEC_PROP_REORDER: u32 = 8;
 pub const AV_CODEC_PROP_FIELDS: u32 = 16;
+pub const AV_CODEC_PROP_ENHANCEMENT: u32 = 32;
 pub const AV_CODEC_PROP_BITMAP_SUB: u32 = 65536;
 pub const AV_CODEC_PROP_TEXT_SUB: u32 = 131072;
 pub const AV_CODEC_FLAG_UNALIGNED: u32 = 1;
@@ -1610,6 +1653,7 @@ pub const AV_CODEC_EXPORT_DATA_FILM_GRAIN: u32 = 8;
 pub const AV_CODEC_EXPORT_DATA_ENHANCEMENTS: u32 = 16;
 pub const AV_GET_BUFFER_FLAG_REF: u32 = 1;
 pub const AV_GET_ENCODE_BUFFER_FLAG_REF: u32 = 1;
+pub const AV_CODEC_RECEIVE_FRAME_FLAG_SYNCHRONOUS: u32 = 1;
 pub const SLICE_FLAG_CODED_ORDER: u32 = 1;
 pub const SLICE_FLAG_ALLOW_FIELD: u32 = 2;
 pub const SLICE_FLAG_ALLOW_PLANE: u32 = 4;
@@ -1733,7 +1777,7 @@ pub const VORBIS_FLAG_HEADER: u32 = 1;
 pub const VORBIS_FLAG_COMMENT: u32 = 2;
 pub const VORBIS_FLAG_SETUP: u32 = 4;
 pub const LIBAVDEVICE_VERSION_MAJOR: u32 = 62;
-pub const LIBAVDEVICE_VERSION_MINOR: u32 = 1;
+pub const LIBAVDEVICE_VERSION_MINOR: u32 = 3;
 pub const LIBAVDEVICE_VERSION_MICRO: u32 = 100;
 pub const LIBAVFORMAT_VERSION_MAJOR: u32 = 62;
 pub const FF_API_R_FRAME_RATE: u32 = 1;
@@ -1746,7 +1790,7 @@ pub const AVIO_FLAG_WRITE: u32 = 2;
 pub const AVIO_FLAG_READ_WRITE: u32 = 3;
 pub const AVIO_FLAG_NONBLOCK: u32 = 8;
 pub const AVIO_FLAG_DIRECT: u32 = 32768;
-pub const LIBAVFORMAT_VERSION_MINOR: u32 = 3;
+pub const LIBAVFORMAT_VERSION_MINOR: u32 = 12;
 pub const LIBAVFORMAT_VERSION_MICRO: u32 = 100;
 pub const AVPROBE_SCORE_EXTENSION: u32 = 50;
 pub const AVPROBE_SCORE_MIME_BONUS: u32 = 30;
@@ -1825,8 +1869,9 @@ pub const AVSEEK_FLAG_FRAME: u32 = 8;
 pub const AVSTREAM_INIT_IN_WRITE_HEADER: u32 = 0;
 pub const AVSTREAM_INIT_IN_INIT_OUTPUT: u32 = 1;
 pub const AV_FRAME_FILENAME_FLAGS_MULTIPLE: u32 = 1;
+pub const AV_FRAME_FILENAME_FLAGS_IGNORE_TRUNCATION: u32 = 2;
 pub const LIBAVFILTER_VERSION_MAJOR: u32 = 11;
-pub const LIBAVFILTER_VERSION_MINOR: u32 = 4;
+pub const LIBAVFILTER_VERSION_MINOR: u32 = 14;
 pub const LIBAVFILTER_VERSION_MICRO: u32 = 100;
 pub const AVFILTER_FLAG_DYNAMIC_INPUTS: u32 = 1;
 pub const AVFILTER_FLAG_DYNAMIC_OUTPUTS: u32 = 2;
@@ -1872,6 +1917,7 @@ pub const AV_CPU_FLAG_ATOM: u32 = 268435456;
 pub const AV_CPU_FLAG_SSE4: u32 = 256;
 pub const AV_CPU_FLAG_SSE42: u32 = 512;
 pub const AV_CPU_FLAG_AESNI: u32 = 524288;
+pub const AV_CPU_FLAG_CLMUL: u32 = 4194304;
 pub const AV_CPU_FLAG_AVX: u32 = 16384;
 pub const AV_CPU_FLAG_AVXSLOW: u32 = 134217728;
 pub const AV_CPU_FLAG_XOP: u32 = 1024;
@@ -1899,6 +1945,10 @@ pub const AV_CPU_FLAG_DOTPROD: u32 = 256;
 pub const AV_CPU_FLAG_I8MM: u32 = 512;
 pub const AV_CPU_FLAG_SVE: u32 = 1024;
 pub const AV_CPU_FLAG_SVE2: u32 = 2048;
+pub const AV_CPU_FLAG_SME: u32 = 4096;
+pub const AV_CPU_FLAG_ARM_CRC: u32 = 8192;
+pub const AV_CPU_FLAG_SME2: u32 = 16384;
+pub const AV_CPU_FLAG_SME_I16I64: u32 = 32768;
 pub const AV_CPU_FLAG_SETEND: u32 = 65536;
 pub const AV_CPU_FLAG_MMI: u32 = 1;
 pub const AV_CPU_FLAG_MSA: u32 = 2;
@@ -1921,7 +1971,7 @@ pub const AV_DETECTION_BBOX_LABEL_NAME_MAX_SIZE: u32 = 64;
 pub const AV_NUM_DETECTION_BBOX_CLASSIFY: u32 = 4;
 pub const AV_DOVI_MAX_PIECES: u32 = 8;
 pub const AV_DOVI_MAX_EXT_BLOCKS: u32 = 32;
-pub const FFMPEG_VERSION: &[u8; 4] = b"8.0\0";
+pub const FFMPEG_VERSION: &[u8; 4] = b"8.1\0";
 pub const AV_FIFO_FLAG_AUTO_GROW: u32 = 1;
 pub const AV_HASH_MAX_SIZE: u32 = 64;
 pub const AV_HDR_PLUS_MAX_PAYLOAD_SIZE: u32 = 907;
@@ -1957,11 +2007,11 @@ pub const AV_PRI_UUID : & [u8 ; 101] = b"%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%
 pub const AV_PRI_URN_UUID : & [u8 ; 110] = b"urn:uuid:%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx\0" ;
 pub const AV_UUID_LEN: u32 = 16;
 pub const LIBSWRESAMPLE_VERSION_MAJOR: u32 = 6;
-pub const LIBSWRESAMPLE_VERSION_MINOR: u32 = 1;
+pub const LIBSWRESAMPLE_VERSION_MINOR: u32 = 3;
 pub const LIBSWRESAMPLE_VERSION_MICRO: u32 = 100;
 pub const SWR_FLAG_RESAMPLE: u32 = 1;
 pub const LIBSWSCALE_VERSION_MAJOR: u32 = 9;
-pub const LIBSWSCALE_VERSION_MINOR: u32 = 1;
+pub const LIBSWSCALE_VERSION_MINOR: u32 = 5;
 pub const LIBSWSCALE_VERSION_MICRO: u32 = 100;
 pub const SWS_SRC_V_CHR_DROP_MASK: u32 = 196608;
 pub const SWS_SRC_V_CHR_DROP_SHIFT: u32 = 16;
@@ -9642,6 +9692,10 @@ pub const AVCOL_PRI_EBU3213: AVColorPrimaries = 22;
 pub const AVCOL_PRI_JEDEC_P22: AVColorPrimaries = 22;
 #[doc = "< Not part of ABI"]
 pub const AVCOL_PRI_NB: AVColorPrimaries = 23;
+pub const AVCOL_PRI_EXT_BASE: AVColorPrimaries = 256;
+pub const AVCOL_PRI_V_GAMUT: AVColorPrimaries = 256;
+#[doc = "< Not part of ABI"]
+pub const AVCOL_PRI_EXT_NB: AVColorPrimaries = 257;
 #[doc = " Chromaticity coordinates of the source primaries.\n These values match the ones defined by ISO/IEC 23091-2_2019 subclause 8.1 and ITU-T H.273."]
 pub type AVColorPrimaries = ::std::os::raw::c_uint;
 pub const AVCOL_TRC_RESERVED0: AVColorTransferCharacteristic = 0;
@@ -9682,6 +9736,10 @@ pub const AVCOL_TRC_SMPTEST428_1: AVColorTransferCharacteristic = 17;
 pub const AVCOL_TRC_ARIB_STD_B67: AVColorTransferCharacteristic = 18;
 #[doc = "< Not part of ABI"]
 pub const AVCOL_TRC_NB: AVColorTransferCharacteristic = 19;
+pub const AVCOL_TRC_EXT_BASE: AVColorTransferCharacteristic = 256;
+pub const AVCOL_TRC_V_LOG: AVColorTransferCharacteristic = 256;
+#[doc = "< Not part of ABI"]
+pub const AVCOL_TRC_EXT_NB: AVColorTransferCharacteristic = 257;
 #[doc = " Color Transfer Characteristic.\n These values match the ones defined by ISO/IEC 23091-2_2019 subclause 8.2."]
 pub type AVColorTransferCharacteristic = ::std::os::raw::c_uint;
 #[doc = "< order of coefficients is actually GBR, also IEC 61966-2-1 (sRGB), YZX and ST 428-1"]
@@ -9747,6 +9805,16 @@ pub const AVCHROMA_LOC_BOTTOM: AVChromaLocation = 6;
 pub const AVCHROMA_LOC_NB: AVChromaLocation = 7;
 #[doc = " Location of chroma samples.\n\n Illustration showing the location of the first (top left) chroma sample of the\n image, the left shows only luma, the right\n shows the location of the chroma sample, the 2 could be imagined to overlay\n each other but are drawn separately due to limitations of ASCII\n\n                1st 2nd       1st 2nd horizontal luma sample positions\n                 v   v         v   v\n                 ______        ______\n1st luma line > |X   X ...    |3 4 X ...     X are luma samples,\n                |             |1 2           1-6 are possible chroma positions\n2nd luma line > |X   X ...    |5 6 X ...     0 is undefined/unknown position"]
 pub type AVChromaLocation = ::std::os::raw::c_uint;
+#[doc = "< Unknown alpha handling, or no alpha channel"]
+pub const AVALPHA_MODE_UNSPECIFIED: AVAlphaMode = 0;
+#[doc = "< Alpha channel is multiplied into color values"]
+pub const AVALPHA_MODE_PREMULTIPLIED: AVAlphaMode = 1;
+#[doc = "< Alpha channel is independent of color values"]
+pub const AVALPHA_MODE_STRAIGHT: AVAlphaMode = 2;
+#[doc = "< Not part of ABI"]
+pub const AVALPHA_MODE_NB: AVAlphaMode = 3;
+#[doc = " Correlation between the alpha channel and color values."]
+pub type AVAlphaMode = ::std::os::raw::c_uint;
 extern "C" {
     #[doc = " Compute the length of an integer list.\n\n @param elsize  size in bytes of each list element (only 1, 2, 4 or 8)\n @param term    list terminator (usually 0 or -1)\n @param list    pointer to the list\n @return  length of the list, in elements, not counting the terminator"]
     pub fn av_int_list_length_for_size(
@@ -10459,6 +10527,8 @@ pub const AV_FRAME_DATA_LCEVC: AVFrameSideDataType = 28;
 pub const AV_FRAME_DATA_VIEW_ID: AVFrameSideDataType = 29;
 #[doc = " This side data contains information about the reference display width(s)\n and reference viewing distance(s) as well as information about the\n corresponding reference stereo pair(s), i.e., the pair(s) of views to be\n displayed for the viewer's left and right eyes on the reference display\n at the reference viewing distance.\n The payload is the AV3DReferenceDisplaysInfo struct defined in\n libavutil/tdrdi.h."]
 pub const AV_FRAME_DATA_3D_REFERENCE_DISPLAYS: AVFrameSideDataType = 30;
+#[doc = " Extensible image file format metadata. The payload is a buffer containing\n EXIF metadata, starting with either 49 49 2a 00, or 4d 4d 00 2a."]
+pub const AV_FRAME_DATA_EXIF: AVFrameSideDataType = 31;
 #[doc = " @defgroup lavu_frame AVFrame\n @ingroup lavu_data\n\n @{\n AVFrame is an abstraction for reference-counted raw multimedia data."]
 pub type AVFrameSideDataType = ::std::os::raw::c_uint;
 pub const AV_AFD_SAME: AVActiveFormatDescription = 8;
@@ -10686,7 +10756,7 @@ pub struct AVFrame {
     pub hw_frames_ctx: *mut AVBufferRef,
     #[doc = " Frame owner's private data.\n\n This field may be set by the code that allocates/owns the frame data.\n It is then not touched by any library functions, except:\n - a new reference to the underlying buffer is propagated by\n   av_frame_copy_props() (and hence by av_frame_ref());\n - it is unreferenced in av_frame_unref();\n - on the caller's explicit request. E.g. libavcodec encoders/decoders\n   will propagate a new reference to/from @ref AVPacket \"AVPackets\" if the\n   caller sets @ref AV_CODEC_FLAG_COPY_OPAQUE.\n\n @see opaque the plain pointer analogue"]
     pub opaque_ref: *mut AVBufferRef,
-    #[doc = " @anchor cropping\n @name Cropping\n Video frames only. The number of pixels to discard from the the\n top/bottom/left/right border of the frame to obtain the sub-rectangle of\n the frame intended for presentation.\n @{"]
+    #[doc = " @anchor cropping\n @name Cropping\n Video frames only. The number of pixels to discard from the\n top/bottom/left/right border of the frame to obtain the sub-rectangle of\n the frame intended for presentation.\n @{"]
     pub crop_top: usize,
     pub crop_bottom: usize,
     pub crop_left: usize,
@@ -10697,6 +10767,8 @@ pub struct AVFrame {
     pub ch_layout: AVChannelLayout,
     #[doc = " Duration of the frame, in the same units as pts. 0 if unknown."]
     pub duration: i64,
+    #[doc = " Indicates how the alpha channel of the video is to be handled.\n - encoding: Set by user\n - decoding: Set by libavcodec"]
+    pub alpha_mode: AVAlphaMode,
 }
 #[test]
 fn bindgen_test_layout_AVFrame() {
@@ -10704,7 +10776,7 @@ fn bindgen_test_layout_AVFrame() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<AVFrame>(),
-        416usize,
+        424usize,
         "Size of AVFrame"
     );
     assert_eq!(
@@ -10907,10 +10979,15 @@ fn bindgen_test_layout_AVFrame() {
         408usize,
         "Offset of field: AVFrame::duration"
     );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).alpha_mode) as usize - ptr as usize },
+        416usize,
+        "Offset of field: AVFrame::alpha_mode"
+    );
 }
 impl ::std::fmt::Debug for AVFrame {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write ! (f , "AVFrame {{ data: {:?}, linesize: {:?}, extended_data: {:?}, width: {:?}, height: {:?}, nb_samples: {:?}, format: {:?}, pict_type: {:?}, sample_aspect_ratio: {:?}, pts: {:?}, pkt_dts: {:?}, time_base: {:?}, quality: {:?}, opaque: {:?}, repeat_pict: {:?}, sample_rate: {:?}, buf: {:?}, extended_buf: {:?}, nb_extended_buf: {:?}, side_data: {:?}, nb_side_data: {:?}, flags: {:?}, color_range: {:?}, color_primaries: {:?}, color_trc: {:?}, colorspace: {:?}, chroma_location: {:?}, best_effort_timestamp: {:?}, metadata: {:?}, decode_error_flags: {:?}, hw_frames_ctx: {:?}, opaque_ref: {:?}, crop_top: {:?}, crop_bottom: {:?}, crop_left: {:?}, crop_right: {:?}, private_ref: {:?}, ch_layout: {:?}, duration: {:?} }}" , self . data , self . linesize , self . extended_data , self . width , self . height , self . nb_samples , self . format , self . pict_type , self . sample_aspect_ratio , self . pts , self . pkt_dts , self . time_base , self . quality , self . opaque , self . repeat_pict , self . sample_rate , self . buf , self . extended_buf , self . nb_extended_buf , self . side_data , self . nb_side_data , self . flags , self . color_range , self . color_primaries , self . color_trc , self . colorspace , self . chroma_location , self . best_effort_timestamp , self . metadata , self . decode_error_flags , self . hw_frames_ctx , self . opaque_ref , self . crop_top , self . crop_bottom , self . crop_left , self . crop_right , self . private_ref , self . ch_layout , self . duration)
+        write ! (f , "AVFrame {{ data: {:?}, linesize: {:?}, extended_data: {:?}, width: {:?}, height: {:?}, nb_samples: {:?}, format: {:?}, pict_type: {:?}, sample_aspect_ratio: {:?}, pts: {:?}, pkt_dts: {:?}, time_base: {:?}, quality: {:?}, opaque: {:?}, repeat_pict: {:?}, sample_rate: {:?}, buf: {:?}, extended_buf: {:?}, nb_extended_buf: {:?}, side_data: {:?}, nb_side_data: {:?}, flags: {:?}, color_range: {:?}, color_primaries: {:?}, color_trc: {:?}, colorspace: {:?}, chroma_location: {:?}, best_effort_timestamp: {:?}, metadata: {:?}, decode_error_flags: {:?}, hw_frames_ctx: {:?}, opaque_ref: {:?}, crop_top: {:?}, crop_bottom: {:?}, crop_left: {:?}, crop_right: {:?}, private_ref: {:?}, ch_layout: {:?}, duration: {:?}, alpha_mode: {:?} }}" , self . data , self . linesize , self . extended_data , self . width , self . height , self . nb_samples , self . format , self . pict_type , self . sample_aspect_ratio , self . pts , self . pkt_dts , self . time_base , self . quality , self . opaque , self . repeat_pict , self . sample_rate , self . buf , self . extended_buf , self . nb_extended_buf , self . side_data , self . nb_side_data , self . flags , self . color_range , self . color_primaries , self . color_trc , self . colorspace , self . chroma_location , self . best_effort_timestamp , self . metadata , self . decode_error_flags , self . hw_frames_ctx , self . opaque_ref , self . crop_top , self . crop_bottom , self . crop_left , self . crop_right , self . private_ref , self . ch_layout , self . duration , self . alpha_mode)
     }
 }
 extern "C" {
@@ -10926,7 +11003,7 @@ extern "C" {
     pub fn av_frame_ref(dst: *mut AVFrame, src: *const AVFrame) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[doc = " Ensure the destination frame refers to the same data described by the source\n frame, either by creating a new reference for each AVBufferRef from src if\n they differ from those in dst, by allocating new buffers and copying data if\n src is not reference counted, or by unrefencing it if src is empty.\n\n Frame properties on dst will be replaced by those from src.\n\n @return 0 on success, a negative AVERROR on error. On error, dst is\n         unreferenced."]
+    #[doc = " Ensure the destination frame refers to the same data described by the source\n frame, either by creating a new reference for each AVBufferRef from src if\n they differ from those in dst, by allocating new buffers and copying data if\n src is not reference counted, or by unreferencing it if src is empty.\n\n Frame properties on dst will be replaced by those from src.\n\n @return 0 on success, a negative AVERROR on error. On error, dst is\n         unreferenced."]
     pub fn av_frame_replace(dst: *mut AVFrame, src: *const AVFrame) -> ::std::os::raw::c_int;
 }
 extern "C" {
@@ -11719,6 +11796,7 @@ pub const AV_CODEC_ID_RV60: AVCodecID = 271;
 pub const AV_CODEC_ID_JPEGXL_ANIM: AVCodecID = 272;
 pub const AV_CODEC_ID_APV: AVCodecID = 273;
 pub const AV_CODEC_ID_PRORES_RAW: AVCodecID = 274;
+pub const AV_CODEC_ID_JPEGXS: AVCodecID = 275;
 #[doc = "< A dummy id pointing at the start of audio codecs"]
 pub const AV_CODEC_ID_FIRST_AUDIO: AVCodecID = 65536;
 pub const AV_CODEC_ID_PCM_S16LE: AVCodecID = 65536;
@@ -11812,6 +11890,14 @@ pub const AV_CODEC_ID_ADPCM_IMA_ACORN: AVCodecID = 69682;
 pub const AV_CODEC_ID_ADPCM_XMD: AVCodecID = 69683;
 pub const AV_CODEC_ID_ADPCM_IMA_XBOX: AVCodecID = 69684;
 pub const AV_CODEC_ID_ADPCM_SANYO: AVCodecID = 69685;
+pub const AV_CODEC_ID_ADPCM_IMA_HVQM4: AVCodecID = 69686;
+pub const AV_CODEC_ID_ADPCM_IMA_PDA: AVCodecID = 69687;
+pub const AV_CODEC_ID_ADPCM_N64: AVCodecID = 69688;
+pub const AV_CODEC_ID_ADPCM_IMA_HVQM2: AVCodecID = 69689;
+pub const AV_CODEC_ID_ADPCM_IMA_MAGIX: AVCodecID = 69690;
+pub const AV_CODEC_ID_ADPCM_PSXC: AVCodecID = 69691;
+pub const AV_CODEC_ID_ADPCM_CIRCUS: AVCodecID = 69692;
+pub const AV_CODEC_ID_ADPCM_IMA_ESCAPE: AVCodecID = 69693;
 pub const AV_CODEC_ID_AMR_NB: AVCodecID = 73728;
 pub const AV_CODEC_ID_AMR_WB: AVCodecID = 73729;
 pub const AV_CODEC_ID_RA_144: AVCodecID = 77824;
@@ -11935,6 +12021,7 @@ pub const AV_CODEC_ID_OSQ: AVCodecID = 86120;
 pub const AV_CODEC_ID_QOA: AVCodecID = 86121;
 pub const AV_CODEC_ID_LC3: AVCodecID = 86122;
 pub const AV_CODEC_ID_G728: AVCodecID = 86123;
+pub const AV_CODEC_ID_AHX: AVCodecID = 86124;
 #[doc = "< A dummy ID pointing at the start of subtitle codecs."]
 pub const AV_CODEC_ID_FIRST_SUBTITLE: AVCodecID = 94208;
 pub const AV_CODEC_ID_DVD_SUBTITLE: AVCodecID = 94208;
@@ -12582,8 +12669,10 @@ pub const AV_PKT_DATA_LCEVC: AVPacketSideDataType = 37;
 pub const AV_PKT_DATA_3D_REFERENCE_DISPLAYS: AVPacketSideDataType = 38;
 #[doc = " Contains the last received RTCP SR (Sender Report) information\n in the form of the AVRTCPSenderReport struct."]
 pub const AV_PKT_DATA_RTCP_SR: AVPacketSideDataType = 39;
+#[doc = " Extensible image file format metadata. The payload is a buffer containing\n EXIF metadata, starting with either 49 49 2a 00, or 4d 4d 00 2a."]
+pub const AV_PKT_DATA_EXIF: AVPacketSideDataType = 40;
 #[doc = " The number of side data types.\n This is not part of the public API/ABI in the sense that it may\n change when new side data types are added.\n This must stay the last enum value.\n If its value becomes huge, some code using it\n needs to be updated as it assumes it to be smaller than other limits."]
-pub const AV_PKT_DATA_NB: AVPacketSideDataType = 40;
+pub const AV_PKT_DATA_NB: AVPacketSideDataType = 41;
 #[doc = " @defgroup lavc_packet_side_data AVPacketSideData\n\n Types and functions for working with AVPacketSideData.\n @{"]
 pub type AVPacketSideDataType = ::std::os::raw::c_uint;
 #[doc = " This structure stores auxiliary information for decoding, presenting, or\n otherwise processing the coded stream. It is typically exported by demuxers\n and encoders and can be fed to decoders and muxers either in a per packet\n basis, or as global side data (applying to the entire coded stream).\n\n Global side data is handled as follows:\n - During demuxing, it may be exported through\n   @ref AVCodecParameters.coded_side_data \"AVStream's codec parameters\", which can\n   then be passed as input to decoders through the\n   @ref AVCodecContext.coded_side_data \"decoder context's side data\", for\n   initialization.\n - For muxing, it can be fed through @ref AVCodecParameters.coded_side_data\n   \"AVStream's codec parameters\", typically  the output of encoders through\n   the @ref AVCodecContext.coded_side_data \"encoder context's side data\", for\n   initialization.\n\n Packet specific side data is handled as follows:\n - During demuxing, it may be exported through @ref AVPacket.side_data\n   \"AVPacket's side data\", which can then be passed as input to decoders.\n - For muxing, it can be fed through @ref AVPacket.side_data \"AVPacket's\n   side data\", typically the output of encoders.\n\n Different modules may accept or export different types of side data\n depending on media type and codec. Refer to @ref AVPacketSideDataType for a\n list of defined types and where they may be found or used."]
@@ -12667,6 +12756,24 @@ extern "C" {
         sd: *mut *mut AVPacketSideData,
         nb_sd: *mut ::std::os::raw::c_int,
     );
+}
+extern "C" {
+    #[doc = " Add a new packet side data entry to an array based on existing frame\n side data, if a matching type exists for packet side data.\n\n @param flags              Currently unused. Must be 0.\n @retval >= 0              Success\n @retval AVERROR(EINVAL)   The frame side data type does not have a matching\n                           packet side data type.\n @retval AVERROR(ENOMEM)   Failed to add a side data entry to the array, or\n                           similar."]
+    pub fn av_packet_side_data_from_frame(
+        sd: *mut *mut AVPacketSideData,
+        nb_sd: *mut ::std::os::raw::c_int,
+        src: *const AVFrameSideData,
+        flags: ::std::os::raw::c_uint,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    #[doc = " Add a new frame side data entry to an array based on existing packet\n side data, if a matching type exists for frame side data.\n\n @param flags              Some combination of AV_FRAME_SIDE_DATA_FLAG_* flags,\n                           or 0.\n @retval >= 0              Success\n @retval AVERROR(EINVAL)   The packet side data type does not have a matching\n                           frame side data type.\n @retval AVERROR(ENOMEM)   Failed to add a side data entry to the array, or\n                           similar."]
+    pub fn av_packet_side_data_to_frame(
+        sd: *mut *mut *mut AVFrameSideData,
+        nb_sd: *mut ::std::os::raw::c_int,
+        src: *const AVPacketSideData,
+        flags: ::std::os::raw::c_uint,
+    ) -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn av_packet_side_data_name(type_: AVPacketSideDataType) -> *const ::std::os::raw::c_char;
@@ -13085,6 +13192,8 @@ pub struct AVCodecParameters {
     pub trailing_padding: ::std::os::raw::c_int,
     #[doc = " Audio only. Number of samples to skip after a discontinuity."]
     pub seek_preroll: ::std::os::raw::c_int,
+    #[doc = " Video with alpha channel only. Alpha channel handling"]
+    pub alpha_mode: AVAlphaMode,
 }
 #[test]
 fn bindgen_test_layout_AVCodecParameters() {
@@ -13092,7 +13201,7 @@ fn bindgen_test_layout_AVCodecParameters() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<AVCodecParameters>(),
-        176usize,
+        184usize,
         "Size of AVCodecParameters"
     );
     assert_eq!(
@@ -13255,10 +13364,15 @@ fn bindgen_test_layout_AVCodecParameters() {
         172usize,
         "Offset of field: AVCodecParameters::seek_preroll"
     );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).alpha_mode) as usize - ptr as usize },
+        176usize,
+        "Offset of field: AVCodecParameters::alpha_mode"
+    );
 }
 impl ::std::fmt::Debug for AVCodecParameters {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write ! (f , "AVCodecParameters {{ codec_type: {:?}, codec_id: {:?}, codec_tag: {:?}, extradata: {:?}, extradata_size: {:?}, coded_side_data: {:?}, nb_coded_side_data: {:?}, format: {:?}, bit_rate: {:?}, bits_per_coded_sample: {:?}, bits_per_raw_sample: {:?}, profile: {:?}, level: {:?}, width: {:?}, height: {:?}, sample_aspect_ratio: {:?}, framerate: {:?}, field_order: {:?}, color_range: {:?}, color_primaries: {:?}, color_trc: {:?}, color_space: {:?}, chroma_location: {:?}, video_delay: {:?}, ch_layout: {:?}, sample_rate: {:?}, block_align: {:?}, frame_size: {:?}, initial_padding: {:?}, trailing_padding: {:?}, seek_preroll: {:?} }}" , self . codec_type , self . codec_id , self . codec_tag , self . extradata , self . extradata_size , self . coded_side_data , self . nb_coded_side_data , self . format , self . bit_rate , self . bits_per_coded_sample , self . bits_per_raw_sample , self . profile , self . level , self . width , self . height , self . sample_aspect_ratio , self . framerate , self . field_order , self . color_range , self . color_primaries , self . color_trc , self . color_space , self . chroma_location , self . video_delay , self . ch_layout , self . sample_rate , self . block_align , self . frame_size , self . initial_padding , self . trailing_padding , self . seek_preroll)
+        write ! (f , "AVCodecParameters {{ codec_type: {:?}, codec_id: {:?}, codec_tag: {:?}, extradata: {:?}, extradata_size: {:?}, coded_side_data: {:?}, nb_coded_side_data: {:?}, format: {:?}, bit_rate: {:?}, bits_per_coded_sample: {:?}, bits_per_raw_sample: {:?}, profile: {:?}, level: {:?}, width: {:?}, height: {:?}, sample_aspect_ratio: {:?}, framerate: {:?}, field_order: {:?}, color_range: {:?}, color_primaries: {:?}, color_trc: {:?}, color_space: {:?}, chroma_location: {:?}, video_delay: {:?}, ch_layout: {:?}, sample_rate: {:?}, block_align: {:?}, frame_size: {:?}, initial_padding: {:?}, trailing_padding: {:?}, seek_preroll: {:?}, alpha_mode: {:?} }}" , self . codec_type , self . codec_id , self . codec_tag , self . extradata , self . extradata_size , self . coded_side_data , self . nb_coded_side_data , self . format , self . bit_rate , self . bits_per_coded_sample , self . bits_per_raw_sample , self . profile , self . level , self . width , self . height , self . sample_aspect_ratio , self . framerate , self . field_order , self . color_range , self . color_primaries , self . color_trc , self . color_space , self . chroma_location , self . video_delay , self . ch_layout , self . sample_rate , self . block_align , self . frame_size , self . initial_padding , self . trailing_padding , self . seek_preroll , self . alpha_mode)
     }
 }
 extern "C" {
@@ -13458,7 +13572,7 @@ pub struct AVCodecContext {
     pub inter_matrix: *mut u16,
     #[doc = " custom intra quantization matrix\n - encoding: Set by user, can be NULL.\n - decoding: unused."]
     pub chroma_intra_matrix: *mut u16,
-    #[doc = " precision of the intra DC coefficient - 8\n - encoding: Set by user.\n - decoding: Set by libavcodec"]
+    #[doc = " precision of the intra DC coefficient - 8\n - encoding: Set by user.\n - decoding: Set by libavcodec\n @deprecated Use the MPEG-2 encoder's private option \"intra_dc_precision\" instead."]
     pub intra_dc_precision: ::std::os::raw::c_int,
     #[doc = " minimum MB Lagrange multiplier\n - encoding: Set by user.\n - decoding: unused"]
     pub mb_lmin: ::std::os::raw::c_int,
@@ -13675,6 +13789,8 @@ pub struct AVCodecContext {
     #[doc = " Array containing static side data, such as HDR10 CLL / MDCV structures.\n Side data entries should be allocated by usage of helpers defined in\n libavutil/frame.h.\n\n - encoding: may be set by user before calling avcodec_open2() for\n             encoder configuration. Afterwards owned and freed by the\n             encoder.\n - decoding: may be set by libavcodec in avcodec_open2()."]
     pub decoded_side_data: *mut *mut AVFrameSideData,
     pub nb_decoded_side_data: ::std::os::raw::c_int,
+    #[doc = " Indicates how the alpha channel of the video is represented.\n - encoding: Set by user\n - decoding: Set by libavcodec"]
+    pub alpha_mode: AVAlphaMode,
 }
 #[test]
 fn bindgen_test_layout_AVCodecContext() {
@@ -14445,10 +14561,15 @@ fn bindgen_test_layout_AVCodecContext() {
         856usize,
         "Offset of field: AVCodecContext::nb_decoded_side_data"
     );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).alpha_mode) as usize - ptr as usize },
+        860usize,
+        "Offset of field: AVCodecContext::alpha_mode"
+    );
 }
 impl ::std::fmt::Debug for AVCodecContext {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write ! (f , "AVCodecContext {{ av_class: {:?}, log_level_offset: {:?}, codec_type: {:?}, codec: {:?}, codec_id: {:?}, codec_tag: {:?}, priv_data: {:?}, internal: {:?}, opaque: {:?}, bit_rate: {:?}, flags: {:?}, flags2: {:?}, extradata: {:?}, extradata_size: {:?}, time_base: {:?}, pkt_timebase: {:?}, framerate: {:?}, delay: {:?}, width: {:?}, height: {:?}, coded_width: {:?}, coded_height: {:?}, sample_aspect_ratio: {:?}, pix_fmt: {:?}, sw_pix_fmt: {:?}, color_primaries: {:?}, color_trc: {:?}, colorspace: {:?}, color_range: {:?}, chroma_sample_location: {:?}, field_order: {:?}, refs: {:?}, has_b_frames: {:?}, slice_flags: {:?}, draw_horiz_band: {:?}, get_format: {:?}, max_b_frames: {:?}, b_quant_factor: {:?}, b_quant_offset: {:?}, i_quant_factor: {:?}, i_quant_offset: {:?}, lumi_masking: {:?}, temporal_cplx_masking: {:?}, spatial_cplx_masking: {:?}, p_masking: {:?}, dark_masking: {:?}, nsse_weight: {:?}, me_cmp: {:?}, me_sub_cmp: {:?}, mb_cmp: {:?}, ildct_cmp: {:?}, dia_size: {:?}, last_predictor_count: {:?}, me_pre_cmp: {:?}, pre_dia_size: {:?}, me_subpel_quality: {:?}, me_range: {:?}, mb_decision: {:?}, intra_matrix: {:?}, inter_matrix: {:?}, chroma_intra_matrix: {:?}, intra_dc_precision: {:?}, mb_lmin: {:?}, mb_lmax: {:?}, bidir_refine: {:?}, keyint_min: {:?}, gop_size: {:?}, mv0_threshold: {:?}, slices: {:?}, sample_rate: {:?}, sample_fmt: {:?}, ch_layout: {:?}, frame_size: {:?}, block_align: {:?}, cutoff: {:?}, audio_service_type: {:?}, request_sample_fmt: {:?}, initial_padding: {:?}, trailing_padding: {:?}, seek_preroll: {:?}, get_buffer2: {:?}, bit_rate_tolerance: {:?}, global_quality: {:?}, compression_level: {:?}, qcompress: {:?}, qblur: {:?}, qmin: {:?}, qmax: {:?}, max_qdiff: {:?}, rc_buffer_size: {:?}, rc_override_count: {:?}, rc_override: {:?}, rc_max_rate: {:?}, rc_min_rate: {:?}, rc_max_available_vbv_use: {:?}, rc_min_vbv_overflow_use: {:?}, rc_initial_buffer_occupancy: {:?}, trellis: {:?}, stats_out: {:?}, stats_in: {:?}, workaround_bugs: {:?}, strict_std_compliance: {:?}, error_concealment: {:?}, debug: {:?}, err_recognition: {:?}, hwaccel: {:?}, hwaccel_context: {:?}, hw_frames_ctx: {:?}, hw_device_ctx: {:?}, hwaccel_flags: {:?}, extra_hw_frames: {:?}, error: {:?}, dct_algo: {:?}, idct_algo: {:?}, bits_per_coded_sample: {:?}, bits_per_raw_sample: {:?}, thread_count: {:?}, thread_type: {:?}, active_thread_type: {:?}, execute: {:?}, execute2: {:?}, profile: {:?}, level: {:?}, properties: {:?}, skip_loop_filter: {:?}, skip_idct: {:?}, skip_frame: {:?}, skip_alpha: {:?}, skip_top: {:?}, skip_bottom: {:?}, lowres: {:?}, codec_descriptor: {:?}, sub_charenc: {:?}, sub_charenc_mode: {:?}, subtitle_header_size: {:?}, subtitle_header: {:?}, dump_separator: {:?}, codec_whitelist: {:?}, coded_side_data: {:?}, nb_coded_side_data: {:?}, export_side_data: {:?}, max_pixels: {:?}, apply_cropping: {:?}, discard_damaged_percentage: {:?}, max_samples: {:?}, get_encode_buffer: {:?}, frame_num: {:?}, side_data_prefer_packet: {:?}, nb_side_data_prefer_packet: {:?}, decoded_side_data: {:?}, nb_decoded_side_data: {:?} }}" , self . av_class , self . log_level_offset , self . codec_type , self . codec , self . codec_id , self . codec_tag , self . priv_data , self . internal , self . opaque , self . bit_rate , self . flags , self . flags2 , self . extradata , self . extradata_size , self . time_base , self . pkt_timebase , self . framerate , self . delay , self . width , self . height , self . coded_width , self . coded_height , self . sample_aspect_ratio , self . pix_fmt , self . sw_pix_fmt , self . color_primaries , self . color_trc , self . colorspace , self . color_range , self . chroma_sample_location , self . field_order , self . refs , self . has_b_frames , self . slice_flags , self . draw_horiz_band , self . get_format , self . max_b_frames , self . b_quant_factor , self . b_quant_offset , self . i_quant_factor , self . i_quant_offset , self . lumi_masking , self . temporal_cplx_masking , self . spatial_cplx_masking , self . p_masking , self . dark_masking , self . nsse_weight , self . me_cmp , self . me_sub_cmp , self . mb_cmp , self . ildct_cmp , self . dia_size , self . last_predictor_count , self . me_pre_cmp , self . pre_dia_size , self . me_subpel_quality , self . me_range , self . mb_decision , self . intra_matrix , self . inter_matrix , self . chroma_intra_matrix , self . intra_dc_precision , self . mb_lmin , self . mb_lmax , self . bidir_refine , self . keyint_min , self . gop_size , self . mv0_threshold , self . slices , self . sample_rate , self . sample_fmt , self . ch_layout , self . frame_size , self . block_align , self . cutoff , self . audio_service_type , self . request_sample_fmt , self . initial_padding , self . trailing_padding , self . seek_preroll , self . get_buffer2 , self . bit_rate_tolerance , self . global_quality , self . compression_level , self . qcompress , self . qblur , self . qmin , self . qmax , self . max_qdiff , self . rc_buffer_size , self . rc_override_count , self . rc_override , self . rc_max_rate , self . rc_min_rate , self . rc_max_available_vbv_use , self . rc_min_vbv_overflow_use , self . rc_initial_buffer_occupancy , self . trellis , self . stats_out , self . stats_in , self . workaround_bugs , self . strict_std_compliance , self . error_concealment , self . debug , self . err_recognition , self . hwaccel , self . hwaccel_context , self . hw_frames_ctx , self . hw_device_ctx , self . hwaccel_flags , self . extra_hw_frames , self . error , self . dct_algo , self . idct_algo , self . bits_per_coded_sample , self . bits_per_raw_sample , self . thread_count , self . thread_type , self . active_thread_type , self . execute , self . execute2 , self . profile , self . level , self . properties , self . skip_loop_filter , self . skip_idct , self . skip_frame , self . skip_alpha , self . skip_top , self . skip_bottom , self . lowres , self . codec_descriptor , self . sub_charenc , self . sub_charenc_mode , self . subtitle_header_size , self . subtitle_header , self . dump_separator , self . codec_whitelist , self . coded_side_data , self . nb_coded_side_data , self . export_side_data , self . max_pixels , self . apply_cropping , self . discard_damaged_percentage , self . max_samples , self . get_encode_buffer , self . frame_num , self . side_data_prefer_packet , self . nb_side_data_prefer_packet , self . decoded_side_data , self . nb_decoded_side_data)
+        write ! (f , "AVCodecContext {{ av_class: {:?}, log_level_offset: {:?}, codec_type: {:?}, codec: {:?}, codec_id: {:?}, codec_tag: {:?}, priv_data: {:?}, internal: {:?}, opaque: {:?}, bit_rate: {:?}, flags: {:?}, flags2: {:?}, extradata: {:?}, extradata_size: {:?}, time_base: {:?}, pkt_timebase: {:?}, framerate: {:?}, delay: {:?}, width: {:?}, height: {:?}, coded_width: {:?}, coded_height: {:?}, sample_aspect_ratio: {:?}, pix_fmt: {:?}, sw_pix_fmt: {:?}, color_primaries: {:?}, color_trc: {:?}, colorspace: {:?}, color_range: {:?}, chroma_sample_location: {:?}, field_order: {:?}, refs: {:?}, has_b_frames: {:?}, slice_flags: {:?}, draw_horiz_band: {:?}, get_format: {:?}, max_b_frames: {:?}, b_quant_factor: {:?}, b_quant_offset: {:?}, i_quant_factor: {:?}, i_quant_offset: {:?}, lumi_masking: {:?}, temporal_cplx_masking: {:?}, spatial_cplx_masking: {:?}, p_masking: {:?}, dark_masking: {:?}, nsse_weight: {:?}, me_cmp: {:?}, me_sub_cmp: {:?}, mb_cmp: {:?}, ildct_cmp: {:?}, dia_size: {:?}, last_predictor_count: {:?}, me_pre_cmp: {:?}, pre_dia_size: {:?}, me_subpel_quality: {:?}, me_range: {:?}, mb_decision: {:?}, intra_matrix: {:?}, inter_matrix: {:?}, chroma_intra_matrix: {:?}, intra_dc_precision: {:?}, mb_lmin: {:?}, mb_lmax: {:?}, bidir_refine: {:?}, keyint_min: {:?}, gop_size: {:?}, mv0_threshold: {:?}, slices: {:?}, sample_rate: {:?}, sample_fmt: {:?}, ch_layout: {:?}, frame_size: {:?}, block_align: {:?}, cutoff: {:?}, audio_service_type: {:?}, request_sample_fmt: {:?}, initial_padding: {:?}, trailing_padding: {:?}, seek_preroll: {:?}, get_buffer2: {:?}, bit_rate_tolerance: {:?}, global_quality: {:?}, compression_level: {:?}, qcompress: {:?}, qblur: {:?}, qmin: {:?}, qmax: {:?}, max_qdiff: {:?}, rc_buffer_size: {:?}, rc_override_count: {:?}, rc_override: {:?}, rc_max_rate: {:?}, rc_min_rate: {:?}, rc_max_available_vbv_use: {:?}, rc_min_vbv_overflow_use: {:?}, rc_initial_buffer_occupancy: {:?}, trellis: {:?}, stats_out: {:?}, stats_in: {:?}, workaround_bugs: {:?}, strict_std_compliance: {:?}, error_concealment: {:?}, debug: {:?}, err_recognition: {:?}, hwaccel: {:?}, hwaccel_context: {:?}, hw_frames_ctx: {:?}, hw_device_ctx: {:?}, hwaccel_flags: {:?}, extra_hw_frames: {:?}, error: {:?}, dct_algo: {:?}, idct_algo: {:?}, bits_per_coded_sample: {:?}, bits_per_raw_sample: {:?}, thread_count: {:?}, thread_type: {:?}, active_thread_type: {:?}, execute: {:?}, execute2: {:?}, profile: {:?}, level: {:?}, properties: {:?}, skip_loop_filter: {:?}, skip_idct: {:?}, skip_frame: {:?}, skip_alpha: {:?}, skip_top: {:?}, skip_bottom: {:?}, lowres: {:?}, codec_descriptor: {:?}, sub_charenc: {:?}, sub_charenc_mode: {:?}, subtitle_header_size: {:?}, subtitle_header: {:?}, dump_separator: {:?}, codec_whitelist: {:?}, coded_side_data: {:?}, nb_coded_side_data: {:?}, export_side_data: {:?}, max_pixels: {:?}, apply_cropping: {:?}, discard_damaged_percentage: {:?}, max_samples: {:?}, get_encode_buffer: {:?}, frame_num: {:?}, side_data_prefer_packet: {:?}, nb_side_data_prefer_packet: {:?}, decoded_side_data: {:?}, nb_decoded_side_data: {:?}, alpha_mode: {:?} }}" , self . av_class , self . log_level_offset , self . codec_type , self . codec , self . codec_id , self . codec_tag , self . priv_data , self . internal , self . opaque , self . bit_rate , self . flags , self . flags2 , self . extradata , self . extradata_size , self . time_base , self . pkt_timebase , self . framerate , self . delay , self . width , self . height , self . coded_width , self . coded_height , self . sample_aspect_ratio , self . pix_fmt , self . sw_pix_fmt , self . color_primaries , self . color_trc , self . colorspace , self . color_range , self . chroma_sample_location , self . field_order , self . refs , self . has_b_frames , self . slice_flags , self . draw_horiz_band , self . get_format , self . max_b_frames , self . b_quant_factor , self . b_quant_offset , self . i_quant_factor , self . i_quant_offset , self . lumi_masking , self . temporal_cplx_masking , self . spatial_cplx_masking , self . p_masking , self . dark_masking , self . nsse_weight , self . me_cmp , self . me_sub_cmp , self . mb_cmp , self . ildct_cmp , self . dia_size , self . last_predictor_count , self . me_pre_cmp , self . pre_dia_size , self . me_subpel_quality , self . me_range , self . mb_decision , self . intra_matrix , self . inter_matrix , self . chroma_intra_matrix , self . intra_dc_precision , self . mb_lmin , self . mb_lmax , self . bidir_refine , self . keyint_min , self . gop_size , self . mv0_threshold , self . slices , self . sample_rate , self . sample_fmt , self . ch_layout , self . frame_size , self . block_align , self . cutoff , self . audio_service_type , self . request_sample_fmt , self . initial_padding , self . trailing_padding , self . seek_preroll , self . get_buffer2 , self . bit_rate_tolerance , self . global_quality , self . compression_level , self . qcompress , self . qblur , self . qmin , self . qmax , self . max_qdiff , self . rc_buffer_size , self . rc_override_count , self . rc_override , self . rc_max_rate , self . rc_min_rate , self . rc_max_available_vbv_use , self . rc_min_vbv_overflow_use , self . rc_initial_buffer_occupancy , self . trellis , self . stats_out , self . stats_in , self . workaround_bugs , self . strict_std_compliance , self . error_concealment , self . debug , self . err_recognition , self . hwaccel , self . hwaccel_context , self . hw_frames_ctx , self . hw_device_ctx , self . hwaccel_flags , self . extra_hw_frames , self . error , self . dct_algo , self . idct_algo , self . bits_per_coded_sample , self . bits_per_raw_sample , self . thread_count , self . thread_type , self . active_thread_type , self . execute , self . execute2 , self . profile , self . level , self . properties , self . skip_loop_filter , self . skip_idct , self . skip_frame , self . skip_alpha , self . skip_top , self . skip_bottom , self . lowres , self . codec_descriptor , self . sub_charenc , self . sub_charenc_mode , self . subtitle_header_size , self . subtitle_header , self . dump_separator , self . codec_whitelist , self . coded_side_data , self . nb_coded_side_data , self . export_side_data , self . max_pixels , self . apply_cropping , self . discard_damaged_percentage , self . max_samples , self . get_encode_buffer , self . frame_num , self . side_data_prefer_packet , self . nb_side_data_prefer_packet , self . decoded_side_data , self . nb_decoded_side_data , self . alpha_mode)
     }
 }
 #[doc = " @defgroup lavc_hwaccel AVHWAccel\n\n @note  Nothing in this structure should be accessed by the user.  At some\n        point in future it will not be externally visible at all.\n\n @{"]
@@ -14768,7 +14889,15 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[doc = " Return decoded output data from a decoder or encoder (when the\n @ref AV_CODEC_FLAG_RECON_FRAME flag is used).\n\n @param avctx codec context\n @param frame This will be set to a reference-counted video or audio\n              frame (depending on the decoder type) allocated by the\n              codec. Note that the function will always call\n              av_frame_unref(frame) before doing anything else.\n\n @retval 0                success, a frame was returned\n @retval AVERROR(EAGAIN)  output is not available in this state - user must\n                          try to send new input\n @retval AVERROR_EOF      the codec has been fully flushed, and there will be\n                          no more output frames\n @retval AVERROR(EINVAL)  codec not opened, or it is an encoder without the\n                          @ref AV_CODEC_FLAG_RECON_FRAME flag enabled\n @retval \"other negative error code\" legitimate decoding errors"]
+    #[doc = " Return decoded output data from a decoder or encoder (when the\n @ref AV_CODEC_FLAG_RECON_FRAME flag is used).\n\n @param avctx codec context\n @param frame This will be set to a reference-counted video or audio\n              frame (depending on the decoder type) allocated by the\n              codec. Note that the function will always call\n              av_frame_unref(frame) before doing anything else.\n @param flags Combination of AV_CODEC_RECEIVE_FRAME_FLAG_* flags.\n\n @retval 0                success, a frame was returned\n @retval AVERROR(EAGAIN)  output is not available in this state - user must\n                          try to send new input\n @retval AVERROR_EOF      the codec has been fully flushed, and there will be\n                          no more output frames\n @retval AVERROR(EINVAL)  codec not opened, or it is an encoder without the\n                          @ref AV_CODEC_FLAG_RECON_FRAME flag enabled\n @retval \"other negative error code\" legitimate decoding errors"]
+    pub fn avcodec_receive_frame_flags(
+        avctx: *mut AVCodecContext,
+        frame: *mut AVFrame,
+        flags: ::std::os::raw::c_uint,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    #[doc = " Alias for `avcodec_receive_frame_flags(avctx, frame, 0)`."]
     pub fn avcodec_receive_frame(
         avctx: *mut AVCodecContext,
         frame: *mut AVFrame,
@@ -14811,6 +14940,8 @@ pub const AV_CODEC_CONFIG_CHANNEL_LAYOUT: AVCodecConfig = 4;
 pub const AV_CODEC_CONFIG_COLOR_RANGE: AVCodecConfig = 5;
 #[doc = "< AVColorSpace, terminated by AVCOL_SPC_UNSPECIFIED"]
 pub const AV_CODEC_CONFIG_COLOR_SPACE: AVCodecConfig = 6;
+#[doc = "< AVAlphaMode, terminated by AVALPHA_MODE_UNSPECIFIED"]
+pub const AV_CODEC_CONFIG_ALPHA_MODE: AVCodecConfig = 7;
 pub type AVCodecConfig = ::std::os::raw::c_uint;
 extern "C" {
     #[doc = " Retrieve a list of all supported values for a given configuration type.\n\n @param avctx An optional context to use. Values such as\n              `strict_std_compliance` may affect the result. If NULL,\n              default values are used.\n @param codec The codec to query, or NULL to use avctx->codec.\n @param config The configuration to query.\n @param flags Currently unused; should be set to zero.\n @param out_configs On success, set to a list of configurations, terminated\n                    by a config-specific terminator, or NULL if all\n                    possible values are supported.\n @param out_num_configs On success, set to the number of elements in\nout_configs, excluding the terminator. Optional."]
@@ -15081,6 +15212,7 @@ fn bindgen_test_layout_AVCodecParserContext() {
 #[derive(Debug, Copy, Clone)]
 pub struct AVCodecParser {
     pub codec_ids: [::std::os::raw::c_int; 7usize],
+    #[doc = " All fields below this line are not part of the public API. They\n may not be used outside of libavcodec and can be changed and\n removed at will.\n New public fields should be added right above.\n"]
     pub priv_data_size: ::std::os::raw::c_int,
     pub parser_init: ::std::option::Option<
         unsafe extern "C" fn(s: *mut AVCodecParserContext) -> ::std::os::raw::c_int,
@@ -18241,7 +18373,7 @@ fn bindgen_test_layout_AVStreamGroupTileGrid() {
         "Offset of field: AVStreamGroupTileGrid::nb_coded_side_data"
     );
 }
-#[doc = " AVStreamGroupLCEVC is meant to define the relation between video streams\n and a data stream containing LCEVC enhancement layer NALUs.\n\n No more than one stream of @ref AVCodecParameters.codec_type \"codec_type\"\n AVMEDIA_TYPE_DATA shall be present, and it must be of\n @ref AVCodecParameters.codec_id \"codec_id\" AV_CODEC_ID_LCEVC."]
+#[doc = " AVStreamGroupLCEVC is meant to define the relation between video streams\n and a data stream containing LCEVC enhancement layer NALUs.\n\n No more than one stream of\n @ref AVCodecParameters.codec_id \"codec_id\" AV_CODEC_ID_LCEVC shall be present."]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct AVStreamGroupLCEVC {
@@ -18448,9 +18580,6 @@ impl ::std::fmt::Debug for AVStreamGroup {
 }
 extern "C" {
     pub fn av_stream_get_parser(s: *const AVStream) -> *mut AVCodecParserContext;
-}
-extern "C" {
-    pub fn av_stream_get_first_dts(st: *const AVStream) -> i64;
 }
 #[doc = " New fields can be added to the end with minor version bumps.\n Removal, reordering and changes to existing fields require a major\n version bump.\n sizeof(AVProgram) must not be used outside libav*."]
 #[repr(C)]
@@ -18798,6 +18927,8 @@ pub struct AVFormatContext {
     >,
     #[doc = " Maximum number of bytes read from input in order to determine stream durations\n when using estimate_timings_from_pts in avformat_find_stream_info().\n Demuxing only, set by the caller before avformat_find_stream_info().\n Can be set to 0 to let avformat choose using a heuristic.\n\n @see skip_estimate_duration_from_pts"]
     pub duration_probesize: i64,
+    #[doc = " Name of this format context, only used for logging purposes."]
+    pub name: *mut ::std::os::raw::c_char,
 }
 #[test]
 fn bindgen_test_layout_AVFormatContext() {
@@ -18805,7 +18936,7 @@ fn bindgen_test_layout_AVFormatContext() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<AVFormatContext>(),
-        472usize,
+        480usize,
         "Size of AVFormatContext"
     );
     assert_eq!(
@@ -19185,6 +19316,11 @@ fn bindgen_test_layout_AVFormatContext() {
         464usize,
         "Offset of field: AVFormatContext::duration_probesize"
     );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).name) as usize - ptr as usize },
+        472usize,
+        "Offset of field: AVFormatContext::name"
+    );
 }
 extern "C" {
     #[doc = " Return the LIBAVFORMAT_VERSION_INT constant."]
@@ -19397,6 +19533,113 @@ extern "C" {
 extern "C" {
     #[doc = " Pause a network-based stream (e.g. RTSP stream).\n\n Use av_read_play() to resume it."]
     pub fn av_read_pause(s: *mut AVFormatContext) -> ::std::os::raw::c_int;
+}
+#[doc = " Send a RTSP `SET_PARAMETER` request to the server\n\n Sends an SET_PARAMETER RTSP command to the server,\n with a data payload of type ::AVRTSPCommandRequest,\n ownership of it and its data remains with the caller.\n\n A reply retrieved is of type ::AVRTSPResponse and it\n and its contents must be freed by the caller."]
+pub const AVFORMAT_COMMAND_RTSP_SET_PARAMETER: AVFormatCommandID = 0;
+#[doc = " Command IDs that can be sent to the demuxer\n\n The following commands can be sent to a demuxer\n using ::avformat_send_command."]
+pub type AVFormatCommandID = ::std::os::raw::c_uint;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct AVRTSPCommandRequest {
+    #[doc = " Headers sent in the request to the server"]
+    pub headers: *mut AVDictionary,
+    #[doc = " Body payload size"]
+    pub body_len: usize,
+    #[doc = " Body payload"]
+    pub body: *mut ::std::os::raw::c_char,
+}
+#[test]
+fn bindgen_test_layout_AVRTSPCommandRequest() {
+    const UNINIT: ::std::mem::MaybeUninit<AVRTSPCommandRequest> = ::std::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::std::mem::size_of::<AVRTSPCommandRequest>(),
+        24usize,
+        "Size of AVRTSPCommandRequest"
+    );
+    assert_eq!(
+        ::std::mem::align_of::<AVRTSPCommandRequest>(),
+        8usize,
+        "Alignment of AVRTSPCommandRequest"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).headers) as usize - ptr as usize },
+        0usize,
+        "Offset of field: AVRTSPCommandRequest::headers"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).body_len) as usize - ptr as usize },
+        8usize,
+        "Offset of field: AVRTSPCommandRequest::body_len"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).body) as usize - ptr as usize },
+        16usize,
+        "Offset of field: AVRTSPCommandRequest::body"
+    );
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct AVRTSPResponse {
+    #[doc = " Response status code from server"]
+    pub status_code: ::std::os::raw::c_int,
+    #[doc = " Reason phrase from the server, describing the\n status in a human-readable way."]
+    pub reason: *mut ::std::os::raw::c_char,
+    #[doc = " Body payload size"]
+    pub body_len: usize,
+    #[doc = " Body payload"]
+    pub body: *mut ::std::os::raw::c_uchar,
+}
+#[test]
+fn bindgen_test_layout_AVRTSPResponse() {
+    const UNINIT: ::std::mem::MaybeUninit<AVRTSPResponse> = ::std::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::std::mem::size_of::<AVRTSPResponse>(),
+        32usize,
+        "Size of AVRTSPResponse"
+    );
+    assert_eq!(
+        ::std::mem::align_of::<AVRTSPResponse>(),
+        8usize,
+        "Alignment of AVRTSPResponse"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).status_code) as usize - ptr as usize },
+        0usize,
+        "Offset of field: AVRTSPResponse::status_code"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).reason) as usize - ptr as usize },
+        8usize,
+        "Offset of field: AVRTSPResponse::reason"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).body_len) as usize - ptr as usize },
+        16usize,
+        "Offset of field: AVRTSPResponse::body_len"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).body) as usize - ptr as usize },
+        24usize,
+        "Offset of field: AVRTSPResponse::body"
+    );
+}
+extern "C" {
+    #[doc = " Send a command to the demuxer\n\n Sends the specified command and (depending on the command)\n optionally a command-specific payload to the demuxer to handle.\n\n @param s     Format context, must be allocated with\n              ::avformat_alloc_context.\n @param id    Identifier of type ::AVFormatCommandID,\n              indicating the command to send.\n @param data  Command-specific data, allocated by the caller\n              and ownership remains with the caller.\n              For details what is expected here, consult the\n              documentation of the respective ::AVFormatCommandID."]
+    pub fn avformat_send_command(
+        s: *mut AVFormatContext,
+        id: AVFormatCommandID,
+        data: *mut ::std::os::raw::c_void,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    #[doc = " Receive a command reply from the demuxer\n\n Retrieves a reply for a previously sent command from the muxer.\n\n @param s         Format context, must be allocated with\n                  ::avformat_alloc_context.\n @param id        Identifier of type ::AVFormatCommandID,\n                  indicating the command for which to retrieve\n                  the reply.\n @param data_out  Pointee is set to the command reply, the actual\n                  type depends on the command. This is allocated by\n                  the muxer and must be freed with ::av_free.\n                  For details on the actual data set here, consult the\n                  documentation of the respective ::AVFormatCommandID."]
+    pub fn avformat_receive_command_reply(
+        s: *mut AVFormatContext,
+        id: AVFormatCommandID,
+        data_out: *mut *mut ::std::os::raw::c_void,
+    ) -> ::std::os::raw::c_int;
 }
 extern "C" {
     #[doc = " Close an opened input AVFormatContext. Free it and all its contents\n and set *s to NULL."]
@@ -19646,6 +19889,14 @@ extern "C" {
         ofmt: *const AVOutputFormat,
         codec_id: AVCodecID,
         std_compliance: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    #[doc = " Make a RFC 4281/6381 like string describing a codec for MIME types.\n\n @param par pointer to an AVCodecParameters struct describing the codec\n @param frame_rate an AVRational for the frame rate, for deciding the\n                   right profile for video codecs. Pass an invalid\n                   AVRational (1/0) to indicate that it is unknown.\n @param out the AVBPrint to write the output to\n @return <0 on error"]
+    pub fn av_mime_codec_str(
+        par: *const AVCodecParameters,
+        frame_rate: AVRational,
+        out: *mut AVBPrint,
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
@@ -20032,6 +20283,8 @@ pub struct AVFilterFormatsConfig {
     pub color_spaces: *mut AVFilterFormats,
     #[doc = "< AVColorRange"]
     pub color_ranges: *mut AVFilterFormats,
+    #[doc = "< AVAlphaMode"]
+    pub alpha_modes: *mut AVFilterFormats,
 }
 #[test]
 fn bindgen_test_layout_AVFilterFormatsConfig() {
@@ -20040,7 +20293,7 @@ fn bindgen_test_layout_AVFilterFormatsConfig() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<AVFilterFormatsConfig>(),
-        40usize,
+        48usize,
         "Size of AVFilterFormatsConfig"
     );
     assert_eq!(
@@ -20072,6 +20325,11 @@ fn bindgen_test_layout_AVFilterFormatsConfig() {
         unsafe { ::std::ptr::addr_of!((*ptr).color_ranges) as usize - ptr as usize },
         32usize,
         "Offset of field: AVFilterFormatsConfig::color_ranges"
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).alpha_modes) as usize - ptr as usize },
+        40usize,
+        "Offset of field: AVFilterFormatsConfig::alpha_modes"
     );
 }
 #[doc = " Filter definition. This defines the pads a filter contains, and all the\n callback functions used to interact with the filter."]
@@ -20344,6 +20602,8 @@ pub struct AVFilterLink {
     pub time_base: AVRational,
     pub side_data: *mut *mut AVFrameSideData,
     pub nb_side_data: ::std::os::raw::c_int,
+    #[doc = "< alpha mode (for videos with an alpha channel)"]
+    pub alpha_mode: AVAlphaMode,
     #[doc = " Lists of supported formats / etc. supported by the input filter."]
     pub incfg: AVFilterFormatsConfig,
     #[doc = " Lists of supported formats / etc. supported by the output filter."]
@@ -20355,7 +20615,7 @@ fn bindgen_test_layout_AVFilterLink() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::std::mem::size_of::<AVFilterLink>(),
-        200usize,
+        216usize,
         "Size of AVFilterLink"
     );
     assert_eq!(
@@ -20444,19 +20704,24 @@ fn bindgen_test_layout_AVFilterLink() {
         "Offset of field: AVFilterLink::nb_side_data"
     );
     assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).alpha_mode) as usize - ptr as usize },
+        116usize,
+        "Offset of field: AVFilterLink::alpha_mode"
+    );
+    assert_eq!(
         unsafe { ::std::ptr::addr_of!((*ptr).incfg) as usize - ptr as usize },
         120usize,
         "Offset of field: AVFilterLink::incfg"
     );
     assert_eq!(
         unsafe { ::std::ptr::addr_of!((*ptr).outcfg) as usize - ptr as usize },
-        160usize,
+        168usize,
         "Offset of field: AVFilterLink::outcfg"
     );
 }
 impl ::std::fmt::Debug for AVFilterLink {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write ! (f , "AVFilterLink {{ src: {:?}, srcpad: {:?}, dst: {:?}, dstpad: {:?}, type: {:?}, format: {:?}, w: {:?}, h: {:?}, sample_aspect_ratio: {:?}, colorspace: {:?}, color_range: {:?}, sample_rate: {:?}, ch_layout: {:?}, time_base: {:?}, side_data: {:?}, nb_side_data: {:?}, incfg: {:?}, outcfg: {:?} }}" , self . src , self . srcpad , self . dst , self . dstpad , self . type_ , self . format , self . w , self . h , self . sample_aspect_ratio , self . colorspace , self . color_range , self . sample_rate , self . ch_layout , self . time_base , self . side_data , self . nb_side_data , self . incfg , self . outcfg)
+        write ! (f , "AVFilterLink {{ src: {:?}, srcpad: {:?}, dst: {:?}, dstpad: {:?}, type: {:?}, format: {:?}, w: {:?}, h: {:?}, sample_aspect_ratio: {:?}, colorspace: {:?}, color_range: {:?}, sample_rate: {:?}, ch_layout: {:?}, time_base: {:?}, side_data: {:?}, nb_side_data: {:?}, alpha_mode: {:?}, incfg: {:?}, outcfg: {:?} }}" , self . src , self . srcpad , self . dst , self . dstpad , self . type_ , self . format , self . w , self . h , self . sample_aspect_ratio , self . colorspace , self . color_range , self . sample_rate , self . ch_layout , self . time_base , self . side_data , self . nb_side_data , self . alpha_mode , self . incfg , self . outcfg)
     }
 }
 extern "C" {
@@ -21069,6 +21334,9 @@ extern "C" {
     pub fn av_buffersink_get_color_range(ctx: *const AVFilterContext) -> AVColorRange;
 }
 extern "C" {
+    pub fn av_buffersink_get_alpha_mode(ctx: *const AVFilterContext) -> AVAlphaMode;
+}
+extern "C" {
     pub fn av_buffersink_get_channels(ctx: *const AVFilterContext) -> ::std::os::raw::c_int;
 }
 extern "C" {
@@ -21145,6 +21413,8 @@ pub struct AVBufferSrcParameters {
     pub color_range: AVColorRange,
     pub side_data: *mut *mut AVFrameSideData,
     pub nb_side_data: ::std::os::raw::c_int,
+    #[doc = " Video only, the alpha mode."]
+    pub alpha_mode: AVAlphaMode,
 }
 #[test]
 fn bindgen_test_layout_AVBufferSrcParameters() {
@@ -21226,10 +21496,15 @@ fn bindgen_test_layout_AVBufferSrcParameters() {
         96usize,
         "Offset of field: AVBufferSrcParameters::nb_side_data"
     );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr).alpha_mode) as usize - ptr as usize },
+        100usize,
+        "Offset of field: AVBufferSrcParameters::alpha_mode"
+    );
 }
 impl ::std::fmt::Debug for AVBufferSrcParameters {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write ! (f , "AVBufferSrcParameters {{ format: {:?}, time_base: {:?}, width: {:?}, height: {:?}, sample_aspect_ratio: {:?}, frame_rate: {:?}, hw_frames_ctx: {:?}, sample_rate: {:?}, ch_layout: {:?}, color_space: {:?}, color_range: {:?}, side_data: {:?}, nb_side_data: {:?} }}" , self . format , self . time_base , self . width , self . height , self . sample_aspect_ratio , self . frame_rate , self . hw_frames_ctx , self . sample_rate , self . ch_layout , self . color_space , self . color_range , self . side_data , self . nb_side_data)
+        write ! (f , "AVBufferSrcParameters {{ format: {:?}, time_base: {:?}, width: {:?}, height: {:?}, sample_aspect_ratio: {:?}, frame_rate: {:?}, hw_frames_ctx: {:?}, sample_rate: {:?}, ch_layout: {:?}, color_space: {:?}, color_range: {:?}, side_data: {:?}, nb_side_data: {:?}, alpha_mode: {:?} }}" , self . format , self . time_base , self . width , self . height , self . sample_aspect_ratio , self . frame_rate , self . hw_frames_ctx , self . sample_rate , self . ch_layout , self . color_space , self . color_range , self . side_data , self . nb_side_data , self . alpha_mode)
     }
 }
 extern "C" {
@@ -21272,6 +21547,10 @@ extern "C" {
         pts: i64,
         flags: ::std::os::raw::c_uint,
     ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    #[doc = " Returns 0 or a negative AVERROR code. Currently, this will only ever\n return AVERROR(EOF), to indicate that the buffer source has been closed,\n either as a result of av_buffersrc_close(), or because the downstream\n filter is no longer accepting new data."]
+    pub fn av_buffersrc_get_status(ctx: *mut AVFilterContext) -> ::std::os::raw::c_int;
 }
 #[doc = " @defgroup lavu_adler32 Adler-32\n @ingroup lavu_hash\n Adler-32 hash function implementation.\n\n @{"]
 pub type AVAdler = u32;
@@ -21489,7 +21768,7 @@ extern "C" {
     pub fn av_audio_fifo_space(af: *mut AVAudioFifo) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[doc = " Assert that floating point operations can be executed.\n\n This will av_assert0() that the cpu is not in MMX state on X86"]
+    #[doc = " Assert that floating point operations can be executed.\n\n This will av_assert0() that the cpu is not in MMX state on X86\n @deprecated without replacement"]
     pub fn av_assert0_fpu();
 }
 extern "C" {
@@ -22212,6 +22491,10 @@ extern "C" {
 extern "C" {
     #[doc = " Determine a suitable 'gamma' value to match the supplied\n AVColorTransferCharacteristic.\n\n See Apple Technical Note TN2257 (https://developer.apple.com/library/mac/technotes/tn2257/_index.html)\n\n This function returns the gamma exponent for the OETF. For example, sRGB is approximated\n by gamma 2.2, not by gamma 0.45455.\n\n @return Will return an approximation to the simple gamma function matching\n         the supplied Transfer Characteristic, Will return 0.0 for any\n         we cannot reasonably match against."]
     pub fn av_csp_approximate_trc_gamma(trc: AVColorTransferCharacteristic) -> f64;
+}
+extern "C" {
+    #[doc = " Determine a suitable EOTF 'gamma' value to match the supplied\n AVColorTransferCharacteristic.\n\n This function returns the gamma value (exponent) for a simple pure power\n function approximation of the supplied AVColorTransferCharacteristic, or 0.\n if no reasonable approximation exists.\n\n EOTF(v) = (L_w - L_b) * v^gamma + L_b\n\n @return Will return an approximation to the simple gamma function matching\n         the supplied Transfer Characteristic EOTF, Will return 0.0 for any\n         we cannot reasonably match against."]
+    pub fn av_csp_approximate_eotf_gamma(trc: AVColorTransferCharacteristic) -> f64;
 }
 extern "C" {
     #[doc = " Determine the function needed to apply the given\n AVColorTransferCharacteristic to linear input.\n\n The function returned should expect a nominal domain and range of [0.0-1.0]\n values outside of this range maybe valid depending on the chosen\n characteristic function.\n\n @return Will return pointer to the function matching the\n         supplied Transfer Characteristic. If unspecified will\n         return NULL:"]
@@ -25773,6 +26056,14 @@ extern "C" {
     ) -> AVChromaLocation;
 }
 extern "C" {
+    #[doc = " @return the name for provided alpha mode or NULL if unknown."]
+    pub fn av_alpha_mode_name(mode: AVAlphaMode) -> *const ::std::os::raw::c_char;
+}
+extern "C" {
+    #[doc = " @return the AVAlphaMode value for name or an AVError if not found."]
+    pub fn av_alpha_mode_from_name(name: *const ::std::os::raw::c_char) -> AVAlphaMode;
+}
+extern "C" {
     #[doc = " Return the pixel format corresponding to name.\n\n If there is no pixel format with name name, then looks for a\n pixel format with the name corresponding to the native endian\n format of name.\n For example in a little-endian system, first looks for \"gray16\",\n then for \"gray16le\".\n\n Finally if no pixel format has been found, returns AV_PIX_FMT_NONE."]
     pub fn av_get_pix_fmt(name: *const ::std::os::raw::c_char) -> AVPixelFormat;
 }
@@ -28454,12 +28745,14 @@ pub const SWS_DITHER_ED: SwsDither = 3;
 pub const SWS_DITHER_A_DITHER: SwsDither = 4;
 pub const SWS_DITHER_X_DITHER: SwsDither = 5;
 pub const SWS_DITHER_NB: SwsDither = 6;
+pub const SWS_DITHER_MAX_ENUM: SwsDither = 2147483647;
 #[doc = " Flags and quality settings *"]
 pub type SwsDither = ::std::os::raw::c_uint;
 pub const SWS_ALPHA_BLEND_NONE: SwsAlphaBlend = 0;
 pub const SWS_ALPHA_BLEND_UNIFORM: SwsAlphaBlend = 1;
 pub const SWS_ALPHA_BLEND_CHECKERBOARD: SwsAlphaBlend = 2;
 pub const SWS_ALPHA_BLEND_NB: SwsAlphaBlend = 3;
+pub const SWS_ALPHA_BLEND_MAX_ENUM: SwsAlphaBlend = 2147483647;
 pub type SwsAlphaBlend = ::std::os::raw::c_uint;
 #[doc = "< fast bilinear filtering"]
 pub const SWS_FAST_BILINEAR: SwsFlags = 1;
@@ -28495,6 +28788,8 @@ pub const SWS_FULL_CHR_H_INP: SwsFlags = 16384;
 pub const SWS_ACCURATE_RND: SwsFlags = 262144;
 #[doc = " Force bit-exact output. This will prevent the use of platform-specific\n optimizations that may lead to slight difference in rounding, in favor\n of always maintaining exact bit output compatibility with the reference\n C code.\n\n Note: It is recommended to set both of these flags simultaneously."]
 pub const SWS_BITEXACT: SwsFlags = 524288;
+#[doc = " Allow using experimental new code paths. This may be faster, slower,\n or produce different output, with semantics subject to change at any\n point in time. For testing and debugging purposes only."]
+pub const SWS_UNSTABLE: SwsFlags = 1048576;
 #[doc = "< This flag has no effect"]
 pub const SWS_DIRECT_BGR: SwsFlags = 32768;
 #[doc = "< Set `SwsContext.dither` instead"]
@@ -28686,11 +28981,15 @@ extern "C" {
     pub fn sws_free_context(ctx: *mut *mut SwsContext);
 }
 extern "C" {
-    #[doc = " Test if a given pixel format is supported.\n\n @param output  If 0, test if compatible with the source/input frame;\n                otherwise, with the destination/output frame.\n @param format  The format to check.\n\n @return A positive integer if supported, 0 otherwise."]
+    #[doc = " Test if a given (software) pixel format is supported.\n\n @param output  If 0, test if compatible with the source/input frame;\n                otherwise, with the destination/output frame.\n @param format  The format to check.\n\n @return A positive integer if supported, 0 otherwise."]
     pub fn sws_test_format(
         format: AVPixelFormat,
         output: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    #[doc = " Test if a given hardware pixel format is supported.\n\n @param format  The hardware format to check, or AV_PIX_FMT_NONE.\n\n @return A positive integer if supported or AV_PIX_FMT_NONE, 0 otherwise."]
+    pub fn sws_test_hw_format(format: AVPixelFormat) -> ::std::os::raw::c_int;
 }
 extern "C" {
     #[doc = " Test if a given color space is supported.\n\n @param output  If 0, test if compatible with the source/input frame;\n                otherwise, with the destination/output frame.\n @param colorspace The colorspace to check.\n\n @return A positive integer if supported, 0 otherwise."]
@@ -28833,7 +29132,7 @@ extern "C" {
     pub fn sws_isSupportedEndiannessConversion(pix_fmt: AVPixelFormat) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[doc = " Initialize the swscaler context sws_context.\n\n This function is considered deprecated, and provided only for backwards\n compatibility with sws_scale() and sws_start_frame(). The preferred way to\n use libswscale is to set all frame properties correctly and call\n sws_scale_frame() directly, without explicitly initializing the context.\n\n @return zero or positive value on success, a negative value on\n error"]
+    #[doc = " Initialize the swscaler context sws_context.\n\n This function is considered deprecated, and provided only for backwards\n compatibility with sws_scale() and sws_frame_start(). The preferred way to\n use libswscale is to set all frame properties correctly and call\n sws_scale_frame() directly, without explicitly initializing the context.\n\n @return zero or positive value on success, a negative value on\n error"]
     pub fn sws_init_context(
         sws_context: *mut SwsContext,
         srcFilter: *mut SwsFilter,
@@ -28860,7 +29159,7 @@ extern "C" {
     ) -> *mut SwsContext;
 }
 extern "C" {
-    #[doc = " Scale the image slice in srcSlice and put the resulting scaled\n slice in the image in dst. A slice is a sequence of consecutive\n rows in an image. Requires a context that has been previously\n been initialized with sws_init_context().\n\n Slices have to be provided in sequential order, either in\n top-bottom or bottom-top order. If slices are provided in\n non-sequential order the behavior of the function is undefined.\n\n @param c         the scaling context previously created with\n                  sws_getContext()\n @param srcSlice  the array containing the pointers to the planes of\n                  the source slice\n @param srcStride the array containing the strides for each plane of\n                  the source image\n @param srcSliceY the position in the source image of the slice to\n                  process, that is the number (counted starting from\n                  zero) in the image of the first row of the slice\n @param srcSliceH the height of the source slice, that is the number\n                  of rows in the slice\n @param dst       the array containing the pointers to the planes of\n                  the destination image\n @param dstStride the array containing the strides for each plane of\n                  the destination image\n @return          the height of the output slice"]
+    #[doc = " Scale the image slice in srcSlice and put the resulting scaled\n slice in the image in dst. A slice is a sequence of consecutive\n rows in an image. Requires a context that has previously been\n initialized with sws_init_context().\n\n Slices have to be provided in sequential order, either in\n top-bottom or bottom-top order. If slices are provided in\n non-sequential order the behavior of the function is undefined.\n\n @param c         the scaling context previously created with\n                  sws_getContext()\n @param srcSlice  the array containing the pointers to the planes of\n                  the source slice\n @param srcStride the array containing the strides for each plane of\n                  the source image\n @param srcSliceY the position in the source image of the slice to\n                  process, that is the number (counted starting from\n                  zero) in the image of the first row of the slice\n @param srcSliceH the height of the source slice, that is the number\n                  of rows in the slice\n @param dst       the array containing the pointers to the planes of\n                  the destination image\n @param dstStride the array containing the strides for each plane of\n                  the destination image\n @return          the height of the output slice"]
     pub fn sws_scale(
         c: *mut SwsContext,
         srcSlice: *const *const u8,
@@ -28872,7 +29171,7 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[doc = " Initialize the scaling process for a given pair of source/destination frames.\n Must be called before any calls to sws_send_slice() and sws_receive_slice().\n Requires a context that has been previously been initialized with\n sws_init_context().\n\n This function will retain references to src and dst, so they must both use\n refcounted buffers (if allocated by the caller, in case of dst).\n\n @param c   The scaling context\n @param dst The destination frame.\n\n            The data buffers may either be already allocated by the caller or\n            left clear, in which case they will be allocated by the scaler.\n            The latter may have performance advantages - e.g. in certain cases\n            some output planes may be references to input planes, rather than\n            copies.\n\n            Output data will be written into this frame in successful\n            sws_receive_slice() calls.\n @param src The source frame. The data buffers must be allocated, but the\n            frame data does not have to be ready at this point. Data\n            availability is then signalled by sws_send_slice().\n @return 0 on success, a negative AVERROR code on failure\n\n @see sws_frame_end()"]
+    #[doc = " Initialize the scaling process for a given pair of source/destination frames.\n Must be called before any calls to sws_send_slice() and sws_receive_slice().\n Requires a context that has previously been initialized with sws_init_context().\n\n This function will retain references to src and dst, so they must both use\n refcounted buffers (if allocated by the caller, in case of dst).\n\n @param c   The scaling context\n @param dst The destination frame.\n\n            The data buffers may either be already allocated by the caller or\n            left clear, in which case they will be allocated by the scaler.\n            The latter may have performance advantages - e.g. in certain cases\n            some output planes may be references to input planes, rather than\n            copies.\n\n            Output data will be written into this frame in successful\n            sws_receive_slice() calls.\n @param src The source frame. The data buffers must be allocated, but the\n            frame data does not have to be ready at this point. Data\n            availability is then signalled by sws_send_slice().\n @return 0 on success, a negative AVERROR code on failure\n\n @see sws_frame_end()"]
     pub fn sws_frame_start(
         c: *mut SwsContext,
         dst: *mut AVFrame,
@@ -28900,11 +29199,11 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    #[doc = " Get the alignment required for slices. Requires a context that has been\n previously been initialized with sws_init_context().\n\n @param c   The scaling context\n @return alignment required for output slices requested with sws_receive_slice().\n         Slice offsets and sizes passed to sws_receive_slice() must be\n         multiples of the value returned from this function."]
+    #[doc = " Get the alignment required for slices. Requires a context that has\n previously been initialized with sws_init_context().\n\n @param c   The scaling context\n @return alignment required for output slices requested with sws_receive_slice().\n         Slice offsets and sizes passed to sws_receive_slice() must be\n         multiples of the value returned from this function."]
     pub fn sws_receive_slice_alignment(c: *const SwsContext) -> ::std::os::raw::c_uint;
 }
 extern "C" {
-    #[doc = " @param c the scaling context\n @param dstRange flag indicating the while-black range of the output (1=jpeg / 0=mpeg)\n @param srcRange flag indicating the while-black range of the input (1=jpeg / 0=mpeg)\n @param table the yuv2rgb coefficients describing the output yuv space, normally ff_yuv2rgb_coeffs[x]\n @param inv_table the yuv2rgb coefficients describing the input yuv space, normally ff_yuv2rgb_coeffs[x]\n @param brightness 16.16 fixed point brightness correction\n @param contrast 16.16 fixed point contrast correction\n @param saturation 16.16 fixed point saturation correction\n\n @return A negative error code on error, non negative otherwise.\n         If `LIBSWSCALE_VERSION_MAJOR < 7`, returns -1 if not supported."]
+    #[doc = " @param c the scaling context\n @param dstRange flag indicating the white-black range of the output (1=jpeg / 0=mpeg)\n @param srcRange flag indicating the white-black range of the input (1=jpeg / 0=mpeg)\n @param table the yuv2rgb coefficients describing the output yuv space, normally ff_yuv2rgb_coeffs[x]\n @param inv_table the yuv2rgb coefficients describing the input yuv space, normally ff_yuv2rgb_coeffs[x]\n @param brightness 16.16 fixed point brightness correction\n @param contrast 16.16 fixed point contrast correction\n @param saturation 16.16 fixed point saturation correction\n\n @return A negative error code on error, non negative otherwise.\n         If `LIBSWSCALE_VERSION_MAJOR < 7`, returns -1 if not supported."]
     pub fn sws_setColorspaceDetails(
         c: *mut SwsContext,
         inv_table: *const ::std::os::raw::c_int,

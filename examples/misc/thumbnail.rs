@@ -73,6 +73,9 @@ fn thumbnail(
     };
 
     let scaled_cover_packet = {
+        // 不同 FFmpeg 版本/平台下 `ffi::SWS_*` 类型不同（macOS 为 `u32`，Windows ffmpeg8 为 `i32`），
+        // 而 `get_context` 统一要求 `u32`，故统一转换并允许跨平台 lint。
+        #[allow(clippy::unnecessary_cast)]
         let mut sws_context = SwsContext::get_context(
             decode_context.width,
             decode_context.height,
@@ -80,7 +83,7 @@ fn thumbnail(
             encode_context.width,
             encode_context.height,
             encode_context.pix_fmt,
-            ffi::SWS_FAST_BILINEAR | ffi::SWS_PRINT_INFO,
+            (ffi::SWS_FAST_BILINEAR | ffi::SWS_PRINT_INFO) as u32,
             None,
             None,
             None,

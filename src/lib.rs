@@ -22,6 +22,8 @@ pub mod swctx;
 pub mod time;
 pub mod utils;
 
+pub use swctx::ScaleAlgorithm;
+
 pub use decode::{Decoder, DecoderBuilder};
 pub use encode::{Encoder, EncoderBuilder};
 pub use flags::{MediaType, SampleFormat};

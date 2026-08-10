@@ -84,7 +84,7 @@ impl Decoder {
                     .send_packet(Some(&packet))
                     .context("Failed to send packet to codec context")?;
 
-                while let Ok(yuv_frame) = self.codec_context.receive_frame() {
+                if let Ok(yuv_frame) = self.codec_context.receive_frame() {
                     // 注意这里的 frame 编码格式为 YUV420P，需要转换为 RGB24
                     let rgb_frame = swctx::scale_frame(
                         &yuv_frame,
@@ -344,7 +344,7 @@ pub fn pgm_save(frame: &AVFrame, filename: &str) -> Result<()> {
 pub fn save_avframe_to_image(yuv_frame: &AVFrame, output_file_name: &str) -> Result<()> {
     // 转换为 RGB24 格式
     let rgb_frame = swctx::scale_frame(
-        &yuv_frame,
+        yuv_frame,
         yuv_frame.width,
         yuv_frame.height,
         PixelFormat::RGB24,
@@ -364,14 +364,16 @@ pub fn save_avframe_rgb24(frame: &AVFrame, output_file_name: &str) -> Result<()>
     };
 
     // 转换为图像
-    let rgb_image = av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)?;
+    let rgb_image = av_convert::avframe_rgb24_to_image_rgb(&rgb_frame)
+        .map_err(|_| anyhow::anyhow!("Unknown image format"))
+        .unwrap();
 
     // 确定输出格式并写入文件
     let path = Path::new(output_file_name);
     let extension = path
         .extension()
         .and_then(std::ffi::OsStr::to_str)
-        .ok_or_else(|| "Unknown image format")
+        .ok_or_else(|| anyhow::anyhow!("Unknown image format"))
         .unwrap();
 
     match extension.to_lowercase().as_str() {

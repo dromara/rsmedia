@@ -348,21 +348,93 @@ pub fn color_distance(c1: &Color, c2: Color) -> f32 {
     (dr + dg + db).sqrt()
 }
 
+/// Calculate the perceptual color difference (CIEDE2000) in CIE Lab space.
+///
+/// Unlike the plain RGB [`color_distance`], CIEDE2000 is aligned with human
+/// color perception, making it suitable for quantitative video-quality
+/// assessment, watermark-removal evaluation, and palette discrimination.
+///
+/// Reference thresholds: `<1` imperceptible, `1~2` subtle, `2~10` noticeable,
+/// `>10` very different.
+pub fn color_delta_e(c1: &Color, c2: Color) -> f32 {
+    use palette::color_difference::Ciede2000;
+    use palette::{IntoColor, Lab, Srgb};
+
+    let lab1: Lab = Srgb::new(
+        c1.r() as f32 / 255.0,
+        c1.g() as f32 / 255.0,
+        c1.b() as f32 / 255.0,
+    )
+    .into_color();
+    let lab2: Lab = Srgb::new(
+        c2.r() as f32 / 255.0,
+        c2.g() as f32 / 255.0,
+        c2.b() as f32 / 255.0,
+    )
+    .into_color();
+    lab1.difference(lab2)
+}
+
+/// Map a scalar in `[min, max]` to an RGB color from the given colormap.
+///
+/// Useful for rendering grayscale / depth / heatmap data as pseudo-color
+/// visualizations. Values outside `[min, max]` are clamped to the range.
+pub fn colormap_lookup(
+    gradient: &colorous::Gradient,
+    value: f64,
+    min: f64,
+    max: f64,
+) -> (u8, u8, u8) {
+    let span = max - min;
+    let t = if span <= f64::EPSILON || !span.is_finite() {
+        0.0
+    } else {
+        ((value - min) / span).clamp(0.0, 1.0)
+    };
+    let steps = 255usize;
+    let c = gradient.eval_rational((t * steps as f64).round() as usize, steps);
+    (c.r, c.g, c.b)
+}
+
+/// Render an entire grayscale frame (`Array2`) to an RGB frame using a colormap.
+///
+/// `gray` values in `[min, max]` are mapped to colors; the result is an
+/// `Array3` of shape `(height, width, 3)` suitable for constructing a
+/// `MediaFrame` (RGB24) or saving as an image.
+pub fn grayscale_to_colormap<T>(
+    gradient: &colorous::Gradient,
+    gray: &ndarray::Array2<T>,
+    min: f64,
+    max: f64,
+) -> ndarray::Array3<u8>
+where
+    T: num_traits::NumCast + Copy,
+{
+    let (h, w) = gray.dim();
+    ndarray::Array3::from_shape_fn((h, w, 3), |(y, x, c)| {
+        let v = num_traits::cast::<T, f64>(gray[[y, x]]).unwrap_or(0.0);
+        let (r, g, b) = colormap_lookup(gradient, v, min, max);
+        [r, g, b][c]
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use palette::chromatic_adaptation::AdaptInto;
+    use ctor::ctor;
+    use dtor::dtor;
+    use palette::chromatic_adaptation::AdaptIntoUnclamped;
     use palette::convert::{FromColorUnclamped, IntoColorUnclamped};
     use palette::{Hsl, IntoColor, Lab, LinSrgb, Oklab, Oklch, Srgb, Xyz};
 
     const OUTPUT_DIR: &str = "output";
 
-    #[ctor::ctor]
+    #[ctor(unsafe)]
     fn before() {
         std::fs::create_dir_all(OUTPUT_DIR).unwrap();
     }
 
-    #[ctor::dtor]
+    #[dtor(unsafe)]
     fn after() {
         std::fs::remove_dir_all(OUTPUT_DIR).unwrap();
     }
@@ -456,7 +528,7 @@ mod tests {
         // 中灰
         let [h, s, v] = rgb_to_hsv(128, 128, 128);
         assert_approx_eq!(s, 0.0);
-        assert_approx_eq!(v, 50.196078, 0.1); // 128/255 ≈ 50.196%
+        assert_approx_eq!(v, 50.2, 0.1); // 128/255 ≈ 50.2%
         assert_eq!(hsv_to_rgb(h, s, v), [128, 128, 128]);
     }
 
@@ -511,10 +583,30 @@ mod tests {
 
         for (r, g, b) in test_cases.iter() {
             let hsv_f32 = rgb_to_hsv(*r, *g, *b);
-            println!("RGB({}, {}, {})", r, g, b);
-            println!(
-                "HSV f32: [{:.6}, {:.6}, {:.6}]",
-                hsv_f32[0], hsv_f32[1], hsv_f32[2]
+            // HSV 输出必须落在合法范围内
+            assert!(
+                (0.0..360.0).contains(&hsv_f32[0]),
+                "Hue out of range for RGB({}, {}, {}): {}",
+                r,
+                g,
+                b,
+                hsv_f32[0]
+            );
+            assert!(
+                (0.0..=100.0).contains(&hsv_f32[1]),
+                "Saturation out of range for RGB({}, {}, {}): {}",
+                r,
+                g,
+                b,
+                hsv_f32[1]
+            );
+            assert!(
+                (0.0..=100.0).contains(&hsv_f32[2]),
+                "Value out of range for RGB({}, {}, {}): {}",
+                r,
+                g,
+                b,
+                hsv_f32[2]
             );
         }
     }
@@ -605,7 +697,7 @@ mod tests {
         let xyz_d65: Xyz<D65, f32> = srgb_color.into_color_unclamped();
         println!("SRGB (D65): {:?} -> Lab (D50): {:?}", srgb_color, xyz_d65);
         //  Step 2: Xyz (D65) -> Xyz (D50)
-        let xyz_d50: Xyz<D50, f32> = xyz_d65.adapt_into();
+        let xyz_d50: Xyz<D50, f32> = xyz_d65.adapt_into_unclamped();
         println!("Xyz (D65): {:?} -> Lab (D50): {:?}", xyz_d65, xyz_d50);
         // Step 3: Xyz (D50) -> Lab (D50)
         let lab_d50: Lab<D50, f32> = xyz_d50.into_color_unclamped();
@@ -619,7 +711,7 @@ mod tests {
             lab_d50, xyz_d50_from_lab
         );
         // 2. Xyz(D50) -> Xyz(D65) (Adapt back)
-        let xyz_d65_from_d50: Xyz<D65, f32> = xyz_d50_from_lab.adapt_into();
+        let xyz_d65_from_d50: Xyz<D65, f32> = xyz_d50_from_lab.adapt_into_unclamped();
         println!(
             "Xyz (D50): {:?} -> Xyz (D65): {:?}",
             xyz_d50_from_lab, xyz_d65_from_d50
@@ -630,5 +722,39 @@ mod tests {
             "Xyz (D65): {:?} -> SRGB (D65): {:?}",
             xyz_d65_from_d50, srgb_from_lab_d50
         );
+    }
+
+    #[test]
+    fn test_color_delta_e() {
+        // 相同颜色 CIEDE2000 色差近似为 0
+        let a = Color::from_rgb(120, 80, 200);
+        assert!(color_delta_e(&a, a) < 0.01);
+
+        // 明显不同的颜色（黑 vs 白）色差应非常大
+        let black = Color::from_rgb(0, 0, 0);
+        let white = Color::from_rgb(255, 255, 255);
+        let de = color_delta_e(&black, white);
+        assert!(de > 50.0, "black vs white deltaE should be large, got {de}");
+    }
+
+    #[test]
+    fn test_colormap_lookup() {
+        let g = colorous::VIRIDIS;
+        let lo = colormap_lookup(&g, 0.0, 0.0, 1.0);
+        let hi = colormap_lookup(&g, 1.0, 0.0, 1.0);
+        assert_ne!(lo, hi);
+        // 越界值被钳制到端点
+        assert_eq!(colormap_lookup(&g, -10.0, 0.0, 1.0), lo);
+        assert_eq!(colormap_lookup(&g, 99.0, 0.0, 1.0), hi);
+    }
+
+    #[test]
+    fn test_grayscale_to_colormap() {
+        let g = colorous::MAGMA;
+        let gray = ndarray::Array2::from_shape_fn((4, 5), |(y, x)| (y * 5 + x) as u8);
+        let rgb = grayscale_to_colormap(&g, &gray, 0.0, 19.0);
+        assert_eq!(rgb.dim(), (4, 5, 3));
+        // 最暗处与最亮处的映射颜色不同
+        assert_ne!(rgb[[0, 0, 0]], rgb[[3, 4, 0]]);
     }
 }

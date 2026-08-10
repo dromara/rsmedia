@@ -436,6 +436,7 @@ pub fn fill_frame_from_buffer(frame: &mut AVFrame, buffer: Vec<u8>) -> Result<()
 }
 
 /// 将 AVFrame 转换为 ndarray::Array3
+#[cfg(feature = "ndarray")]
 pub fn to_ndarray(frame: &AVFrame) -> Result<ndarray::Array3<u8>> {
     let (height, width) = (frame.height as usize, frame.width as usize);
 
@@ -816,8 +817,8 @@ mod tests {
             for y in 0..height as usize {
                 let row_ptr = y_ptr.add(y * y_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, width as usize);
-                for x in 0..width as usize {
-                    assert_eq!(row[x], 100, "Y plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 100, "Y plane data mismatch at ({}, {})", x, y);
                 }
             }
 
@@ -827,8 +828,8 @@ mod tests {
             for y in 0..uv_height as usize {
                 let row_ptr = u_ptr.add(y * u_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, uv_width as usize);
-                for x in 0..uv_width as usize {
-                    assert_eq!(row[x], 150, "U plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 150, "U plane data mismatch at ({}, {})", x, y);
                 }
             }
 
@@ -838,8 +839,8 @@ mod tests {
             for y in 0..uv_height as usize {
                 let row_ptr = v_ptr.add(y * v_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, uv_width as usize);
-                for x in 0..uv_width as usize {
-                    assert_eq!(row[x], 200, "V plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 200, "V plane data mismatch at ({}, {})", x, y);
                 }
             }
         }
@@ -940,6 +941,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_fill_frame_from_buffer() -> Result<()> {
         let mut frame = create_test_frame(320, 240, ffi::AV_PIX_FMT_RGB24)?;
@@ -958,6 +960,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_to_ndarray() {
         let width = 320_usize;
@@ -1018,6 +1021,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "ndarray")]
     #[test]
     fn test_frame_integration() {
         // 测试完整的操作流程
@@ -1082,8 +1086,8 @@ mod tests {
             for y in 0..height as usize {
                 let row_ptr = y_ptr.add(y * y_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, width as usize);
-                for x in 0..width as usize {
-                    assert_eq!(row[x], 100, "Y plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 100, "Y plane data mismatch at ({}, {})", x, y);
                 }
             }
 
@@ -1093,8 +1097,8 @@ mod tests {
             for y in 0..uv_height as usize {
                 let row_ptr = u_ptr.add(y * u_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, uv_width as usize);
-                for x in 0..uv_width as usize {
-                    assert_eq!(row[x], 150, "U plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 150, "U plane data mismatch at ({}, {})", x, y);
                 }
             }
 
@@ -1104,8 +1108,8 @@ mod tests {
             for y in 0..uv_height as usize {
                 let row_ptr = v_ptr.add(y * v_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, uv_width as usize);
-                for x in 0..uv_width as usize {
-                    assert_eq!(row[x], 200, "V plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 200, "V plane data mismatch at ({}, {})", x, y);
                 }
             }
         }
@@ -1140,12 +1144,8 @@ mod tests {
             for y in 0..height as usize {
                 let row_ptr = y_ptr.add(y * y_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, width as usize);
-                for x in 0..width as usize {
-                    assert_eq!(
-                        row[x], 100,
-                        "YUV444P Y plane data mismatch at ({}, {})",
-                        x, y
-                    );
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 100, "YUV444P Y plane data mismatch at ({}, {})", x, y);
                 }
             }
 
@@ -1155,12 +1155,8 @@ mod tests {
             for y in 0..height as usize {
                 let row_ptr = u_ptr.add(y * u_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, width as usize);
-                for x in 0..width as usize {
-                    assert_eq!(
-                        row[x], 150,
-                        "YUV444P U plane data mismatch at ({}, {})",
-                        x, y
-                    );
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 150, "YUV444P U plane data mismatch at ({}, {})", x, y);
                 }
             }
 
@@ -1170,12 +1166,8 @@ mod tests {
             for y in 0..height as usize {
                 let row_ptr = v_ptr.add(y * v_linesize);
                 let row = std::slice::from_raw_parts(row_ptr, width as usize);
-                for x in 0..width as usize {
-                    assert_eq!(
-                        row[x], 200,
-                        "YUV444P V plane data mismatch at ({}, {})",
-                        x, y
-                    );
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 200, "YUV444P V plane data mismatch at ({}, {})", x, y);
                 }
             }
         }
@@ -1200,8 +1192,8 @@ mod tests {
             for y in 0..height as usize {
                 let row_ptr = ptr.add(y * linesize);
                 let row = std::slice::from_raw_parts(row_ptr, width as usize * 4);
-                for x in 0..width as usize * 4 {
-                    assert_eq!(row[x], 128, "RGBA plane data mismatch at ({}, {})", x, y);
+                for (x, &val) in row.iter().enumerate() {
+                    assert_eq!(val, 128, "RGBA plane data mismatch at ({}, {})", x, y);
                 }
             }
         }

@@ -18,13 +18,13 @@ fn main() {
 
     rsmedia::init().unwrap();
 
-    let input_path = Path::new("/tmp/bear.mp4");
+    let input_path = Path::new("/tmp/test.mp4");
     let mut demuxer = Demuxer::new(input_path).unwrap();
 
     let output_path = Path::new("/tmp/output.mov");
     let stream_writer = StreamWriterBuilder::new(output_path)
         .with_format("mov")
-        .with_options(Some(Options::preset_avformat_fragmented_mov()))
+        .with_options(Options::preset_avformat_fragmented_mov())
         .build()
         .unwrap();
     let mut muxer = Muxer::new_from_writer(stream_writer);
@@ -39,9 +39,9 @@ fn main() {
                 EncoderBuilder::new_video(stream_info.width as usize, stream_info.height as usize)
                     // cuda acceleration
                     .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
-                    .with_codec_name(Some("h264_nvenc".to_string()))
+                    .with_codec_name("h264_nvenc".to_string())
                     // notes: options must be match with input video encoder codec,
-                    .with_options(Some(Options::preset_h264_nvenc()))
+                    .with_options(Options::preset_h264_nvenc())
                     .with_bit_rate(stream_info.bit_rate)
                     // video
                     .with_time_base_ra(stream_info.time_base)

@@ -22,7 +22,7 @@ fn dump_frame(file: &CStr, out_dir: &str) -> Result<()> {
 
     let video_stream_index = input_format_context
         .streams()
-        .into_iter()
+        .iter()
         .position(|stream| stream.codecpar().codec_type().is_video())
         .context("No video stream")?;
 
@@ -47,6 +47,9 @@ fn dump_frame(file: &CStr, out_dir: &str) -> Result<()> {
 
     let mut frame_rgb = AVFrameWithImage::new(image_buffer);
 
+    // 不同 FFmpeg 版本/平台下 `ffi::SWS_*` 类型不同（macOS 为 `u32`，Windows ffmpeg8 为 `i32`），
+    // 而 `get_context` 统一要求 `u32`，故统一转换并允许跨平台 lint。
+    #[allow(clippy::unnecessary_cast)]
     let mut sws_context = SwsContext::get_context(
         decode_context.width,
         decode_context.height,
@@ -54,7 +57,7 @@ fn dump_frame(file: &CStr, out_dir: &str) -> Result<()> {
         decode_context.width,
         decode_context.height,
         ffi::AV_PIX_FMT_RGB32,
-        ffi::SWS_BILINEAR,
+        ffi::SWS_BILINEAR as u32,
         None,
         None,
         None,

@@ -166,7 +166,7 @@ export FFMPEG_DLL_PATH=$FFMPEG_DIR/lib/libffmpeg.dll
 fn main() {
   rsmedia::init().unwrap();
 
-  let input_path = Path::new("/tmp/bear.mp4");
+  let input_path = Path::new("/tmp/test.mp4");
   let mut demuxer = Demuxer::new(input_path).unwrap();
 
   // demux and mux all streams frame
@@ -202,7 +202,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
           // decoder with CUDA acceleration
           // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
-          // .with_codec_name(Some("h264_cuvid".to_string()))
+          // .with_codec_name("h264_cuvid".to_string())
           .build_wrapped(source)
           .context("failed to create decoder")?;
 
@@ -211,7 +211,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
       Ok(Some(yuv_frame)) => {
         println!(
           "decoded frame pts: {}, type: {:?}, format:{:?}",
-          yuv_frame.pts, yuv_frame.media_type, yuv_frame.format
+          yuv_frame.pts,
+          yuv_frame.media_type,
+          yuv_frame
+            .video_format()
+            .map(|f| f.get_pix_fmt_name())
+            .unwrap_or_else(|| "n/a".to_string())
         );
         
         // processing frame here...
@@ -243,9 +248,9 @@ fn main() -> Result<(), Box<dyn Error>> {
           // encoder with CUDA acceleration
           // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
           // libx264, libx265, h264_nvenc, h264_vaapi
-          // .with_codec_name(Some("h264_nvenc".to_string()))
-          // .with_options(Some(Options::preset_h264_nvenc()))
-          .with_filters(Some(filters))
+          // .with_codec_name("h264_nvenc".to_string())
+          // .with_options(Options::preset_h264_nvenc())
+          .with_filters(filters)
           .build_wrapped(output_path)
           .expect("failed to create encoder");
 

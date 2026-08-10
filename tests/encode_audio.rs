@@ -277,14 +277,11 @@ fn encode_audio(
         .unwrap();
 
     println!(
-        "{}",
-        format!(
-            "encode_audio: output_path:{}, codec_id:{}, sample_format:{}, codec_config: {:#?}",
-            output_path.to_string_lossy().to_string(),
-            codec_id,
-            sample_format,
-            codec_config
-        )
+        "encode_audio: output_path:{}, codec_id:{}, sample_format:{}, codec_config: {:#?}",
+        output_path.to_string_lossy(),
+        codec_id,
+        sample_format,
+        codec_config
     );
 
     assert!(
@@ -433,7 +430,7 @@ fn test_encode_audio_wav() {
         c"/tmp/encode_audio_output.wav",
         ffi::AV_CODEC_ID_PCM_S24LE,
         ffi::AV_SAMPLE_FMT_S32,
-        2304_000,
+        2_304_000,
         2,
     )
     .unwrap();
@@ -447,7 +444,7 @@ fn test_encode_audio_wav_16bit() {
         c"/tmp/encode_audio_output_16bit.wav",
         ffi::AV_CODEC_ID_PCM_S16LE,
         ffi::AV_SAMPLE_FMT_S16,
-        1536_000, // 48kHz * 16bit * 2ch
+        1_536_000, // 48kHz * 16bit * 2ch
         2,
     )
     .unwrap();

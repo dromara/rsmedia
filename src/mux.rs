@@ -433,7 +433,7 @@ mod tests {
         // 填充V平面 (红色分量)
         for y in 0..(height / 2) {
             for x in 0..(width / 2) {
-                let index = (y * v_linesize as usize + x) as usize;
+                let index = y * v_linesize as usize + x;
                 let v_value = (((1.0 - time_factor) * 128.0) as u8).wrapping_add(128);
                 unsafe {
                     *v_plane.add(index) = v_value;
@@ -619,7 +619,7 @@ mod tests {
         let audio_encoder =
             EncoderBuilder::new_audio(bit_rate, channels, sample_rate, SampleFormat::FLTP)
                 // 使用LAME MP3编码器
-                .with_codec_name(Some("libmp3lame".to_string()))
+                .with_codec_name("libmp3lame".to_string())
                 .build()?;
 
         let mut muxer = Muxer::new(output_path)?;
@@ -854,7 +854,7 @@ mod tests {
     #[test]
     #[ignore = "mux transcode need a file"]
     fn test_transcode() -> Result<()> {
-        transcode("/tmp/bear.mp4", "/tmp/bear_transcode.mov")?;
+        transcode("/tmp/test.mp4", "/tmp/test_transcode.mov")?;
         Ok(())
     }
 }

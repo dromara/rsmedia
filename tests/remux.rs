@@ -34,7 +34,7 @@ fn remux(input_path: &CStr, output_path: &CStr) -> Result<()> {
         let mut stream_index = 0usize;
         input_format_context
             .streams()
-            .into_iter()
+            .iter()
             .map(|stream| {
                 let codec_type = stream.codecpar().codec_type();
                 if !codec_type.is_video() && !codec_type.is_audio() && !codec_type.is_subtitle() {

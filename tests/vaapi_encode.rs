@@ -63,42 +63,45 @@ fn encode_write(
     Ok(())
 }
 
-fn hw_encode(
-    input: &Path,
-    output: &Path,
+struct HwEncodeConfig<'a> {
+    input: &'a Path,
+    output: &'a Path,
     width: i32,
     height: i32,
-    encode_codec: &CStr,
+    encode_codec: &'a CStr,
     device_type: AVHWDeviceType,
     hw_format: AVPixelFormat,
     sw_format: AVPixelFormat,
-) -> Result<()> {
-    let size = width as usize * height as usize;
+}
 
-    let mut fin = File::open(input).context("Fail to open input file")?;
-    let mut fout = File::create(output).context("Fail to open output file")?;
+fn hw_encode(config: &HwEncodeConfig<'_>) -> Result<()> {
+    let size = config.width as usize * config.height as usize;
 
-    let hw_device_ctx = AVHWDeviceContext::create(device_type, None, None, 0)
+    let mut fin = File::open(config.input).context("Fail to open input file")?;
+    let mut fout = File::create(config.output).context("Fail to open output file")?;
+
+    let hw_device_ctx = AVHWDeviceContext::create(config.device_type, None, None, 0)
         .context("Failed to create a VAAPI device")?;
 
-    let codec = AVCodec::find_encoder_by_name(encode_codec).context("Could not find encoder.")?;
+    let codec =
+        AVCodec::find_encoder_by_name(config.encode_codec).context("Could not find encoder.")?;
 
     let mut avctx = AVCodecContext::new(&codec);
 
-    avctx.set_width(width);
-    avctx.set_height(height);
+    avctx.set_width(config.width);
+    avctx.set_height(config.height);
     avctx.set_time_base(ra(1, 25));
     avctx.set_framerate(ra(25, 1));
     avctx.set_sample_aspect_ratio(ra(1, 1));
-    avctx.set_pix_fmt(hw_format);
+    avctx.set_pix_fmt(config.hw_format);
 
     set_hwframe_ctx(
         &mut avctx,
         &hw_device_ctx,
-        width,
-        height,
-        hw_format,
-        sw_format,
+        config.width,
+        config.height,
+        config.hw_format,
+        config.sw_format,
     )
     .context("Failed to set hwframe context.")?;
 
@@ -110,9 +113,9 @@ fn hw_encode(
         let mut sw_frame = AVFrame::new();
 
         // read data into software frame, and transfer them into hw frame
-        sw_frame.set_width(width);
-        sw_frame.set_height(height);
-        sw_frame.set_format(sw_format);
+        sw_frame.set_width(config.width);
+        sw_frame.set_height(config.height);
+        sw_frame.set_format(config.sw_format);
         sw_frame.get_buffer(0).context("Get buffer failed.")?;
 
         let y = unsafe { slice::from_raw_parts_mut(sw_frame.data_mut()[0], size) };
@@ -150,16 +153,16 @@ fn hw_encode(
 fn vaapi_encode_test_vaapi() {
     std::fs::create_dir_all("tests/output/vaapi_encode/").unwrap();
     // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv
-    hw_encode(
-        Path::new("tests/assets/vids/bear.yuv"),
-        Path::new("tests/output/vaapi_encode/vaapi_encode_test_vaapi.h264"),
-        320,
-        180,
-        c"h264_vaapi",
-        AV_HWDEVICE_TYPE_VAAPI,
-        AV_PIX_FMT_VAAPI,
-        AV_PIX_FMT_NV12,
-    )
+    hw_encode(&HwEncodeConfig {
+        input: Path::new("tests/assets/vids/bear.yuv"),
+        output: Path::new("tests/output/vaapi_encode/vaapi_encode_test_vaapi.h264"),
+        width: 320,
+        height: 180,
+        encode_codec: c"h264_vaapi",
+        device_type: AV_HWDEVICE_TYPE_VAAPI,
+        hw_format: AV_PIX_FMT_VAAPI,
+        sw_format: AV_PIX_FMT_NV12,
+    })
     .unwrap();
 }
 
@@ -176,16 +179,16 @@ fn vaapi_encode_test_vaapi() {
 fn nvenc_encode_test_nvenc() {
     std::fs::create_dir_all("tests/output/nvenc_encode/").unwrap();
     // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv
-    hw_encode(
-        Path::new("tests/assets/vids/bear.yuv"),
-        Path::new("tests/output/nvenc_encode/nvenc_encode_test_nvenc.h264"),
-        320,
-        180,
-        c"h264_nvenc",
-        AV_HWDEVICE_TYPE_CUDA,
-        AV_PIX_FMT_CUDA,
-        AV_PIX_FMT_NV12,
-    )
+    hw_encode(&HwEncodeConfig {
+        input: Path::new("tests/assets/vids/bear.yuv"),
+        output: Path::new("tests/output/nvenc_encode/nvenc_encode_test_nvenc.h264"),
+        width: 320,
+        height: 180,
+        encode_codec: c"h264_nvenc",
+        device_type: AV_HWDEVICE_TYPE_CUDA,
+        hw_format: AV_PIX_FMT_CUDA,
+        sw_format: AV_PIX_FMT_NV12,
+    })
     .unwrap();
 }
 
@@ -194,15 +197,15 @@ fn nvenc_encode_test_nvenc() {
 fn toolbox_encode_test_videotoolbox() {
     std::fs::create_dir_all("tests/output/toolbox_encode/").unwrap();
     // Produced by ffmpeg -i tests/assets/vids/bear.mp4 -pix_fmt nv12 tests/assets/vids/bear.yuv
-    hw_encode(
-        Path::new("tests/assets/vids/bear.yuv"),
-        Path::new("tests/output/toolbox_encode/toolbox_encode_test_h264.h264"),
-        320,
-        180,
-        c"h264_videotoolbox",
-        AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
-        AV_PIX_FMT_VIDEOTOOLBOX,
-        AV_PIX_FMT_NV12,
-    )
+    hw_encode(&HwEncodeConfig {
+        input: Path::new("tests/assets/vids/bear.yuv"),
+        output: Path::new("tests/output/toolbox_encode/toolbox_encode_test_h264.h264"),
+        width: 320,
+        height: 180,
+        encode_codec: c"h264_videotoolbox",
+        device_type: AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+        hw_format: AV_PIX_FMT_VIDEOTOOLBOX,
+        sw_format: AV_PIX_FMT_NV12,
+    })
     .unwrap();
 }

@@ -1,16 +1,16 @@
 //! 演示读取解码器/编码器的元数据与流信息 getter。
 //!
 //! 覆盖的 API：
-//! - `DecoderWrapper::stream_info` —— 读取流的 `StreamInfo`（宽高、比特率、时长等）
-//! - `DecoderWrapper::decoder_mut` —— 访问底层 `Decoder` 的只读 getter：
+//! - `StreamInfo::from_reader` —— 读取流的 `StreamInfo`（宽高、比特率、时长等）
+//! - 裸 `Decoder` 的只读 getter：
 //!   - `width` / `height` / `pix_fmt`
 //!   - `sample_rate` / `sample_fmt` / `ch_layout`
 //!   - `duration` / `time_base` / `frames` / `frame_rate` / `media_type` / `stream_index`
 
-use rsmedia::{DecoderBuilder, MediaType};
+use rsmedia::stream::StreamInfo;
+use rsmedia::{DecoderBuilder, MediaType, StreamReader};
 
 use anyhow::Result;
-use std::path::Path;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -18,24 +18,23 @@ fn main() -> Result<()> {
         .init();
     rsmedia::init()?;
 
-    let source = Path::new("/tmp/test.mp4");
-    let mut decoder = DecoderBuilder::new(MediaType::VIDEO).build_wrapped(source)?;
+    let reader = StreamReader::new("/tmp/test.mp4")?;
+    let decoder = DecoderBuilder::new(MediaType::VIDEO).build_from_reader(&reader)?;
 
-    // 1. 通过 stream_info 读取流的整体信息
-    let info = decoder.stream_info().clone();
+    // 1. 通过 StreamInfo 读取流的整体信息
+    let info = StreamInfo::from_reader(&reader, decoder.stream_index())?;
     println!("=== StreamInfo ===");
     println!("codec_id: {}", info.codec_id);
     println!("width x height: {}x{}", info.width, info.height);
     println!("bit_rate: {}", info.bit_rate);
-    println!("format: {}", info.format);
+    println!("format: {:?}", info.format);
     println!("time_base: {}/{}", info.time_base.num, info.time_base.den);
     println!(
         "frame_rate: {}/{}",
         info.frame_rate.num, info.frame_rate.den
     );
 
-    // 2. 通过 decoder_mut 读取底层解码器已打开的上下文参数
-    let decoder = decoder.decoder_mut();
+    // 2. 直接读取底层解码器已打开的上下文参数
     println!("=== Decoder getters ===");
     println!("media_type: {:?}", decoder.media_type());
     println!("stream_index: {}", decoder.stream_index());

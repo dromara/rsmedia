@@ -1,6 +1,7 @@
 use image::{ImageBuffer, Rgb};
 
-use rsmedia::{DecoderBuilder, MediaFrame, MediaFrameFormat, MediaType, filter};
+use rsmedia::io::{Seekable, StreamReader};
+use rsmedia::{DecoderBuilder, FrameFormat, HWDeviceConfig, MediaFrame, MediaType, filter};
 
 use anyhow::{Context, Result};
 use futures::future::join_all;
@@ -26,33 +27,37 @@ async fn main() -> Result<()> {
 
     rsmedia::init().unwrap();
 
-    let source = std::path::Path::new("/tmp/test.mp4");
-
     // 640x360 mp4
     // let source = "https://img.qunliao.info/4oEGX68t_9505974551.mp4"
-    //     .parse::<url::Url>()
-    //     .unwrap();
+
+    let source = "/tmp/test.mp4";
 
     let filters = vec![
         filter::video::scale(640, 360, None),
         filter::video::fps(30.0),
     ];
 
+    let mut reader = StreamReader::new(source)?;
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
         // decoder with CUDA acceleration
-        // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
+        .with_hardware_device(Some(HWDeviceConfig::auto_platform()?))
+        // h264_cuvid decoder name
         // .with_codec_name("h264_cuvid".to_string())
         .with_filters(filters)
-        .build_wrapped(source)
+        .build_from_reader(&reader)
         .context("failed to create decoder")?;
 
     std::fs::create_dir_all(OUTPUT_DIR).context("failed to create output directory")?;
 
-    // seek to the 20th frame
-    decoder.seek_to_frame(20).unwrap();
+    // Seek near the 20th frame. MP4/AAC containers do not support frame-based
+    // seeking (`AVSeekFlag::FRAME`), so use the reliable timestamp seek which
+    // lands on the nearest keyframe (≈666ms at 30fps → before the 20th frame).
+    reader
+        .seek_to_timestamp(20 * 1000 / 30)
+        .context("failed to seek to the 20th frame")?;
 
     loop {
-        match decoder.decode_frame() {
+        match decoder.decode_frame(&mut reader) {
             Ok(Some(yuv_frame)) => {
                 println!(
                     "decoded frame pts: {}, type: {:?}, format:{:?}",
@@ -61,7 +66,7 @@ async fn main() -> Result<()> {
                     yuv_frame
                         .format()
                         .map(|f| match f {
-                            MediaFrameFormat::Pixel(p) => p.get_pix_fmt_name(),
+                            FrameFormat::Pixel(p) => p.get_pix_fmt_name(),
                             _ => "N/A",
                         })
                         .unwrap_or("N/A")

@@ -11,9 +11,9 @@ use rsmpeg::{
     ffi,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rsmedia::codec::CodecConfig;
-use rsmedia::{EncoderBuilder, SampleFormat, filter, utils};
+use rsmedia::{EncoderBuilder, SampleFormat, filter, strutils};
 use std::ffi::{CStr, CString};
 
 /// 生成正弦波音频样本（优化内存访问）
@@ -467,7 +467,7 @@ const COMMON_AUDIO_CONTAINERS: &[(&str, &str, i64)] = &[
 fn encode_audio_container(container_type: &str, codec_name: &str, bit_rate: i64) -> Result<()> {
     // 编码器是否存在取决于 FFmpeg 编译配置（如 libmp3lame、libopus），
     // 缺失时跳过该容器而不是失败
-    let Some(codec) = AVCodec::find_encoder_by_name(&utils::from_str(codec_name)) else {
+    let Some(codec) = AVCodec::find_encoder_by_name(&strutils::str_to_cstring(codec_name)) else {
         anyhow::bail!("encoder {codec_name} not available in this FFmpeg build");
     };
     let codec_config = CodecConfig::from_codec(codec);
@@ -499,10 +499,13 @@ fn encode_audio_container(container_type: &str, codec_name: &str, bit_rate: i64)
         filter::audio::atempo(1.25), // 加速 25%
     ];
 
-    let mut encoder = EncoderBuilder::new_audio(bit_rate, channels, sample_rate, sample_format)
+    let encoder = EncoderBuilder::new_audio(bit_rate, channels, sample_rate, sample_format)
         .with_codec_name(codec_name.to_string())
         .with_filters(audio_filters)
-        .build_wrapped(output_path.as_path())?;
+        .build()?;
+    let enc_tb = encoder.time_base();
+    let mut muxer = rsmedia::mux::Muxer::new(&output_path)?;
+    let a_idx = muxer.add_encoder(encoder)?;
 
     // rsmedia 编码器内部对固定帧大小编码器做 AVAudioFifo 缓冲，
     // 这里统一用 1024 样本块驱动即可
@@ -522,11 +525,12 @@ fn encode_audio_container(container_type: &str, codec_name: &str, bit_rate: i64)
     for pts in (0..total_samples).step_by(frame_size as usize) {
         generate_sine_wave(&mut frame, 440.0, sample_rate).context("Failed to generate samples")?;
         frame.set_pts(pts);
-        encoder.encode_raw(frame.clone())?;
+        frame.set_time_base(enc_tb);
+        muxer.mux(frame.clone(), a_idx)?;
     }
 
     // flush encoder and write trailer
-    encoder.finish()?;
+    muxer.finish()?;
 
     Ok(())
 }
@@ -534,7 +538,7 @@ fn encode_audio_container(container_type: &str, codec_name: &str, bit_rate: i64)
 /// 遍历常见音频容器逐一编码；编码器缺失的容器跳过并报告，
 /// 但要求至少一个容器成功，防止环境异常时测试空壳通过。
 #[test]
-fn test_encode_audio_containers() {
+fn test_encode_audio_containers() -> Result<()> {
     let mut skipped = Vec::new();
     let mut encoded = 0;
 
@@ -544,10 +548,11 @@ fn test_encode_audio_containers() {
             Err(e) if e.to_string().contains("not available in this FFmpeg build") => {
                 skipped.push(*container_type)
             }
-            Err(e) => panic!("encode {container_type} failed: {e:#}"),
+            Err(e) => return Err(anyhow!("encode {container_type} failed: {e:#}")),
         }
     }
 
     println!("encoded {encoded} containers, skipped: {skipped:?}");
     assert!(encoded > 0, "all audio container encodings were skipped");
+    Ok(())
 }

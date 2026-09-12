@@ -92,3 +92,46 @@ fn remux_test0() {
     let output_path_c = CString::new(output_path.to_string_lossy().as_bytes()).unwrap();
     remux(c"assets/mp4.mp4", &output_path_c).unwrap();
 }
+
+/// 高层 API remux 往返：用 `Demuxer::new_passthrough` + `Muxer::add_copy_stream`
+/// + `mux_packet` 把 MP4 转封装为 MKV（完全内存内），再读回验证可解封装。
+///
+/// 覆盖"理想形态 2：remux passthrough"的端到端路径。
+#[test]
+fn remux_passthrough_roundtrip() {
+    use rsmedia::io::{BufferReader, BufferWriter};
+    use rsmedia::mux::{Demuxer, Muxer};
+
+    let src = std::fs::read("assets/mp4.mp4").unwrap();
+    let reader = BufferReader::new(src).unwrap();
+    let mut demuxer = Demuxer::new_passthrough(reader).unwrap();
+
+    // 为每条输入流建立对应的输出透传流。
+    let nb_in = demuxer.nb_streams();
+    let infos: Vec<_> = (0..nb_in)
+        .map(|i| demuxer.stream_info(i).unwrap())
+        .collect();
+    let mut muxer = Muxer::new_from_writer(BufferWriter::new("matroska").unwrap());
+    muxer.set_interleaved(true);
+    let dst_indices: Vec<_> = infos
+        .iter()
+        .map(|info| muxer.add_copy_stream(info).unwrap())
+        .collect();
+
+    // 逐一读包写入输出
+    while let Some(pkt) = demuxer.demux_packet().unwrap() {
+        let (src_idx, mut packet) = pkt;
+        muxer.mux_packet(&mut packet, dst_indices[src_idx]).unwrap();
+    }
+    muxer.finish().unwrap();
+    let out_bytes = muxer.into_writer().into_bytes();
+    assert!(!out_bytes.is_empty(), "remux produced no output bytes");
+
+    // 读回验证输出容器有效且可解封装
+    let vreader = BufferReader::new(out_bytes).unwrap();
+    let vdemuxer = Demuxer::new_passthrough(vreader).unwrap();
+    assert!(
+        vdemuxer.nb_streams() >= 1,
+        "remuxed container should contain at least one stream"
+    );
+}

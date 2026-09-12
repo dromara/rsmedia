@@ -2,7 +2,7 @@
 mod common;
 use anyhow::{Context, Result, anyhow};
 use common::test_output_path;
-use rsmedia::{EncoderBuilder, utils};
+use rsmedia::{EncoderBuilder, strutils};
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avutil::{AVFrame, opt_set, ra},
@@ -134,16 +134,19 @@ const COMMON_VIDEO_CONTAINERS: &[(&str, &str)] = &[
 fn encode_video_container(container_type: &str, codec_name: &str) -> Result<()> {
     // 编码器是否存在取决于 FFmpeg 编译配置（如 libx264、libtheora），
     // 缺失时跳过该容器而不是失败
-    if AVCodec::find_encoder_by_name(&utils::from_str(codec_name)).is_none() {
+    if AVCodec::find_encoder_by_name(&strutils::str_to_cstring(codec_name)).is_none() {
         anyhow::bail!("encoder {codec_name} not available in this FFmpeg build");
     }
 
     let output_path = test_output_path("encode_video", &format!("test.{container_type}"));
 
-    let mut encoder = EncoderBuilder::new_video(WIDTH, HEIGHT)
+    let encoder = EncoderBuilder::new_video(WIDTH, HEIGHT)
         .with_fps(25.0)
         .with_codec_name(codec_name.to_string())
-        .build_wrapped(output_path.as_path())?;
+        .build()?;
+    let enc_tb = encoder.time_base();
+    let mut muxer = rsmedia::mux::Muxer::new(&output_path)?;
+    let v_idx = muxer.add_encoder(encoder)?;
 
     let mut frame = AVFrame::new();
     frame.set_format(ffi::AV_PIX_FMT_YUV420P as _);
@@ -156,11 +159,12 @@ fn encode_video_container(container_type: &str, codec_name: &str) -> Result<()> 
     for i in 0..FRAME_COUNT {
         fill_test_frame(&mut frame, i)?;
         frame.set_pts(i as i64);
-        encoder.encode_raw(frame.clone())?;
+        frame.set_time_base(enc_tb);
+        muxer.mux(frame.clone(), v_idx)?;
     }
 
     // flush encoder and write trailer
-    encoder.finish()?;
+    muxer.finish()?;
 
     Ok(())
 }
@@ -168,7 +172,7 @@ fn encode_video_container(container_type: &str, codec_name: &str) -> Result<()> 
 /// 遍历常见视频容器逐一编码；编码器缺失的容器跳过并报告，
 /// 但要求至少一个容器成功，防止环境异常时测试空壳通过。
 #[test]
-fn test_encode_video_containers() {
+fn test_encode_video_containers() -> Result<()> {
     let mut skipped = Vec::new();
     let mut encoded = 0;
 
@@ -178,12 +182,13 @@ fn test_encode_video_containers() {
             Err(e) if e.to_string().contains("not available in this FFmpeg build") => {
                 skipped.push(*container_type)
             }
-            Err(e) => panic!("encode {container_type} failed: {e:#}"),
+            Err(e) => return Err(anyhow!("encode {container_type} failed: {e:#}")),
         }
     }
 
     println!("encoded {encoded} containers, skipped: {skipped:?}");
     assert!(encoded > 0, "all video container encodings were skipped");
+    Ok(())
 }
 
 #[test]

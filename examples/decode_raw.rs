@@ -4,16 +4,14 @@
 //! FFmpeg 的 `AVFrame` / `AVPacket`，适合需要精确控制帧数据或做底层处理的场景。
 //!
 //! 覆盖的 API：
-//! - `DecoderWrapper::decode_raw` —— 逐帧解码为原始 `AVFrame`
-//! - `DecoderWrapper::into_parts` —— 解构出底层 `Decoder` 和 `Reader`
-//! - `Decoder::decode_raw_packet` / `Decoder::drain_raw` —— 逐 packet 送入解码器并排空
+//! - `Decoder::decode_raw` —— 逐帧解码为原始 `AVFrame`
 //! - `Decoder::stream_index` —— 解码器所属的流索引
+//! - `Decoder::decode_raw_packet` / `Decoder::drain_raw` —— 逐 packet 送入解码器并排空
 
-use rsmedia::{DecoderBuilder, MediaType, Reader};
+use rsmedia::{DecoderBuilder, MediaType, Reader, StreamReader};
 
 use anyhow::Result;
 use rsmpeg::avutil::AVFrame;
-use std::path::Path;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -21,12 +19,11 @@ fn main() -> Result<()> {
         .init();
     rsmedia::init()?;
 
-    let source = Path::new("/tmp/test.mp4");
-
     // 方式一：高层便捷路径，直接拿到原始 AVFrame
-    let mut decoder = DecoderBuilder::new(MediaType::VIDEO).build_wrapped(source)?;
+    let mut reader = StreamReader::new("/tmp/test.mp4")?;
+    let mut decoder = DecoderBuilder::new(MediaType::VIDEO).build_from_reader(&reader)?;
     let mut raw_count = 0;
-    while let Some(frame) = decoder.decode_raw()? {
+    while let Some(frame) = decoder.decode_raw(&mut reader)? {
         println!(
             "[decode_raw] pts={}, {}x{}",
             frame.pts, frame.width, frame.height
@@ -37,17 +34,16 @@ fn main() -> Result<()> {
         }
     }
 
-    // 方式二：解构出底层 Decoder + Reader，手动逐 packet 送入解码器
-    let (mut raw_decoder, mut reader) = decoder.into_parts();
-    let stream_index = raw_decoder.stream_index();
+    // 方式二：直接使用裸 Decoder + Reader，手动逐 packet 送入解码器
+    let stream_index = decoder.stream_index();
     let mut packet_count = 0;
 
-    while let Some((stream, packet)) = reader.read_packet()? {
+    while let Some((packet_stream_index, packet)) = reader.read_packet()? {
         // 跳过其它流的 packet
-        if stream.index() != stream_index {
+        if packet_stream_index != stream_index {
             continue;
         }
-        if let Some(frame) = raw_decoder.decode_raw_packet(&packet)? {
+        if let Some(frame) = decoder.decode_raw_packet(&packet)? {
             print_frame("packet", &frame);
             packet_count += 1;
             if packet_count >= 10 {
@@ -57,7 +53,7 @@ fn main() -> Result<()> {
     }
 
     // 方式三：解码器排空 —— 取出缓冲在解码器内部、未随 packet 输出的帧
-    while let Some(frame) = raw_decoder.drain_raw()? {
+    while let Some(frame) = decoder.drain_raw()? {
         print_frame("drain", &frame);
     }
 

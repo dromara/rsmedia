@@ -10,7 +10,7 @@
 
 use image::{ImageBuffer, Rgb};
 
-use rsmedia::{DecoderBuilder, MediaFrame, MediaFrameFormat, MediaType, filter};
+use rsmedia::{DecoderBuilder, FrameFormat, MediaFrame, MediaType, StreamReader, filter};
 
 use anyhow::{Context, Result};
 
@@ -51,9 +51,10 @@ fn main() -> Result<()> {
     ];
 
     let filter_count = filters.len();
+    let mut reader = StreamReader::new(&source).context("failed to open input")?;
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO)
         .with_filters(filters)
-        .build_wrapped(source.as_path())
+        .build_from_reader(&reader)
         .context("failed to create decoder")?;
 
     std::fs::create_dir_all(OUTPUT_DIR).context("failed to create output directory")?;
@@ -67,12 +68,12 @@ fn main() -> Result<()> {
     let mut decoded = 0usize;
     let mut saved = 0usize;
     loop {
-        match decoder.decode_frame() {
+        match decoder.decode_frame(&mut reader) {
             Ok(Some(frame)) => {
                 let fmt = frame
                     .format()
                     .map(|f| match f {
-                        MediaFrameFormat::Pixel(p) => p.get_pix_fmt_name().to_string(),
+                        FrameFormat::Pixel(p) => p.get_pix_fmt_name().to_string(),
                         _ => "N/A".to_string(),
                     })
                     .unwrap_or_else(|| "N/A".to_string());

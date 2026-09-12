@@ -7,8 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Error, Result, anyhow};
 use image::DynamicImage;
-use rsmedia::PixelFormat;
-use rsmedia::swctx;
+use rsmedia::{PixelFormat, scale};
 
 use super::av_convert;
 use rsmedia::codec::CodecConfig;
@@ -86,7 +85,7 @@ impl Decoder {
 
                 if let Ok(yuv_frame) = self.codec_context.receive_frame() {
                     // 注意这里的 frame 编码格式为 YUV420P，需要转换为 RGB24
-                    let rgb_frame = swctx::scale_frame(
+                    let rgb_frame = scale::scale_frame(
                         &yuv_frame,
                         yuv_frame.width,
                         yuv_frame.height,
@@ -350,7 +349,7 @@ pub fn pgm_save(frame: &AVFrame, filename: &str) -> Result<()> {
 
 pub fn save_avframe_to_image(yuv_frame: &AVFrame, output_file_name: &str) -> Result<()> {
     // 转换为 RGB24 格式
-    let rgb_frame = swctx::scale_frame(
+    let rgb_frame = scale::scale_frame(
         yuv_frame,
         yuv_frame.width,
         yuv_frame.height,
@@ -365,7 +364,7 @@ pub fn save_avframe_to_image(yuv_frame: &AVFrame, output_file_name: &str) -> Res
 
 pub fn save_avframe_rgb24(frame: &AVFrame, output_file_name: &str) -> Result<()> {
     let rgb_frame = if frame.format != ffi::AV_PIX_FMT_RGB24 {
-        swctx::scale_frame(frame, frame.width, frame.height, PixelFormat::RGB24)?
+        scale::scale_frame(frame, frame.width, frame.height, PixelFormat::RGB24)?
     } else {
         frame.clone()
     };

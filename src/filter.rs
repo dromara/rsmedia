@@ -3,24 +3,15 @@
 //! The filters are implemented using the ffmpeg library.
 //!
 //! See: <https://ffmpeg.org/ffmpeg-filters.html>
-//!
-//!```rust,ignore
-//! /// 水印 + 缩放 + 淡入淡出组合
-//! /// [buffer] -> scale -> drawtext -> [buffersink]
-//! let video_watermark_preset_filters = vec![
-//!     scale(1280, 720, None),
-//!     DrawText::new("Hello Text", 20, 20, 24, "white").build(),
-//!     fade_in(30),
-//!     fade_out(270, 30),
-//! ];
-//! ```
-use crate::{MediaType, PixelFormat, SampleFormat};
+use crate::MediaType;
+use crate::error::{Context, Result, RsmediaError};
+use crate::fmt::{FrameFormat, SampleFormat};
+use crate::pixel::PixelFormat;
 
 use rsmpeg::avfilter::{AVFilter, AVFilterContextMut, AVFilterGraph, AVFilterInOut};
 use rsmpeg::avutil::{AVChannelLayout, AVFrame};
 use rsmpeg::ffi;
 
-use anyhow::{Context, Error, Result};
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -29,6 +20,12 @@ pub struct Filter {
     name: &'static str,
     media_type: MediaType,
     spec: String,
+    /// 滤镜图要求的**输入**格式声明（如 GIF 调色板链要求 RGB 输入）。
+    ///
+    /// `Some(fmt)` 时：编码器/解码器侧把输入帧先转换到 `fmt` 再进图，且
+    /// buffer/abuffer 源按 `fmt` 配置（sink 仍按协商格式）。`None` 时沿用
+    /// 协商格式（默认，src/sink 同格式，零行为变化）。
+    input_format: Option<FrameFormat>,
 }
 
 impl Filter {
@@ -37,7 +34,19 @@ impl Filter {
             name,
             media_type,
             spec,
+            input_format: None,
         }
+    }
+
+    /// 声明滤镜图要求的输入格式（视频=像素格式 / 音频=采样格式，覆盖默认的
+    /// "协商格式"）。
+    ///
+    /// `PixelFormat`/`SampleFormat` 均可隐式转入 [`FrameFormat`]，调用形如
+    /// `.with_input_format(PixelFormat::RGB24)` 或
+    /// `.with_input_format(SampleFormat::FLT)`。
+    pub fn with_input_format(mut self, format: impl Into<FrameFormat>) -> Self {
+        self.input_format = Some(format.into());
+        self
     }
 
     pub fn name(&self) -> &'static str {
@@ -50,6 +59,10 @@ impl Filter {
 
     pub fn spec(&self) -> String {
         self.spec.clone()
+    }
+
+    pub fn input_format(&self) -> Option<FrameFormat> {
+        self.input_format
     }
 }
 
@@ -622,6 +635,44 @@ pub mod video {
     pub fn deblock() -> Filter {
         Filter::new("deblock", MediaType::VIDEO, "deblock".to_string())
     }
+
+    /// GIF 单遍调色板滤镜链（palettegen/paletteuse），输出 pal8 帧供 `gif`
+    /// 编码器直接编码。
+    ///
+    /// 构建的滤镜图：
+    /// `fps=<fps>,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse[输出]`
+    ///
+    /// palettegen 统计**全部**输入帧的最优 256 色调色板（EOF 时才输出），
+    /// paletteuse 用它把帧量化为 pal8 —— 即 FFmpeg 官方推荐的单遍 GIF 调色板
+    /// 管线；palettegen/paletteuse 之间的帧缓存在图内完成，无需两遍编码。
+    ///
+    /// * `fps` - 输出帧率（GIF 体积敏感，通常 10~15）。
+    /// * `dither` - 抖动算法（`"bayer"`/`"floyd_steinberg"`/`"none"` 等），
+    ///   `None` 使用 FFmpeg 默认（sierra2_4a）。
+    ///
+    /// 输入为 RGB 帧：滤镜声明了 RGB24 输入格式，编码器侧自动把输入帧转到
+    /// RGB24 再进图；输出 pal8 与 `gif` 编码器原生格式一致。
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use rsmedia::{EncoderBuilder, filter::video};
+    /// let encoder = EncoderBuilder::new_video(320, 240)
+    ///     .with_codec_name("gif".to_string())
+    ///     .with_fps(10.0)
+    ///     .with_filters(vec![video::gif_palette(10.0, None)])
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    pub fn gif_palette(fps: f32, dither: Option<&str>) -> Filter {
+        let dither_part = dither.map(|d| format!(":dither={d}")).unwrap_or_default();
+        Filter::new(
+            "paletteuse",
+            MediaType::VIDEO,
+            format!("fps={fps},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse{dither_part}"),
+        )
+        .with_input_format(PixelFormat::RGB24)
+    }
 }
 
 pub mod audio {
@@ -724,7 +775,7 @@ pub mod audio {
     /// See: <https://ffmpeg.org/ffmpeg-filters.html#acompressor>
     pub fn compressor(ratio: f32, attack: Option<f32>, release: Option<f32>) -> Result<Filter> {
         if ratio < 1.0 {
-            return Err(Error::msg(format!(
+            return Err(RsmediaError::custom(format!(
                 "Compressor ratio must be >= 1.0: {ratio}"
             )));
         }
@@ -814,7 +865,7 @@ pub mod audio {
     /// 44.1kHz 下 H=177 样本）。当输入总样本数不是 H 的整数倍时会越界写堆内存，
     /// 可能导致进程随机崩溃。上游尚未修复；若使用本滤镜，建议保证输入总样本数为
     /// 窗口尺寸（`H = 2*round(pd*sample_rate/1e6)+1`，默认参数 44.1kHz 下为 177）
-    /// 的整数倍，或改用 [`fft_denoise`](Self::fft_denoise) / [`denoise`](Self::denoise)。
+    /// 的整数倍，或改用 `Filter::fft_denoise` / `Filter::denoise`。
     pub fn anlm_denoise(
         strength: Option<f32>,
         patch_size: Option<i32>,
@@ -887,7 +938,12 @@ impl FilterParams {
 pub struct VideoParams {
     pub width: i32,
     pub height: i32,
+    /// 滤镜图**输出**（sink）像素格式：编码器协商格式。
     pub format: PixelFormat,
+    /// 滤镜图**输入**（buffer 源）像素格式：默认与 `format` 相同；当滤镜链
+    /// 声明了不同的输入格式（如 GIF 调色板链要求 RGB 输入、输出 pal8）时，
+    /// 由编码器侧设置为声明的输入格式，src→sink 的格式转换由滤镜图内完成。
+    pub src_format: PixelFormat,
     pub time_base: ffi::AVRational,
     pub frame_rate: ffi::AVRational,
     pub pixel_aspect: ffi::AVRational,
@@ -898,7 +954,12 @@ pub struct VideoParams {
 pub struct AudioParams {
     pub nb_channels: i32,
     pub sample_rate: i32,
+    /// 滤镜图**输出**（abuffersink 约束）采样格式：编码器/解码器协商格式。
     pub format: SampleFormat,
+    /// 滤镜图**输入**（abuffer）采样格式：默认与 `format` 相同；当滤镜链
+    /// 声明了不同的输入格式（[`Filter::with_input_format`]）时，由编码器/
+    /// 解码器侧设置为声明的格式，src→sink 的格式转换由图内滤镜完成。
+    pub src_format: SampleFormat,
     pub time_base: ffi::AVRational,
 }
 
@@ -942,13 +1003,13 @@ impl FilterGraph {
     /// 初始化过滤器图表
     pub fn init(&mut self, params: &FilterParams, filters: &[Filter]) -> Result<()> {
         if self.is_initialized() {
-            return Err(Error::msg("Filter graph already initialized"));
+            return Err(RsmediaError::custom("Filter graph already initialized"));
         }
 
         // check
         for filter in filters {
             if filter.media_type() != params.media_type() {
-                return Err(Error::msg(format!(
+                return Err(RsmediaError::custom(format!(
                     "Filter media type mismatch: expected {:?}, got {:?}",
                     params.media_type(),
                     filter.media_type()
@@ -980,11 +1041,14 @@ impl FilterGraph {
     /// `buffersink`: <https://ffmpeg.org/ffmpeg-filters.html#buffersink>
     fn setup_video_filters(&mut self, params: &VideoParams, spec: String) -> Result<()> {
         let args = {
+            // buffer 源按"滤镜图输入格式"配置（默认=编码器格式）；sink 仍按
+            // 编码器协商格式约束。二者不同时（如 GIF 调色板链 RGB→pal8），
+            // 格式转换由图内的滤镜（paletteuse/format 等）完成。
             let args = format!(
                 "width={}:height={}:pix_fmt={}:time_base={}/{}:frame_rate={}/{}:pixel_aspect={}/{}",
                 params.width,
                 params.height,
-                params.format.get_pix_fmt_name(),
+                params.src_format.get_pix_fmt_name(),
                 params.time_base.num,
                 params.time_base.den,
                 params.frame_rate.num,
@@ -1021,7 +1085,7 @@ impl FilterGraph {
                 ffi::AV_OPT_TYPE_PIXEL_FMT,
             )
             .context("Failed to set video sink filter context pixel format")?;
-        #[cfg(not(any(feature = "ffmpeg8", feature = "ffmpeg9")))]
+        #[cfg(any(feature = "ffmpeg6", feature = "ffmpeg7"))]
         sink_ctx
             .opt_set_bin(c"pix_fmts", &(ffi::AVPixelFormat::from(params.format)))
             .context("Failed to set video sink filter context pixel format")?;
@@ -1055,7 +1119,7 @@ impl FilterGraph {
                 params.time_base.num,
                 params.time_base.den,
                 params.sample_rate,
-                params.format.get_sample_fmt_name(),
+                params.src_format.get_sample_fmt_name(),
                 channel_desc.to_string_lossy(),
             );
             CString::new(args)?
@@ -1087,7 +1151,7 @@ impl FilterGraph {
             Some(&[params.format as i32]),
             ffi::AV_OPT_TYPE_SAMPLE_FMT,
         )?;
-        #[cfg(not(any(feature = "ffmpeg8", feature = "ffmpeg9")))]
+        #[cfg(any(feature = "ffmpeg6", feature = "ffmpeg7"))]
         sink_ctx.opt_set_bin(c"sample_fmts", &(params.format as i32))?;
         #[cfg(any(feature = "ffmpeg8", feature = "ffmpeg9"))]
         sink_ctx.opt_set_array(
@@ -1096,7 +1160,7 @@ impl FilterGraph {
             Some(&[params.sample_rate]),
             ffi::AV_OPT_TYPE_INT,
         )?;
-        #[cfg(not(any(feature = "ffmpeg8", feature = "ffmpeg9")))]
+        #[cfg(any(feature = "ffmpeg6", feature = "ffmpeg7"))]
         sink_ctx.opt_set_bin(c"sample_rates", &params.sample_rate)?;
         #[cfg(any(feature = "ffmpeg8", feature = "ffmpeg9"))]
         {
@@ -1110,7 +1174,7 @@ impl FilterGraph {
                 )
                 .context("Failed to set audio sink channel layout")?;
         }
-        #[cfg(not(any(feature = "ffmpeg8", feature = "ffmpeg9")))]
+        #[cfg(any(feature = "ffmpeg6", feature = "ffmpeg7"))]
         sink_ctx.opt_set(c"ch_layouts", &channel_desc)?;
         sink_ctx
             .init_str(None)
@@ -1133,7 +1197,7 @@ impl FilterGraph {
     /// 处理单帧
     pub fn process_frame(&mut self, frame: Option<AVFrame>) -> Result<Option<AVFrame>> {
         if !self.is_initialized() {
-            return Err(Error::msg("Filter graph not initialized"));
+            return Err(RsmediaError::custom("Filter graph not initialized"));
         }
 
         {
@@ -1163,14 +1227,16 @@ impl FilterGraph {
                 self.state = FilterGraphState::Flushed;
                 Ok(None)
             }
-            Err(e) => Err(Error::msg(format!("Get frame from buffer sink Error: {e}"))),
+            Err(e) => Err(RsmediaError::custom(format!(
+                "Get frame from buffer sink Error: {e}"
+            ))),
         }
     }
 
     /// 刷新过滤器链
     pub fn flush(&mut self) -> Result<Vec<AVFrame>> {
         if !self.is_initialized() {
-            return Err(Error::msg("Filter graph not initialized"));
+            return Err(RsmediaError::custom("Filter graph not initialized"));
         }
         if self.is_flushed() {
             log::debug!("Filter graph already flushed.");
@@ -1678,5 +1744,144 @@ mod tests {
             f.contains("box=1:boxcolor=black@0.5:boxborderw=0"),
             "box missing: {f}"
         );
+    }
+
+    /// 构造一个 GRAY8 单平面、已分配缓冲的测试帧。
+    fn make_gray8_frame(width: i32, height: i32) -> AVFrame {
+        use crate::error::Context;
+        use crate::pixel::PixelFormat;
+        let mut f = AVFrame::new();
+        f.set_width(width);
+        f.set_height(height);
+        f.set_format(PixelFormat::GRAY8.into());
+        f.alloc_buffer()
+            .context("alloc buffer for gray8 frame")
+            .unwrap();
+        f
+    }
+
+    /// `FilterGraph::process_frame` 独立路径测试（此前仅经 encode 间接覆盖）。
+    ///
+    /// 用真实的 `hflip` 滤镜：单帧进、单帧出；输出尺寸/格式保持，但整行像素
+    /// 顺序被反转。同时验证状态机 `is_initialized` 与 `output_size`。
+    #[test]
+    fn test_filtergraph_process_frame_hflip() -> Result<()> {
+        use crate::pixel::PixelFormat;
+
+        let (w, h) = (8, 4);
+        let src = make_gray8_frame(w, h);
+        // 给每行填入递增的像素值，用于检测 hflip 是否确实翻转了行内顺序。
+        unsafe {
+            let linesize = src.linesize[0] as usize;
+            for y in 0..h as usize {
+                for x in 0..w as usize {
+                    // 像素值 = (y*w + x) % 256，行内单调递增。
+                    *src.data[0].cast::<u8>().add(y * linesize + x) =
+                        ((y * w as usize + x) % 256) as u8;
+                }
+            }
+        }
+
+        let params = FilterParams::Video(VideoParams {
+            width: w,
+            height: h,
+            format: PixelFormat::GRAY8,
+            src_format: PixelFormat::GRAY8,
+            time_base: ffi::AVRational { num: 1, den: 25 },
+            frame_rate: ffi::AVRational { num: 25, den: 1 },
+            pixel_aspect: ffi::AVRational { num: 1, den: 1 },
+        });
+        let filter = video::hflip();
+
+        let mut graph = FilterGraph::new();
+        assert!(!graph.is_initialized(), "graph should start uninitialized");
+        graph.init(&params, &[filter])?;
+        assert!(
+            graph.is_initialized(),
+            "graph should be initialized after init"
+        );
+
+        // 输出链路尺寸应与输入一致。
+        assert_eq!(
+            graph.output_size(),
+            Some((w, h)),
+            "output_size should match input size"
+        );
+
+        // 单帧进 -> 单帧出，行被反转。
+        let out = graph
+            .process_frame(Some(src))?
+            .expect("one input frame should yield one output frame");
+        assert_eq!(out.width, w, "output width mismatch");
+        assert_eq!(out.height, h, "output height mismatch");
+
+        // 校验每个像素是否被水平翻转（逐行逆序）。
+        let linesize = out.linesize[0] as usize;
+        unsafe {
+            let out_ptr = out.data[0].cast::<u8>();
+            for y in 0..h as usize {
+                for x in 0..w as usize {
+                    let expected = ((y * w as usize + (w as usize - 1 - x)) % 256) as u8;
+                    let got = *out_ptr.add(y * linesize + x);
+                    assert_eq!(
+                        got, expected,
+                        "hflip mismatch at ({x},{y}): got {got}, expected {expected}"
+                    );
+                }
+            }
+        }
+
+        // 提交 EOF 后 graph 进入 drained/flushed 状态，flush 亦返回空。
+        assert!(
+            graph.process_frame(None)?.is_none(),
+            "EOF should eventually drain to None"
+        );
+        let remaining = graph.flush()?;
+        assert!(remaining.is_empty(), "no frames should remain after EOF");
+        Ok(())
+    }
+
+    /// 音频 `abuffer`/`abuffersink` 独立路径测试：aformat 把 FLTP 转成 S16。
+    #[test]
+    fn test_filter_graph_process_frame_audio() -> Result<()> {
+        use rsmpeg::avutil::AVChannelLayout;
+
+        let (channels, sample_rate, nb_samples) = (2i32, 44100i32, 1024i32);
+
+        let params = FilterParams::Audio(AudioParams {
+            nb_channels: channels,
+            sample_rate,
+            format: SampleFormat::S16,
+            src_format: SampleFormat::FLTP,
+            time_base: ffi::AVRational { num: 1, den: 44100 },
+        });
+
+        // aformat 把输入转为 S16（与 sink 约束一致）。
+        let mut graph = FilterGraph::new();
+        graph.init(
+            &params,
+            &[audio::format(
+                channels as u32,
+                sample_rate as u32,
+                SampleFormat::S16,
+            )],
+        )?;
+
+        let mut frame = AVFrame::new();
+        frame.set_format(SampleFormat::FLTP as _);
+        frame.set_ch_layout(AVChannelLayout::from_nb_channels(channels).into_inner());
+        frame.set_sample_rate(sample_rate);
+        frame.set_nb_samples(nb_samples);
+        frame.alloc_buffer().context("alloc audio frame")?;
+
+        let out = graph
+            .process_frame(Some(frame))?
+            .expect("audio frame should flow through");
+        assert_eq!(out.sample_rate, sample_rate, "sample rate preserved");
+        assert_eq!(out.nb_samples, nb_samples, "sample count preserved");
+
+        graph.process_frame(None)?;
+        assert!(graph.flush()?.is_empty());
+        Ok(())
     }
 }

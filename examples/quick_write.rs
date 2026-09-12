@@ -1,10 +1,10 @@
 //! 开箱即用地快速写视频：无需手动封装 writer，也无需手动设置 pts。
 //!
 //! 相比 video-rs（用户常需自定义 `VideoWriter` 来管理时间戳），本示例展示
-//! rsmedia 的 `EncoderWrapper::write_frame` + `EncoderBuilder::preset_h264_yuv420p`
-//! 即可逐帧写出，时间戳自动维护。
+//! rsmedia 的裸 `Encoder` + `Muxer`（`EncoderBuilder::preset_h264_yuv420p` +
+//! `add_stream` + `mux`）即可逐帧写出，pts 手动按帧率递增。
 
-use rsmedia::{EncoderBuilder, PixelFormat, frame::MediaFrame, time};
+use rsmedia::{EncoderBuilder, PixelFormat, frame::MediaFrame, mux::Muxer, time};
 
 fn main() -> anyhow::Result<()> {
     rsmedia::init()?;
@@ -13,17 +13,23 @@ fn main() -> anyhow::Result<()> {
     let fps = 30f32;
 
     // 一键预设 + 逐帧快速写入
-    let mut encoder = EncoderBuilder::new_video(width, height)
+    let encoder = EncoderBuilder::new_video(width, height)
         .with_fps(fps)
-        .build_wrapped(std::path::Path::new("/tmp/quick_write.mp4"))?;
+        .build()?;
+    let enc_tb = encoder.time_base();
+    let mut muxer = Muxer::new("/tmp/quick_write.mp4")?;
+    let v_idx = muxer.add_encoder(encoder)?;
 
     for i in 0..60 {
         let frame = rainbow_frame(width, height, i as f32 / 60.0);
-        // 无需 set_pts，write_frame 自动按帧率递增
-        encoder.write_frame(frame)?;
+        let mut av = frame.to_avframe()?;
+        // 编码器 time_base = 1/fps，帧索引即 pts（每帧 1 tick = 1/fps 秒）
+        av.set_pts(i as i64);
+        av.set_time_base(enc_tb);
+        muxer.mux(av, v_idx)?;
     }
 
-    encoder.finish()?;
+    muxer.finish()?;
     println!(
         "Wrote /tmp/quick_write.mp4 ({}x{} @ {}fps)",
         width, height, fps

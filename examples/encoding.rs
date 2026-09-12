@@ -1,6 +1,5 @@
-use rsmedia::{EncoderBuilder, PixelFormat, colors, filter, frame::MediaFrame, time};
-
-use std::path::Path;
+use rsmedia::{EncoderBuilder, HWDeviceConfig, PixelFormat, StreamWriterBuilder, Writer};
+use rsmedia::{colors, filter, frame::MediaFrame, time};
 
 use rsmpeg::avfilter::AVFilter;
 
@@ -39,49 +38,67 @@ fn main() -> anyhow::Result<()> {
         );
     }
 
-    let output_path = Path::new("/tmp/rainbow.mp4");
+    let output_path = "/tmp/rainbow.mp4";
+    let mut writer = StreamWriterBuilder::new(output_path)
+        .build()
+        .expect("failed to create stream writer");
 
     let mut encoder = EncoderBuilder::new_video(width as usize, height as usize)
         // encoder with CUDA acceleration
-        // .with_hardware_device(Some(HWDeviceType::CUDA.auto_best_config().unwrap()))
+        .with_hardware_device(Some(HWDeviceConfig::auto_platform()?))
         // libx264, libx265, h264_nvenc, h264_vaapi
         // .with_codec_name("h264_nvenc".to_string())
         // .with_options(Options::preset_h264_nvenc())
         .with_filters(filters)
-        .build_wrapped(output_path)
+        .build()
         .expect("failed to create encoder");
 
-    // 方法一：encoder.encode() 手动记录 position
-    // let duration: Time = Time::from_nth_of_a_second(24);
-    // let mut position = Time::zero();
-    //
-    // for i in 0..256 {
-    //     // This will create a smooth rainbow animation video!
-    //     let mut frame = rainbow_frame(width as usize, height as usize, i as f32 / 256.0);
-    //
-    //     frame.set_pts(
-    //         position
-    //             .aligned_with_rational(encoder.time_base())
-    //             .into_value()
-    //             .unwrap(),
-    //     );
-    //
-    //     encoder.encode(frame)?;
-    //
-    //     println!("Encoded frame {} at position {}", i, position);
-    //
-    //     // Update the current position and add the inter-frame duration to it.
-    //     position = position.aligned_with(duration).add();
-    // }
+    // 为输出容器添加一条视频流，并写出容器头。
+    let stream_idx = writer.add_stream(encoder.codecpar(), encoder.time_base());
+    writer.write_header()?;
 
-    // 方法二：encoder.write_frame() 自动记录 position
+    // 容器（MP4 的 movenc）可能在 `write_header` 时重设流时间基，因此写包前
+    // 实时取一次输出流时间基。
+    let out_stream_time_base = writer.stream_time_base(stream_idx);
+
+    let mut total_bytes = 0u64;
+    let mut lost = 0usize;
     for i in 0..256 {
-        // This will create a smooth rainbow animation video!
+        // 每一帧对应彩虹色轮上的一个相位，逐帧渐变，生成平滑动画。
         let frame = rainbow_frame(width as usize, height as usize, i as f32 / 256.0);
-        encoder.write_frame(frame)?;
+        // 编码后立即交给 StreamWriter 写盘：先完成 `encode()`，再把每次返回的
+        // packet 写到容器，这样不丢包。
+        let packets = encoder.encode(frame)?; // 编码：由 Encoder 产出 packet
+        let n_packets = packets.len();
+        if packets.is_empty() {
+            lost += 1; // 仍在编码器缓冲中，尚未产出 packet（关键帧延迟等）
+            continue;
+        }
+
+        for mut p in packets {
+            total_bytes += p.size as u64;
+            p.set_pos(-1);
+            p.set_stream_index(stream_idx as i32);
+            // 把 packet 时间戳从编码器时间基换算到输出流时间基
+            p.rescale_ts(encoder.time_base(), out_stream_time_base);
+            // 写出到容器：由 StreamWriter 承接，不丢包
+            writer.write_frame(&mut p)?;
+        }
+
+        println!(
+            "Encoded frame {i}: {n} packets, cumulated {total_bytes} bytes",
+            n = n_packets
+        );
     }
 
-    encoder.finish()?;
+    encoder.flush(&mut writer, false, stream_idx, out_stream_time_base)?;
+
+    writer.write_trailer()?;
+
+    println!(
+        "Encoded {total_bytes} bytes to {:?} via Encoder + StreamWriter ({} frames, {} frames were buffered)",
+        output_path, 256, lost,
+    );
 
     Ok(())
 }

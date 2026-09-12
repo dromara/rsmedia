@@ -13,6 +13,12 @@ updates:
       - "exclude"
     commit-message:
       prefix: "chore(github-actions)"
+      include: "scope"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: "cargo"
     directory: "/"
@@ -24,13 +30,12 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "chore(cargo)"
-    reviewers:
-      - "phial3"
-    assignees:
-      - "phial3"
-    target-branch: "rsmpeg"
-    open-pull-requests-limit: 5
+      include: "scope"
     groups:
       rust:
         patterns:
           - "*"
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch

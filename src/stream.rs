@@ -1,17 +1,54 @@
+use crate::error::{Result, RsmediaError};
+use crate::fmt::FrameFormat;
 use crate::hwaccel::HWDeviceType;
 use crate::io::{Reader, Writer};
-use crate::{MediaType, Options, PixelFormat, SampleFormat, utils};
+use crate::strutils;
+use crate::{Metadata, PixelFormat, SampleFormat};
 
-use rsmpeg::avcodec::{AVCodec, AVCodecParametersRef, AVPacket};
-use rsmpeg::avformat::{AVInputFormatRef, AVStream};
-use rsmpeg::avutil::AVDictionaryRef;
+use rsmpeg::avcodec::{AVCodec, AVCodecParameters};
+use rsmpeg::avformat::AVStream;
+use rsmpeg::avutil::{self, AVChannelLayout};
 use rsmpeg::ffi;
 
-use anyhow::{Error, Result};
-use std::collections::HashMap;
-use std::marker::PhantomData;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
-use std::ptr::NonNull;
+
+// 由单源表生成枚举与双向映射：判别值即 FFmpeg 常量值，
+// 未知/版本差异的 `AVMEDIA_TYPE_*` 回退为 `UNKNOWN`（而非 panic）。
+// 枚举 doc 写在宏调用括号内（`#[$em]` 转发到生成的枚举）——
+// 挂在宏调用外部的 doc 注释 rustdoc 不认，会触发 unused_doc_comments 警告。
+ffi_enum_wrap_from!(
+    /// Media type (FFmpeg `AVMEDIA_TYPE_*`): the classification of a stream.
+    ///
+    /// Generated from one `variant => constant` table with a two-way `From`. A value the table
+    /// does not list panics rather than degrading to `UNKNOWN`, so a stream type this crate does
+    /// not model is reported immediately instead of being silently treated as unknown — the
+    /// listed `AVMEDIA_TYPE_UNKNOWN` still converts to `UNKNOWN` as usual.
+    MediaType => ffi::AVMediaType,
+    repr = i32,
+    fallback = panic {
+        UNKNOWN => ffi::AVMEDIA_TYPE_UNKNOWN;
+        VIDEO => ffi::AVMEDIA_TYPE_VIDEO;
+        AUDIO => ffi::AVMEDIA_TYPE_AUDIO;
+        DATA => ffi::AVMEDIA_TYPE_DATA;
+        SUBTITLE => ffi::AVMEDIA_TYPE_SUBTITLE;
+        ATTACHMENT => ffi::AVMEDIA_TYPE_ATTACHMENT;
+    }
+);
+
+impl MediaType {
+    pub fn get_media_name(&self) -> String {
+        avutil::get_media_type_string(*self as _).map_or("Unknown".to_string(), |s| {
+            strutils::cstr_to_string(s).unwrap()
+        })
+    }
+}
+
+impl Display for MediaType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.get_media_name())
+    }
+}
 
 /// Holds transferable stream information. This can be used to duplicate stream settings for the
 /// purpose of transmuxing or transcoding.
@@ -27,8 +64,10 @@ pub struct StreamInfo {
     pub codec_id: u32,
     /// Codec Additional Info
     pub codec_tag: u32,
-    /// Video: [`PixelFormat`], Audio: [`SampleFormat`]
-    pub format: i32,
+    /// 统一格式表示：Video 为 [`FrameFormat::Pixel`]（[`PixelFormat`]），
+    /// Audio 为 [`FrameFormat::Sample`]（[`SampleFormat`]）；
+    /// 字幕/数据等无格式概念的流回退为 [`FrameFormat::Pixel`]([`PixelFormat::NONE`])。
+    pub format: FrameFormat,
     /// Number of bits per sample or zero if unknown for the given codec.
     pub bits_per_sample: i32,
     /// Only return non-zero if the bits per sample is exactly correct, not an approximation.
@@ -52,8 +91,6 @@ pub struct StreamInfo {
     pub bit_rate: i64,
     /// combination of AV_DISPOSITION_*
     pub disposition: i32,
-    /// discard of AVDISCARD_*
-    pub discard: i32,
     /// codec profile
     pub profile: i32,
     /// codec level, eg. 3.1, 4.1 etc.
@@ -70,8 +107,6 @@ pub struct StreamInfo {
     pub real_frame_rate: ffi::AVRational,
     /// Number of bits in timestamps. Used for wrapping control.
     pub pts_wrap_bits: i32,
-    /// Flags indicating events happening on the stream, a combination of AVSTREAM_EVENT_FLAG_*.
-    pub event_flags: i32,
     /// video_delay
     pub video_delay: i32,
     /// Video sample aspect ratio
@@ -79,17 +114,17 @@ pub struct StreamInfo {
     /// Display aspect ratio
     pub display_aspect_ratio: ffi::AVRational,
     /// Video color space, eg: ffi::AVCOL_SPC_*
-    pub color_space: usize,
+    pub color_space: ffi::AVColorSpace,
     /// Video color range, eg: ffi::AVCOL_RANGE_*
-    pub color_range: usize,
+    pub color_range: ffi::AVColorRange,
     /// Video color primaries, eg: ffi::AVCOL_PRI_*
-    pub color_primaries: usize,
+    pub color_primaries: ffi::AVColorPrimaries,
     /// Video color transfer, eg: ffi::AVCOL_TRC_*
-    pub color_transfer: usize,
+    pub color_transfer: ffi::AVColorTransferCharacteristic,
     /// Location of chroma samples, eg: ffi::AVCHROMA_LOC_*
-    pub chroma_location: usize,
+    pub chroma_location: ffi::AVChromaLocation,
     /// Video field order
-    pub field_order: usize,
+    pub field_order: ffi::AVFieldOrder,
     /// Video rotation
     pub rotation: f64,
 
@@ -97,7 +132,7 @@ pub struct StreamInfo {
     /// Audio sample rate
     pub sample_rate: i32,
     /// Audio Channel layout
-    pub channel_layout: ffi::AVChannelLayout,
+    pub channel_layout: AVChannelLayout,
     /// Audio frame size
     pub frame_size: i32,
     /// Audio block align
@@ -117,8 +152,14 @@ pub struct StreamInfo {
 
     // extra
     pub extra_data: Option<Vec<u8>>,
-    pub metadata: HashMap<String, String>,
-    pub codec_parameters: NonNull<ffi::AVCodecParameters>,
+    pub metadata: Metadata,
+    /// **owned 快照**：构建本 `StreamInfo` 时通过 `avcodec_parameters_copy`
+    /// 深拷贝得到的 codec 参数，生命周期完全独立于源 reader/writer，可由
+    /// [`Self::into_parts`] 取出透传给 mux。
+    ///
+    /// rsmpeg 的 [`AVCodecParameters`] 在 `Drop` 时调用
+    /// `avcodec_parameters_free` 释放，故不会泄漏，也不存在 use-after-free。
+    pub codec_parameters: AVCodecParameters,
 }
 
 impl StreamInfo {
@@ -133,7 +174,7 @@ impl StreamInfo {
             .input()
             .streams()
             .get(stream_index)
-            .ok_or(Error::msg(format!(
+            .ok_or(RsmediaError::custom(format!(
                 "reader stream: {stream_index} not found!"
             )))?;
 
@@ -145,7 +186,7 @@ impl StreamInfo {
             .output()
             .streams()
             .get(stream_index)
-            .ok_or(Error::msg(format!(
+            .ok_or(RsmediaError::custom(format!(
                 "writer stream: {stream_index} not found!"
             )))?;
 
@@ -157,12 +198,17 @@ impl StreamInfo {
         let codec_type = codecpar.codec_type();
         let metadata = stream
             .metadata()
-            .map_or(HashMap::new(), |d| Options::new(d.to_owned()).into());
-        let bytes_per_sample = if codec_type.is_audio() {
-            SampleFormat::from(codecpar.format).get_bytes_per_sample()
+            .map_or_else(Metadata::new, |d| Metadata::from_dict(&d));
+        // 统一格式：视频 → 像素格式，音频 → 采样格式，其他 → NONE 占位
+        let format = if codec_type.is_video() {
+            FrameFormat::Pixel(PixelFormat::from(codecpar.format))
+        } else if codec_type.is_audio() {
+            FrameFormat::Sample(SampleFormat::from(codecpar.format))
         } else {
-            None
+            FrameFormat::Pixel(PixelFormat::NONE)
         };
+
+        let bytes_per_sample = format.into_sample().and_then(|s| s.get_bytes_per_sample());
 
         // descriptor() 返回 Result，未知格式时返回错误而非 panic
         let pix_fmt_desc = if codec_type.is_video() {
@@ -197,7 +243,7 @@ impl StreamInfo {
             #[allow(clippy::unnecessary_cast)]
             codec_id: codecpar.codec_id as u32,
             codec_tag: codecpar.codec_tag,
-            format: codecpar.format,
+            format,
             bits_per_sample,
             exact_bits_per_sample,
             bits_per_pixel,
@@ -207,7 +253,6 @@ impl StreamInfo {
             start_time: stream.start_time,
             nb_frames: stream.nb_frames,
             disposition: stream.disposition,
-            discard: stream.discard,
             profile: codecpar.profile,
             level: codecpar.level,
             // Video
@@ -218,20 +263,23 @@ impl StreamInfo {
             avg_frame_rate: stream.avg_frame_rate,
             real_frame_rate: stream.r_frame_rate,
             pts_wrap_bits: stream.pts_wrap_bits,
-            event_flags: stream.event_flags,
             video_delay: codecpar.video_delay,
             sample_aspect_ratio: codecpar.sample_aspect_ratio,
-            display_aspect_ratio: stream.sample_aspect_ratio,
-            color_space: codecpar.color_space as usize,
-            color_range: codecpar.color_range as usize,
-            color_transfer: codecpar.color_trc as usize,
-            color_primaries: codecpar.color_primaries as usize,
-            chroma_location: codecpar.chroma_location as usize,
-            field_order: codecpar.field_order as usize,
+            display_aspect_ratio: Self::compute_display_aspect_ratio(
+                codecpar.sample_aspect_ratio,
+                codecpar.width,
+                codecpar.height,
+            ),
+            color_space: codecpar.color_space,
+            color_range: codecpar.color_range,
+            color_transfer: codecpar.color_trc,
+            color_primaries: codecpar.color_primaries,
+            chroma_location: codecpar.chroma_location,
+            field_order: codecpar.field_order,
             rotation: Self::get_stream_display_rotation(stream, &metadata),
             // Audio
             sample_rate: codecpar.sample_rate,
-            channel_layout: codecpar.ch_layout,
+            channel_layout: codecpar.ch_layout().clone(),
             frame_size: codecpar.frame_size,
             block_align: codecpar.block_align,
             initial_padding: codecpar.initial_padding,
@@ -243,22 +291,75 @@ impl StreamInfo {
             // extra
             metadata,
             extra_data: Self::get_extra_data(stream),
-            codec_parameters: NonNull::new(stream.codecpar).unwrap(),
+            // owned 深拷贝快照：`AVCodecParameters::clone` 内部经
+            // `avcodec_parameters_copy` 拷贝，Drop 时释放，生命周期独立。
+            codec_parameters: stream.codecpar().clone(),
         })
     }
 
-    fn get_stream_display_rotation(_stream: &AVStream, map: &HashMap<String, String>) -> f64 {
-        fn get_rotation_from_metadata(map: &HashMap<String, String>) -> f64 {
-            if let Some(value) = map.get("rotate") {
-                value.parse::<f64>().unwrap_or(0.0)
-            } else {
-                0.0
+    /// 计算显示宽高比 DAR = SAR × (width / height)。
+    ///
+    /// SAR 未知（0/1，FFmpeg 惯例按方形像素处理）时退化为 width/height。
+    /// 用 `av_reduce` 规约分数（与 FFmpeg 内部一致），避免溢出且得到最简比。
+    fn compute_display_aspect_ratio(
+        sample_aspect_ratio: ffi::AVRational,
+        width: i32,
+        height: i32,
+    ) -> ffi::AVRational {
+        if width <= 0 || height <= 0 {
+            return ffi::AVRational { num: 0, den: 1 };
+        }
+        // SAR 未知/非法时按方形像素（1/1）处理
+        let (sar_num, sar_den) = if sample_aspect_ratio.num <= 0 || sample_aspect_ratio.den <= 0 {
+            (1, 1)
+        } else {
+            (
+                sample_aspect_ratio.num as i64,
+                sample_aspect_ratio.den as i64,
+            )
+        };
+        let mut num: i32 = 0;
+        let mut den: i32 = 1;
+        unsafe {
+            ffi::av_reduce(
+                &mut num,
+                &mut den,
+                sar_num * width as i64,
+                sar_den * height as i64,
+                i32::MAX as i64,
+            );
+        }
+        ffi::AVRational { num, den }
+    }
+
+    /// 读取视频流旋转角度（度，顺时针）。
+    ///
+    /// 优先级：
+    /// 1. **side_data display matrix**（`AV_PKT_DATA_DISPLAYMATRIX`，FFmpeg 6+
+    ///    移到 `codecpar.coded_side_data`）：手机拍摄视频的标准存储方式，
+    ///    `av_display_rotation_get` 返回**逆时针**角度，取负转为顺时针语义。
+    /// 2. `rotate` metadata 标签：旧版 mov/mp4 demuxer 的写入方式（新版
+    ///    demuxer 会同时写入 side_data，两者一致时优先 side_data）。
+    fn get_stream_display_rotation(stream: &AVStream, map: &Metadata) -> f64 {
+        // 1. side_data display matrix（codecpar.coded_side_data，FFmpeg 6+）
+        let codecpar = stream.codecpar();
+        let nb_side_data = codecpar.nb_coded_side_data.max(0) as usize;
+        if nb_side_data > 0 && !codecpar.coded_side_data.is_null() {
+            unsafe {
+                let entries = std::slice::from_raw_parts(codecpar.coded_side_data, nb_side_data);
+                for entry in entries {
+                    if entry.type_ == ffi::AV_PKT_DATA_DISPLAYMATRIX && entry.size >= 9 * 4 {
+                        // av_display_rotation_get 返回逆时针角度，取负为顺时针
+                        return -ffi::av_display_rotation_get(entry.data as *const i32);
+                    }
+                }
             }
         }
 
-        // FIXME:
-        // firstly, should get side_data from stream, and find rotation side_data
-        get_rotation_from_metadata(map)
+        // 2. rotate metadata 标签（旧 demuxer 回退）
+        map.get("rotate")
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0)
     }
 
     fn get_extra_data(stream: &AVStream) -> Option<Vec<u8>> {
@@ -284,154 +385,162 @@ impl StreamInfo {
     ///
     /// A tuple consisting of:
     /// * The stream index.
-    /// * Codec parameters.
+    /// * Owned codec parameters snapshot.
     /// * Original stream time base.
-    pub fn into_parts(self) -> (usize, NonNull<ffi::AVCodecParameters>, ffi::AVRational) {
+    pub fn into_parts(self) -> (usize, AVCodecParameters, ffi::AVRational) {
         (self.index, self.codec_parameters, self.time_base)
     }
 
     /// find codec name, if have hw_device_type, will use hw accelerated codec name
     /// if not, will use current stream codec name
+    ///
+    /// 硬件解码器名先经 `find_decoder_by_name` 验证存在（表项可能因 FFmpeg
+    /// 版本/编译选项不存在，如 ffmpeg6 无 `*_vulkan` 解码器），不存在时
+    /// 回退到通用软件解码器名。
     pub fn find_decoder_name(&self, hw_device_type: Option<HWDeviceType>) -> Option<String> {
         let codec_id = self.codec_id as ffi::AVCodecID;
-        let codec_name = utils::to_string(AVCodec::find_decoder(codec_id)?.name()).unwrap();
-
-        let hw_codec_name = if let Some(hw_type) = hw_device_type {
-            match hw_type {
-                HWDeviceType::CUDA => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_VC1 => Some("vc1_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_VP8 => Some("vp8_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_VP9 => Some("vp9_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_cuvid".to_string()),
-                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_cuvid".to_string()),
-                    _ => None,
-                },
-                HWDeviceType::QSV => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
-                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
-                    ffi::AV_CODEC_ID_VC1 => Some("vc1_qsv".to_string()),
-                    ffi::AV_CODEC_ID_VP8 => Some("vp8_qsv".to_string()),
-                    ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
-                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
-                    _ => None,
-                },
-                HWDeviceType::VAAPI => {
-                    // VAAPI使用通用解码器，但需要特定配置
-                    match codec_id {
-                        ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
-                        ffi::AV_CODEC_ID_VC1 => Some("vc1_vaapi".to_string()),
-                        _ => None,
-                    }
+        let codec_name = strutils::cstr_to_string_lossy(AVCodec::find_decoder(codec_id)?.name());
+        let hw_codec_name = hw_device_type
+            .and_then(|hw| hw_decoder_name(hw, codec_id))
+            .filter(|name| {
+                let exists =
+                    AVCodec::find_decoder_by_name(&strutils::str_to_cstring(name)).is_some();
+                if !exists {
+                    log::debug!(
+                        "HW decoder '{name}' not registered in this FFmpeg build, \
+                         falling back to software decoder '{codec_name}'"
+                    );
                 }
-                HWDeviceType::VULKAN => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_vulkan".to_string()),
-                    _ => None,
-                },
-                _ => None,
-            }
-        } else {
-            None
-        };
-
-        if hw_codec_name.is_some() {
-            hw_codec_name
-        } else {
-            Some(codec_name)
-        }
+                exists
+            });
+        Some(hw_codec_name.unwrap_or(codec_name))
     }
 
     /// find encoder name, if we have hw_device_type, will use hw accelerated codec name
     /// if not, will use current stream codec name
-    pub fn find_encoder_name(
-        stream_info: &StreamInfo,
-        hw_device_type: Option<HWDeviceType>,
-    ) -> Option<String> {
-        let codec_id = stream_info.codec_id as ffi::AVCodecID;
-        let codec_name = utils::to_string(AVCodec::find_encoder(codec_id)?.name()).unwrap();
+    ///
+    /// 与 [`Self::find_decoder_name`] 对称：硬件编码器名同样经验证存在后才使用。
+    pub fn find_encoder_name(&self, hw_device_type: Option<HWDeviceType>) -> Option<String> {
+        let codec_id = self.codec_id as ffi::AVCodecID;
+        let codec_name = strutils::cstr_to_string_lossy(AVCodec::find_encoder(codec_id)?.name());
+        let hw_codec_name = hw_device_type
+            .and_then(|hw| hw_encoder_name(hw, codec_id))
+            .filter(|name| {
+                let exists =
+                    AVCodec::find_encoder_by_name(&strutils::str_to_cstring(name)).is_some();
+                if !exists {
+                    log::debug!(
+                        "HW encoder '{name}' not registered in this FFmpeg build, \
+                         falling back to software encoder '{codec_name}'"
+                    );
+                }
+                exists
+            });
+        Some(hw_codec_name.unwrap_or(codec_name))
+    }
+}
 
-        let hw_codec_name = if let Some(hw_type) = hw_device_type {
-            match hw_type {
-                HWDeviceType::CUDA => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_nvenc".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_nvenc".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_nvenc".to_string()),
-                    _ => None,
-                },
-                HWDeviceType::QSV => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
-                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
-                    ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
-                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
-                    _ => None,
-                },
-                HWDeviceType::VAAPI => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
-                    ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
-                    ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
-                    ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
-                    ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
-                    ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
-                    _ => None,
-                },
-                HWDeviceType::VIDEOTOOLBOX => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
-                    ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
-                    _ => None,
-                },
-                HWDeviceType::VULKAN => match codec_id {
-                    ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
-                    ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
-                    _ => None,
-                },
-                _ => None,
-            }
-        } else {
-            None
-        };
+/// 返回解码器对应的硬件加速编解码器名称（如 `h264_cuvid`），当前设备类型
+/// 不支持该编码时返回 `None`（调用方随后回退到软件解码器）。
+fn hw_decoder_name(hw_type: HWDeviceType, codec_id: ffi::AVCodecID) -> Option<String> {
+    match hw_type {
+        HWDeviceType::CUDA => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_cuvid".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_cuvid".to_string()),
+            ffi::AV_CODEC_ID_MPEG1VIDEO => Some("mpeg1_cuvid".to_string()),
+            ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_cuvid".to_string()),
+            ffi::AV_CODEC_ID_MPEG4 => Some("mpeg4_cuvid".to_string()),
+            ffi::AV_CODEC_ID_VC1 => Some("vc1_cuvid".to_string()),
+            ffi::AV_CODEC_ID_VP8 => Some("vp8_cuvid".to_string()),
+            ffi::AV_CODEC_ID_VP9 => Some("vp9_cuvid".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_cuvid".to_string()),
+            ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_cuvid".to_string()),
+            _ => None,
+        },
+        HWDeviceType::QSV => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
+            ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
+            ffi::AV_CODEC_ID_VC1 => Some("vc1_qsv".to_string()),
+            ffi::AV_CODEC_ID_VP8 => Some("vp8_qsv".to_string()),
+            ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
+            ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
+            _ => None,
+        },
+        HWDeviceType::VULKAN => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_vulkan".to_string()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 
-        if hw_codec_name.is_some() {
-            hw_codec_name
-        } else {
-            Some(codec_name)
-        }
+/// 硬件编码器对应的硬件编解码器名称（如 `h264_nvenc`），设备类型不支持该
+/// 编码时返回 `None`（调用方随后回退到软件编码器）。
+fn hw_encoder_name(hw_type: HWDeviceType, codec_id: ffi::AVCodecID) -> Option<String> {
+    match hw_type {
+        HWDeviceType::CUDA => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_nvenc".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_nvenc".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_nvenc".to_string()),
+            _ => None,
+        },
+        HWDeviceType::QSV => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_qsv".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_qsv".to_string()),
+            ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_qsv".to_string()),
+            ffi::AV_CODEC_ID_VP9 => Some("vp9_qsv".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_qsv".to_string()),
+            ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_qsv".to_string()),
+            _ => None,
+        },
+        HWDeviceType::VAAPI => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_vaapi".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_vaapi".to_string()),
+            ffi::AV_CODEC_ID_MPEG2VIDEO => Some("mpeg2_vaapi".to_string()),
+            ffi::AV_CODEC_ID_VP8 => Some("vp8_vaapi".to_string()),
+            ffi::AV_CODEC_ID_VP9 => Some("vp9_vaapi".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_vaapi".to_string()),
+            ffi::AV_CODEC_ID_MJPEG => Some("mjpeg_vaapi".to_string()),
+            _ => None,
+        },
+        HWDeviceType::VIDEOTOOLBOX => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_videotoolbox".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_videotoolbox".to_string()),
+            ffi::AV_CODEC_ID_PRORES => Some("prores_videotoolbox".to_string()),
+            _ => None,
+        },
+        HWDeviceType::VULKAN => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_vulkan".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_vulkan".to_string()),
+            _ => None,
+        },
+        // Windows：D3D11VA 设备类型承载 AMD AMF 编码器
+        //（AMF 无独立 hwcontext，挂在 d3d11va 下）。
+        HWDeviceType::D3D11VA => match codec_id {
+            ffi::AV_CODEC_ID_H264 => Some("h264_amf".to_string()),
+            ffi::AV_CODEC_ID_HEVC => Some("hevc_amf".to_string()),
+            ffi::AV_CODEC_ID_AV1 => Some("av1_amf".to_string()),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
 impl std::fmt::Debug for StreamInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let codec_name = unsafe {
             let codec_id = self.codec_id as ffi::AVCodecID;
-            utils::from_c_char(ffi::avcodec_get_name(codec_id))
+            strutils::c_char_to_str(ffi::avcodec_get_name(codec_id))
         };
-        let format = {
-            if self.media_type == MediaType::VIDEO {
-                PixelFormat::from(self.format).get_pix_fmt_name().to_owned()
-            } else if self.media_type == MediaType::AUDIO {
-                SampleFormat::from(self.format).get_sample_fmt_name()
-            } else {
-                format!("Unknown:{}", self.format).to_string()
-            }
+        let format = match self.format {
+            FrameFormat::Pixel(p) => p.get_pix_fmt_name().to_owned(),
+            FrameFormat::Sample(s) => s.get_sample_fmt_name(),
         };
-        let stream_type = self.media_type.get_media_type_string();
+        let stream_type = self.media_type.get_media_name();
         write!(
             f,
             "{} #{}: codec={}, format={}, size={}x{}, fps={:?}, bit_rate={}, sample_rate={}, nb_channels={}, video_delay={}",
@@ -450,133 +559,101 @@ impl std::fmt::Debug for StreamInfo {
     }
 }
 
-impl std::fmt::Display for StreamInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for StreamInfo {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
     }
 }
 
+// `StreamInfo` 完全持有自身数据（`codec_parameters` 为深拷贝的 owned 快照），
+// 不引用任何外部 reader/writer 的生命周期，可安全跨线程传递与共享。
+// 由于 rsmpeg 的 `AVCodecParameters` 仅实现了 `Send` 而未实现 `Sync`，
+// `StreamInfo` 无法自动推导 `Sync`，此处手动补上（比较 `&self` 只读访问
+// 快照字段，无数据竞争）。
 unsafe impl Send for StreamInfo {}
 unsafe impl Sync for StreamInfo {}
 
-//////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::StreamReader;
 
-pub struct Stream<'a> {
-    av_stream: &'a AVStream,
-    iformat: AVInputFormatRef<'a>,
-    metadata: Option<AVDictionaryRef<'a>>,
-}
+    /// DAR = SAR × (W/H)，各退化路径与规约均正确。
+    #[test]
+    fn test_compute_display_aspect_ratio() {
+        let ar = |num: i32, den: i32| ffi::AVRational { num, den };
+        let eq_ar = |a: ffi::AVRational, b: ffi::AVRational| a.num == b.num && a.den == b.den;
 
-impl<'a> Stream<'a> {
-    pub fn wrap(
-        av_stream: &'a AVStream,
-        iformat: AVInputFormatRef<'a>,
-        metadata: Option<AVDictionaryRef<'a>>,
-    ) -> Stream<'a> {
-        Stream {
-            av_stream,
-            iformat,
-            metadata,
+        // SAR 未知（0/1）→ 方形像素，DAR = W/H
+        assert!(eq_ar(
+            StreamInfo::compute_display_aspect_ratio(ar(0, 1), 1920, 1080),
+            ar(16, 9)
+        ));
+        // SAR 1/1 → DAR = W/H
+        assert!(eq_ar(
+            StreamInfo::compute_display_aspect_ratio(ar(1, 1), 1920, 1080),
+            ar(16, 9)
+        ));
+        // 变形宽银幕：SAR 2/1 + 720x576(5/4) → DAR = 5/2
+        assert!(eq_ar(
+            StreamInfo::compute_display_aspect_ratio(ar(2, 1), 720, 576),
+            ar(5, 2)
+        ));
+        // 分数需规约：SAR 118/81 + 1920x1080 → 118*16/(81*9) = 1888/729（已最简）
+        assert!(eq_ar(
+            StreamInfo::compute_display_aspect_ratio(ar(118, 81), 1920, 1080),
+            ar(1888, 729)
+        ));
+        // 非视频流（W/H 为 0）→ 0/1
+        assert!(eq_ar(
+            StreamInfo::compute_display_aspect_ratio(ar(1, 1), 0, 0),
+            ar(0, 1)
+        ));
+    }
+
+    /// VAAPI 必须回退到通用软件解码器（`h264_vaapi` 是编码器名，
+    /// 若返回会导致 Demuxer 构建失败）。
+    #[test]
+    fn test_find_decoder_name_vaapi_falls_back() {
+        let reader =
+            StreamReader::new(std::path::Path::new("assets/mp4.mp4")).expect("open test asset");
+        let info = StreamInfo::from_reader(&reader, 0).expect("read stream 0");
+        assert_eq!(info.media_type, MediaType::VIDEO);
+
+        let generic = info.find_decoder_name(None).expect("generic decoder");
+        let vaapi = info
+            .find_decoder_name(Some(HWDeviceType::VAAPI))
+            .expect("vaapi lookup");
+        assert_eq!(
+            vaapi, generic,
+            "VAAPI must fall back to the generic decoder"
+        );
+        assert_ne!(vaapi, "h264_vaapi");
+    }
+
+    /// 存在性验证：表中列出但当前 FFmpeg 构建未注册的硬件解码器（如
+    /// ffmpeg6 无 `*_vulkan`）应回退到软件解码器，而不是返回无效名字。
+    #[test]
+    fn test_find_decoder_name_unregistered_hw_falls_back() -> Result<()> {
+        let reader = StreamReader::new("assets/mp4.mp4")?;
+        let info = StreamInfo::from_reader(&reader, 0)?;
+
+        for hw in [HWDeviceType::CUDA, HWDeviceType::VULKAN, HWDeviceType::QSV] {
+            let name = info
+                .find_decoder_name(Some(hw))
+                .ok_or_else(|| RsmediaError::custom(format!("lookup for {hw:?} failed")))?;
+            let registered = if let Some(codec) =
+                AVCodec::find_decoder_by_name(&strutils::str_to_cstring(&name))
+            {
+                strutils::cstr_to_string(codec.name()).unwrap() == name
+            } else {
+                false
+            };
+            assert!(
+                registered,
+                "find_decoder_name({hw:?}) returned '{name}' which is not registered"
+            );
         }
-    }
-
-    pub fn iformat(&self) -> &AVInputFormatRef<'a> {
-        &self.iformat
-    }
-
-    pub fn ctx_metadata(&self) -> &Option<AVDictionaryRef<'a>> {
-        &self.metadata
-    }
-}
-
-impl Stream<'_> {
-    pub fn id(&self) -> i32 {
-        self.av_stream.id
-    }
-
-    pub fn index(&self) -> usize {
-        self.av_stream.index as usize
-    }
-
-    pub fn time_base(&self) -> ffi::AVRational {
-        self.av_stream.time_base
-    }
-
-    pub fn start_time(&self) -> i64 {
-        self.av_stream.start_time
-    }
-
-    pub fn duration(&self) -> i64 {
-        self.av_stream.duration
-    }
-
-    pub fn nb_frames(&self) -> i64 {
-        self.av_stream.nb_frames
-    }
-
-    pub fn disposition(&self) -> i32 {
-        self.av_stream.disposition
-    }
-
-    pub fn discard(&self) -> ffi::AVDiscard {
-        self.av_stream.discard
-    }
-
-    pub fn r_frame_rate(&self) -> ffi::AVRational {
-        self.av_stream.r_frame_rate
-    }
-
-    pub fn avg_frame_rate(&self) -> ffi::AVRational {
-        self.av_stream.avg_frame_rate
-    }
-
-    pub fn parameters(&self) -> AVCodecParametersRef<'_> {
-        self.av_stream.codecpar()
-    }
-
-    pub fn metadata(&self) -> Option<AVDictionaryRef<'_>> {
-        self.av_stream.metadata()
-    }
-}
-
-impl PartialEq for Stream<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.av_stream.id == other.av_stream.id
-    }
-}
-
-impl Eq for Stream<'_> {}
-
-/////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////
-
-pub struct PacketSideData<'a> {
-    ptr: *mut ffi::AVPacketSideData,
-    _marker: PhantomData<&'a AVPacket>,
-}
-
-impl PacketSideData<'_> {
-    pub fn wrap(ptr: *mut ffi::AVPacketSideData) -> Self {
-        PacketSideData {
-            ptr,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn as_ptr(&self) -> *const ffi::AVPacketSideData {
-        self.ptr as *const _
-    }
-
-    pub fn kind(&self) -> ffi::AVPacketSideDataType {
-        unsafe { ffi::AVPacketSideDataType::from((*self.as_ptr()).type_) }
-    }
-
-    pub fn size(&self) -> usize {
-        unsafe { (*self.as_ptr()).size }
-    }
-
-    pub fn data(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts((*self.as_ptr()).data, (*self.as_ptr()).size) }
+        Ok(())
     }
 }

@@ -1,190 +1,9 @@
-use crate::{PixelFormat, SampleFormat, imgutils, time};
+use crate::error::{Context, Result, RsmediaError};
+use crate::{SampleFormat, imgutils, time};
 
 use rsmpeg::avutil::{AVFrame, AVSamples};
 use rsmpeg::ffi;
 use rsmpeg::swresample::SwrContext;
-use rsmpeg::swscale::SwsContext;
-
-use anyhow::{Context, Error, Result};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////// Video Scaler SwsContext ////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// 缩放算法选择。对应 FFmpeg 的 `sws_flags` 缩放算法位，多个质量相关 flag
-/// （`SWS_FULL_CHR_H_INT | SWS_ACCURATE_RND | SWS_BITEXACT`）恒被附加。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum ScaleAlgorithm {
-    /// 快速双线性插值（性能优先，质量略逊）
-    FastBilinear,
-    /// 双线性插值，与 FFmpeg 命令行默认一致
-    Bilinear,
-    /// 双三次插值（默认，质量/性能均衡）
-    #[default]
-    Bicubic,
-    /// 实验性算法（`SWS_X`）
-    Experimental,
-    /// 最近邻（阶跃边缘，无平滑）
-    Point,
-    /// 面积平均（适合缩小）
-    Area,
-    /// 双三次亮度 + 双线性色度（`SWS_BICUBLIN`）
-    BicubicLinear,
-    /// 高斯插值
-    Gaussian,
-    /// sinc 插值
-    Sinc,
-    /// Lanczos 插值（高质量）
-    Lanczos,
-    /// 三次 Keys 样条
-    Spline,
-}
-
-// FFmpeg `SwsFlags` 定义参考（对应 swscale 头的开关位，见
-// https://ffmpeg.org/doxygen/trunk/swscale_8h_source.html ）：
-//   SWS_STRICT         1 << 11   Return an error on underspecified conversions.
-//   SWS_PRINT_INFO     1 << 12   Emit verbose log of scaling parameters.
-//   SWS_FULL_CHR_H_INT 1 << 13   Perform full chroma upsampling when upscaling to RGB.
-//   SWS_FULL_CHR_H_INP 1 << 14   Perform full chroma interpolation when downscaling RGB.
-//   SWS_ACCURATE_RND   1 << 18   Force bit-exact output rounding.
-//   SWS_BITEXACT       1 << 19   Disable platform-specific optimizations for bit-exactness.
-//   SWS_UNSTABLE       1 << 20   Prefer experimental code paths.
-//   SWS_DIRECT_BGR     1 << 15   Deprecated: no effect.
-//   SWS_ERROR_DIFFUSION 1 << 23   Deprecated: set `SwsContext.dither` instead.
-//   SWS_FAST_BILINEAR  1 <<  0   fast bilinear filtering
-//   SWS_BILINEAR       1 <<  1   bilinear filtering
-//   SWS_BICUBIC        1 <<  2   2-tap cubic B-spline
-//   SWS_X              1 <<  3   experimental
-//   SWS_POINT          1 <<  4   nearest neighbor
-//   SWS_AREA           1 <<  5   area averaging
-//   SWS_BICUBLIN       1 <<  6   bicubic luma, bilinear chroma
-//   SWS_GAUSS          1 <<  7   gaussian approximation
-//   SWS_SINC           1 <<  8   unwindowed sinc
-//   SWS_LANCZOS        1 <<  9   3-tap sinc/sinc
-//   SWS_SPLINE         1 << 10   unwindowed natural cubic spline
-impl ScaleAlgorithm {
-    /// 返回该算法对应的完整 swscale flags（算法位 + 质量 flag）。
-    // 不同 FFmpeg 版本/平台下 `ffi::SWS_*` 常量类型不同（u32 / i32），统一转 u32
-    #[allow(clippy::unnecessary_cast)]
-    pub fn flags(self) -> u32 {
-        let mut flags = match self {
-            Self::FastBilinear => ffi::SWS_FAST_BILINEAR,
-            Self::Bilinear => ffi::SWS_BILINEAR,
-            Self::Bicubic => ffi::SWS_BICUBIC,
-            Self::Experimental => ffi::SWS_X,
-            Self::Point => ffi::SWS_POINT,
-            Self::Area => ffi::SWS_AREA,
-            Self::BicubicLinear => ffi::SWS_BICUBLIN,
-            Self::Gaussian => ffi::SWS_GAUSS,
-            Self::Sinc => ffi::SWS_SINC,
-            Self::Lanczos => ffi::SWS_LANCZOS,
-            Self::Spline => ffi::SWS_SPLINE,
-        } as u32;
-        flags |= ffi::SWS_FULL_CHR_H_INT as u32;
-        flags |= ffi::SWS_ACCURATE_RND as u32;
-        flags |= ffi::SWS_BITEXACT as u32;
-        flags
-    }
-}
-
-fn setup_scaler(
-    src_width: i32,
-    src_height: i32,
-    src_pix_fmt: ffi::AVPixelFormat,
-    dst_width: i32,
-    dst_height: i32,
-    dst_pix_fmt: ffi::AVPixelFormat,
-    flags: u32,
-) -> Result<SwsContext> {
-    // new sws_ctx
-    let sws_ctx = SwsContext::get_context(
-        src_width,
-        src_height,
-        src_pix_fmt,
-        dst_width,
-        dst_height,
-        dst_pix_fmt,
-        flags,
-        None,
-        None,
-        None,
-    )
-    .context("Failed to create a swscale context.")?;
-
-    Ok(sws_ctx)
-}
-
-/// # Safety
-///
-/// ffi::sws_scale_frame
-pub fn scale_frame(
-    src_frame: &AVFrame,
-    dst_width: i32,
-    dst_height: i32,
-    dst_pix_fmt: PixelFormat,
-) -> Result<AVFrame> {
-    scale_with_flags(
-        src_frame,
-        dst_width,
-        dst_height,
-        dst_pix_fmt,
-        ScaleAlgorithm::default(),
-    )
-}
-
-/// # Safety
-///
-/// ffi::sws_scale_frame
-pub fn scale_with_flags(
-    src_frame: &AVFrame,
-    dst_width: i32,
-    dst_height: i32,
-    dst_pix_fmt: PixelFormat,
-    scaler_algo: ScaleAlgorithm,
-) -> Result<AVFrame> {
-    if !src_frame.hw_frames_ctx.is_null() {
-        anyhow::bail!("Hardware frames are not supported in this software scalar");
-    }
-
-    let mut dst_frame = AVFrame::new();
-    dst_frame.set_width(dst_width);
-    dst_frame.set_height(dst_height);
-    dst_frame.set_format(dst_pix_fmt.into());
-    dst_frame
-        .alloc_buffer()
-        .context("Failed to allocate destination frame buffer")?;
-    imgutils::copy_frame_metadata(src_frame, &mut dst_frame, false)?;
-    let mut sws_ctx = setup_scaler(
-        src_frame.width,
-        src_frame.height,
-        src_frame.format,
-        dst_width,
-        dst_height,
-        dst_pix_fmt.into(),
-        scaler_algo.flags(),
-    )
-    .context("Failed to create swscale context.")?;
-
-    let ret = unsafe {
-        let dst_frame_ptr = dst_frame.as_mut_ptr();
-        ffi::sws_scale_frame(sws_ctx.as_mut_ptr(), dst_frame_ptr, src_frame.as_ptr())
-    };
-    if ret < 0 {
-        return Err(Error::msg(format!("Failed to scale frame, ret: {ret}")));
-    }
-
-    log::debug!(
-        "Sws scale from src:[{}x{}, {:?}] to dst:[{}x{}, {:?}]",
-        src_frame.width,
-        src_frame.height,
-        PixelFormat::from(src_frame.format),
-        dst_width,
-        dst_height,
-        dst_pix_fmt
-    );
-
-    Ok(dst_frame)
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////// Audio Resampler SwrContext /////////////////////////////////////////
@@ -213,6 +32,20 @@ fn setup_resampler(
     Ok(swr_ctx)
 }
 
+/// 校验重采样输入帧：不支持硬件帧，且采样率/样本数必须有效。
+fn check_resampler_input(src_frame: &AVFrame) -> Result<()> {
+    if !src_frame.hw_frames_ctx.is_null() {
+        return Err(RsmediaError::unsupported(
+            "Hardware frames are not supported in this software re-sampler",
+        ));
+    }
+
+    if src_frame.sample_rate < 1 || src_frame.nb_samples < 1 {
+        return Err(RsmediaError::custom("Invalid input frame."));
+    }
+    Ok(())
+}
+
 /// Audio resampling frame
 pub fn convert(
     src_frame: &AVFrame,
@@ -220,15 +53,9 @@ pub fn convert(
     out_sample_fmt: ffi::AVSampleFormat,
     out_sample_rate: i32,
 ) -> Result<AVSamples> {
-    if !src_frame.hw_frames_ctx.is_null() {
-        anyhow::bail!("Hardware frames are not supported in this software re-sampler");
-    }
+    check_resampler_input(src_frame)?;
 
-    if src_frame.sample_rate < 1 || src_frame.nb_samples < 1 {
-        return Err(Error::msg("Invalid input frame."));
-    }
-
-    let mut swr_ctx = setup_resampler(
+    let mut resampler = Resampler::new(
         src_frame.ch_layout,
         src_frame.format,
         src_frame.sample_rate,
@@ -238,29 +65,7 @@ pub fn convert(
     )
     .context("Failed to create resample context.")?;
 
-    let mut output_samples = AVSamples::new(
-        out_ch_layout.nb_channels,
-        src_frame.nb_samples,
-        out_sample_fmt,
-        0,
-    )
-    .context("Create samples buffer failed.")?;
-
-    let ret = unsafe {
-        swr_ctx
-            .convert(
-                output_samples.audio_data.as_mut_ptr(),
-                output_samples.nb_samples,
-                src_frame.extended_data as *const _,
-                src_frame.nb_samples,
-            )
-            .context("Could not convert input samples")?
-    };
-    if ret < 0 {
-        return Err(Error::msg(format!(
-            "Failed to convert input samples, ret: {ret}"
-        )));
-    }
+    let samples = resampler.convert(src_frame, out_ch_layout, out_sample_fmt)?;
 
     log::debug!(
         "Swr convert from src:[{}, {:?}, {}] to dst:[{}, {:?}, {}]",
@@ -272,7 +77,7 @@ pub fn convert(
         out_sample_rate
     );
 
-    Ok(output_samples)
+    Ok(samples)
 }
 
 /// Audio resampling frame
@@ -286,23 +91,16 @@ pub fn convert_frame(
     out_sample_fmt: ffi::AVSampleFormat,
     out_sample_rate: i32,
 ) -> Result<AVFrame> {
-    if !src_frame.hw_frames_ctx.is_null() {
-        anyhow::bail!("Hardware frames are not supported in this software re-sampler");
-    }
+    check_resampler_input(src_frame)?;
 
-    if src_frame.sample_rate < 1 || src_frame.nb_samples < 1 {
-        return Err(Error::msg("Invalid input frame."));
-    }
-
-    let swr_ctx = setup_resampler(
+    let mut resampler = Resampler::new(
         src_frame.ch_layout,
         src_frame.format,
         src_frame.sample_rate,
         out_ch_layout,
         out_sample_fmt,
         out_sample_rate,
-    )
-    .context("Failed to create resample context.")?;
+    )?;
 
     let mut dst_frame = AVFrame::new();
     // copy props
@@ -310,11 +108,11 @@ pub fn convert_frame(
     dst_frame.set_format(out_sample_fmt);
     dst_frame.set_ch_layout(out_ch_layout);
     // 输出帧的缓冲必须按重采样后的输出样本数分配，而不是简单地使用输入样本数。
-    // 当输入/输出采样率不同时，swr_convert_frame() 会写入比输入样本数更多的输出样本，
+    // 当输入/输出采样率不同时，swr_convert() 会写入比输入样本数更多的输出样本，
     // 但 FFmpeg 不会自动扩大已分配的输出缓冲（只把放不下的部分存入内部 FIFO），
-    // 若这里 mb_samples 设得过小，将导致 swr_convert 越界写。
+    // 若这里 nb_samples 设得过小，将导致 swr_convert 越界写。
     // 用 swr_get_out_samples() 得到所需输出样本数的上界来分配缓冲。
-    let out_samples = swr_ctx.get_out_samples(src_frame.nb_samples).max(1);
+    let out_samples = resampler.get_out_samples(src_frame.nb_samples).max(1);
     dst_frame.set_nb_samples(out_samples);
     dst_frame.set_sample_rate(out_sample_rate);
     dst_frame.set_time_base(time::new_rational(1, out_sample_rate));
@@ -325,10 +123,10 @@ pub fn convert_frame(
     // 转换输入 AVFrame 中的样本并将其写入输出 AVFrame。
     // 输入和输出 AVFrame 必须设置通道布局、采样率和格式。
     // 如果输出 AVFrame 没有分配数据指针，则将在调用 av_frame_get_buffer() 分配帧时设置 nb_samples 字段。
-    // 输出的 AVFrame 可以是 NULL，或者分配的样本少于所需的数量。在这种情况下，未写入输出的剩余样本将被添加到内部 FIFO 缓冲区，在下次调用此函数或 swr_convert() 时返回。
-    // 如果转换采样率，内部重采样延迟缓冲区中可能会有剩余数据。要以输出方式获取这些数据，请调用此函数或 swr_convert()，并输入 NULL。
-    swr_ctx
-        .convert_frame(Some(src_frame), &mut dst_frame)
+    // 输出的 AVFrame 可以是 NULL，或者分配的样本少于所需的数量。在这种情况下，未写入输出的剩余样本将被添加到内部 FIFO 缓冲区，在下次调用此函数时返回。
+    // 如果转换采样率，内部重采样延迟缓冲区中可能会有剩余数据。要以输出方式获取这些数据，请调用此函数，并输入 NULL。
+    resampler
+        .convert_frame(src_frame, &mut dst_frame)
         .context("Failed to convert frame.")?;
 
     log::debug!(
@@ -344,11 +142,118 @@ pub fn convert_frame(
     Ok(dst_frame)
 }
 
+/// Persistent streaming resampler.
+///
+/// Unlike [`convert_frame`] (which creates a temporary context on each call),
+/// `Resampler` holds a reusable `SwrContext` for continuous streaming input:
+/// when resampling (different input/output sample rates), the internal filter
+/// delay buffers samples between calls and outputs them with subsequent data;
+/// at the end, [`Resampler::flush`] must be called to drain the tail, otherwise
+/// the last few milliseconds of samples will be lost.
+pub struct Resampler {
+    swr: SwrContext,
+}
+
+impl Resampler {
+    pub fn new(
+        in_ch_layout: ffi::AVChannelLayout,
+        in_sample_fmt: ffi::AVSampleFormat,
+        in_sample_rate: i32,
+        out_ch_layout: ffi::AVChannelLayout,
+        out_sample_fmt: ffi::AVSampleFormat,
+        out_sample_rate: i32,
+    ) -> Result<Self> {
+        Ok(Self {
+            swr: setup_resampler(
+                in_ch_layout,
+                in_sample_fmt,
+                in_sample_rate,
+                out_ch_layout,
+                out_sample_fmt,
+                out_sample_rate,
+            )?,
+        })
+    }
+
+    /// Upper bound estimate of the number of output samples for the given number of input samples.
+    pub fn get_out_samples(&self, in_samples: i32) -> i32 {
+        self.swr.get_out_samples(in_samples).max(1)
+    }
+
+    /// Convert an input frame into an output frame with allocated buffer
+    /// (persistent context: samples that cannot be written with `swr_convert` due to
+    /// insufficient output capacity remain internally buffered and are returned with subsequent calls).
+    ///
+    /// The caller must set format/layout/sample_rate/nb_samples on `dst` and
+    /// call `alloc_buffer`; after conversion, `dst.nb_samples` is the actual
+    /// number of output samples.
+    pub fn convert_frame(&mut self, src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
+        self.swr
+            .convert_frame(Some(src), dst)
+            .context("Failed to convert frame with streaming resampler")
+    }
+
+    /// Raw sample conversion (direct `swr_convert` wrapper), for caller-managed
+    /// sample buffers such as [`AVSamples`].
+    ///
+    /// Returns the number of samples output per channel; a negative value has
+    /// been mapped to an error. Returns 0 when the input sample count is > 0,
+    /// indicating that the conversion result is temporarily buffered inside swr
+    /// (possible during resampling) and will be output along with subsequent inputs.
+    ///
+    /// # Safety
+    ///
+    /// The buffers pointed to by `out`/`in_` and their sample counts must satisfy
+    /// the validity requirements of `swr_convert`.
+    pub fn convert(
+        &mut self,
+        src_frame: &AVFrame,
+        out_ch_layout: ffi::AVChannelLayout,
+        out_sample_fmt: ffi::AVSampleFormat,
+    ) -> Result<AVSamples> {
+        // 容量按输出样本数的上界分配，避免上采样（in < out）时尾部样本被丢弃。
+        let capacity = self.get_out_samples(src_frame.nb_samples);
+        let mut out_samples =
+            AVSamples::new(out_ch_layout.nb_channels, capacity, out_sample_fmt, 0)
+                .context("Create samples buffer failed.")?;
+
+        let ret = unsafe {
+            self.swr
+                .convert(
+                    out_samples.audio_data.as_mut_ptr(),
+                    out_samples.nb_samples,
+                    src_frame.extended_data as *const _,
+                    src_frame.nb_samples,
+                )
+                .context("Could not convert input samples")?
+        };
+
+        if ret < 0 {
+            return Err(RsmediaError::custom(format!(
+                "Failed to convert input samples, ret: {ret}"
+            )));
+        }
+
+        Ok(out_samples)
+    }
+
+    /// Drain the remaining samples from the resampler (EOF flush).
+    ///
+    /// `dst` must already have an allocated buffer; after conversion,
+    /// `dst.nb_samples` is the actual number of samples (possibly 0).
+    /// Repeat until 0 samples are returned to fully drain.
+    pub fn flush(&mut self, dst: &mut AVFrame) -> Result<()> {
+        self.swr
+            .convert_frame(None, dst)
+            .context("Failed to flush streaming resampler")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::{Context, Result};
     use crate::{SampleFormat, time};
-    use anyhow::{Context, Result};
     use rsmpeg::avutil::AVChannelLayout;
     use rsmpeg::ffi;
 
@@ -483,7 +388,7 @@ mod tests {
             ffi::AV_SAMPLE_FMT_S64 | ffi::AV_SAMPLE_FMT_S64P => {
                 fill_samples!(i64, i64::MAX)
             }
-            _ => return Err(Error::msg("Unsupported sample format")),
+            _ => return Err(RsmediaError::custom("Unsupported sample format")),
         }
         Ok(())
     }
@@ -519,7 +424,6 @@ mod tests {
         let nb_samples = 1024;
         let nb_channels = 2;
 
-        // 测试所有格式组合
         for in_fmt in AUDIO_FORMATS {
             println!("\nTesting input format: {:?}", in_fmt);
 
@@ -582,7 +486,6 @@ mod tests {
                         let result =
                             convert_frame(&src_frame, ch_layout, out_fmt.format, out_rate)?;
 
-                        // 验证转换结果
                         assert_eq!(result.format, out_fmt.format);
                         assert_eq!(result.sample_rate, out_rate);
                         assert_eq!(result.ch_layout.nb_channels, nb_channels);

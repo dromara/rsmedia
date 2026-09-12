@@ -210,7 +210,7 @@ fn init_filter<'graph>(
                 ffi::AV_OPT_TYPE_PIXEL_FMT,
             )
             .context("Cannot set output pixel format")?;
-        #[cfg(not(any(feature = "ffmpeg8", feature = "ffmpeg9")))]
+        #[cfg(any(feature = "ffmpeg6", feature = "ffmpeg7"))]
         buffer_sink_context
             .opt_set_bin(c"pix_fmts", &enc_ctx.pix_fmt)
             .context("Cannot set output pixel format")?;
@@ -281,7 +281,7 @@ fn init_filter<'graph>(
                 )
                 .context("Cannot set output sample rate")?;
         }
-        #[cfg(not(any(feature = "ffmpeg8", feature = "ffmpeg9")))]
+        #[cfg(any(feature = "ffmpeg6", feature = "ffmpeg7"))]
         {
             buffersink_ctx
                 .opt_set_bin(c"sample_fmts", &enc_ctx.sample_fmt)

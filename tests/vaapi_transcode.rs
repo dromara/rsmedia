@@ -16,7 +16,7 @@ use rsmpeg::ffi::{
 };
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn hwaccel_get_format(
+unsafe extern "C" fn get_format(
     ctx: *mut ffi::AVCodecContext,
     pix_fmts: *const ffi::AVPixelFormat,
 ) -> ffi::AVPixelFormat {
@@ -61,7 +61,7 @@ fn set_hwframe_ctx(
             let hw_device_ctx_ptr = hw_device_ctx.as_ptr();
             let codec_ctx_ptr = codec_ctx.as_mut_ptr();
             (*codec_ctx_ptr).opaque = hw_format as *mut std::os::raw::c_void;
-            (*codec_ctx_ptr).get_format = Some(hwaccel_get_format);
+            (*codec_ctx_ptr).get_format = Some(get_format);
             (*codec_ctx_ptr).sw_pix_fmt = sw_format;
             (*codec_ctx_ptr).hw_device_ctx = hw_device_ctx_ptr as *mut _;
         }

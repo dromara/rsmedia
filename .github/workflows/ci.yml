@@ -198,7 +198,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: ["macos/arm64"]
-        ffmpeg_version: ["6", "7", "9"]
+        ffmpeg_version: ["6", "7", "8", "9"]
         include:
           - ffmpeg_version: "6"
             feature: "ndarray,ffmpeg6,link_system_ffmpeg"
@@ -206,7 +206,9 @@ jobs:
           - ffmpeg_version: "7"
             feature: "ndarray,ffmpeg7,link_system_ffmpeg"
             brew_formula: "ffmpeg@7"
-          # homebrew 无 ffmpeg@8 / ffmpeg@9，主 formula 即 FFmpeg 9
+          - ffmpeg_version: "8"
+            feature: "ndarray,ffmpeg8,link_system_ffmpeg"
+            brew_formula: "ffmpeg@8"
           - ffmpeg_version: "9"
             feature: "ndarray,ffmpeg9,link_system_ffmpeg"
             brew_formula: "ffmpeg"
@@ -236,7 +238,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install dependencies
-        run: brew install pkg-config ${{ matrix.brew_formula }}
+        run: brew update && brew install pkg-config ${{ matrix.brew_formula }}
 
       - name: Check
         run: cargo check --workspace --all-targets --no-default-features --features ${{ matrix.feature }}

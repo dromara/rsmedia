@@ -1045,9 +1045,11 @@ impl Encoder {
 
     fn send_frame_to_encoder(&mut self, frame_opt: Option<AVFrame>) -> Result<()> {
         if let Some(mut frame) = frame_opt {
-            // pts 处理必须在进滤镜/格式转换之前：滤镜（`fps`/`framerate` 等）需要
-            // 有效 pts 才能正确工作，时间基换算也要以滤镜图输入时间基为基准。
-            self.assign_pts(&mut frame);
+            // sample_rate 补齐与 pts 处理都必须在这里完成、早于滤镜与格式转换：滤镜
+            // （`fps`/`framerate` 等）需要有效 pts 才能正确工作，时间基换算要以
+            // 滤镜图输入时间基为基准，而帧采样率会被滤镜输入转换、`rescale`、
+            // `check_frame` 三处读取（见 `assign_pts_sample_rate`）。
+            self.assign_pts_sample_rate(&mut frame);
             // 正常编码帧：经过 filter（如有）
             // 滤镜 buffer/abuffer 源按"滤镜图输入格式"配置（声明优先，见
             // `Filter::with_input_format`；默认=编码器协商格式）。输入帧格式
@@ -1105,9 +1107,19 @@ impl Encoder {
         }
     }
 
-    /// pts 的自动处理与时间基归一化（在帧进滤镜/编码器之前调用）。
+    /// 帧进滤镜/编码器前的归一化：补齐音频采样率、换算时间基、自动编号 pts。
     ///
-    /// FFmpeg 在编码器输入侧**忽略** `AVFrame.time_base`，pts 一律按
+    /// **采样率**：音频帧的 0 表示"调用方没有声明"，而不是"0 Hz"——音频编码器的目标
+    /// 采样率在 [`EncoderBuilder::new_audio`] 时就必须给定并写入 `AVCodecContext`
+    /// （见 [`effective_time_base`](Self::effective_time_base)），是唯一权威值，故以它
+    /// 补齐。**只有 0 会被替换**：非 0 一律视为调用方声明的真实源率，与编码器不同时
+    /// 照常重采样（这是"任意采样率输入"功能的依据）。这一步必须在下游三处消费者之前
+    /// 完成——滤镜输入格式转换（`resample::convert_frame` 把帧率当**源率**）、
+    /// [`rescale`](Self::rescale) 的重采样判断、[`check_frame`](Self::check_frame) 的
+    /// 采样率校验；它们都假定该值有效，未声明时会一路走到 `check_resampler_input`
+    /// 而以 `Invalid input frame.` 失败。
+    ///
+    /// **pts**：FFmpeg 在编码器输入侧**忽略** `AVFrame.time_base`，pts 一律按
     /// `AVCodecContext.time_base` 解释。因此两件事必须在这里完成：
     ///
     /// 1. **时间基换算**：帧携带了有效且不同的 `time_base` 时（解码侧容器流时间基，
@@ -1122,30 +1134,41 @@ impl Encoder {
     ///
     /// 计数器在用户设置了 pts 的帧上同样前进（跳到该 pts 之后），使后续未设置
     /// pts 的帧能接续正确的时间轴。
-    fn assign_pts(&mut self, frame: &mut AVFrame) {
+    ///
+    /// 离开本方法时：音频帧的采样率必定有效，任何帧的时间基必定是编码器输入时间基。
+    fn assign_pts_sample_rate(&mut self, frame: &mut AVFrame) {
+        let is_audio = self.media_type == MediaType::AUDIO;
         let input_tb = self.input_time_base;
-        if frame.pts != ffi::AV_NOPTS_VALUE
-            && frame.time_base.num > 0
-            && frame.time_base.den > 0
-            && (frame.time_base.num != input_tb.num || frame.time_base.den != input_tb.den)
-        {
-            frame.set_pts(frame.pts.rescale(frame.time_base, input_tb));
+
+        // 采样率：未声明（0）时以编码器的目标率补齐。
+        if is_audio && frame.sample_rate <= 0 {
+            frame.set_sample_rate(self.sample_rate());
+        }
+
+        // 时间基：帧自带有效且与编码器**不同**的时间基时（解码侧容器时间基，如 mp4 的
+        // 1/15360），pts 需先换算过来；无论换算与否，离开时帧都带编码器输入时间基。
+        let frame_tb = frame.time_base;
+        let needs_rescale = frame.pts != ffi::AV_NOPTS_VALUE
+            && frame_tb.num > 0
+            && frame_tb.den > 0
+            && !time::av_rational_eq(&frame_tb, &input_tb);
+        if needs_rescale {
+            frame.set_pts(frame.pts.rescale(frame_tb, input_tb));
         }
         frame.set_time_base(input_tb);
 
-        // 固定帧长音频走 audio_fifo，输出帧 pts 由 `next_pts` 按已输出样本数
-        // 递增（见 buffer_audio_frame / drain_audio_fifo），这里不编号。
-        if self.media_type == MediaType::AUDIO && self.frame_size() > 0 {
+        // 固定帧长音频（aac 等）的输出 pts 由 `audio_fifo` 按已输出样本数维护
+        // （见 buffer_audio_frame / drain_audio_fifo），故不为输入帧编号、计数器也不前进。
+        if is_audio && self.frame_size() > 0 {
             return;
         }
         if frame.pts == ffi::AV_NOPTS_VALUE {
             frame.set_pts(self.next_pts);
         }
-        let step = if self.media_type == MediaType::AUDIO {
-            // 输入时间基 = 1/sample_rate，样本位置即时间轴。
+        // 输入时间基：视频 `1/fps`（每帧恰一 tick），音频 `1/sample_rate`（样本位置即时间轴）。
+        let step = if is_audio {
             frame.nb_samples.max(1) as i64
         } else {
-            // 输入时间基 = 1/fps，每帧恰一 tick。
             1
         };
         self.next_pts = frame.pts + step;
@@ -1217,7 +1240,7 @@ impl Encoder {
         if self.audio_fifo.is_none() {
             let channels = self.ch_layout().nb_channels;
             let sample_fmt = self.sample_fmt() as _;
-            // 首次缓冲时以首帧 pts（编码器时间基下的样本位置，`assign_pts` 已
+            // 首次缓冲时以首帧 pts（编码器时间基下的样本位置，`assign_pts_sample_rate` 已
             // 完成换算/自动编号的对齐）播种样本计数器；未设置则保持 0 起步。
             if frame.pts != ffi::AV_NOPTS_VALUE {
                 self.next_pts = frame.pts;
@@ -1841,17 +1864,17 @@ mod tests {
     /// 视频自动 pts：未设置 pts 的帧按每帧 1 tick 编号，用户设置的 pts 原样
     /// 使用并把计数器跳到其后，后续未设置的帧接续编号。
     #[test]
-    fn test_assign_pts_auto_numbering_video() -> Result<()> {
+    fn test_assign_pts_sample_rate_auto_numbering_video() -> Result<()> {
         let mut encoder = EncoderBuilder::new_video(64, 64).with_fps(25.0).build()?;
         assert_eq!(encoder.next_pts, 0);
 
         let mut first = AVFrame::new();
-        encoder.assign_pts(&mut first);
+        encoder.assign_pts_sample_rate(&mut first);
         assert_eq!(first.pts, 0, "first auto pts");
         assert_eq!(encoder.next_pts, 1);
 
         let mut second = AVFrame::new();
-        encoder.assign_pts(&mut second);
+        encoder.assign_pts_sample_rate(&mut second);
         assert_eq!(second.pts, 1, "second auto pts");
         assert_eq!(encoder.next_pts, 2);
 
@@ -1861,12 +1884,12 @@ mod tests {
         // 用户显式 pts：原样使用，计数器跳到该 pts 之后。
         let mut explicit = AVFrame::new();
         explicit.set_pts(100);
-        encoder.assign_pts(&mut explicit);
+        encoder.assign_pts_sample_rate(&mut explicit);
         assert_eq!(explicit.pts, 100);
         assert_eq!(encoder.next_pts, 101);
 
         let mut resumed = AVFrame::new();
-        encoder.assign_pts(&mut resumed);
+        encoder.assign_pts_sample_rate(&mut resumed);
         assert_eq!(
             resumed.pts, 101,
             "auto numbering resumes after the explicit pts"
@@ -1874,16 +1897,47 @@ mod tests {
         Ok(())
     }
 
-    /// 固定帧长音频（aac，frame_size = 1024）的输出 pts 由 `audio_fifo` 切帧时
-    /// 按已输出样本数维护，`assign_pts` 不参与编号。
+    /// 音频帧未声明采样率（0）时回退到编码器自己的率；已声明的不被覆盖。
     #[test]
-    fn test_assign_pts_defers_to_audio_fifo_for_fixed_frame_size() -> Result<()> {
+    fn test_assign_pts_sample_rate_fills_missing_rate() -> Result<()> {
+        let mut encoder =
+            EncoderBuilder::new_audio(128_000, 2, 44_100, SampleFormat::FLTP).build()?;
+
+        // 未声明（0）→ 用编码器的率补齐。用户直接构造的 AVFrame 就是这个状态。
+        let mut undeclared = AVFrame::new();
+        undeclared.set_sample_rate(0);
+        encoder.assign_pts_sample_rate(&mut undeclared);
+        assert_eq!(undeclared.sample_rate, 44_100);
+
+        // 已声明 → 原样保留，否则"任意采样率输入、自动重采样"会失效。
+        let mut declared = AVFrame::new();
+        declared.set_sample_rate(16_000);
+        encoder.assign_pts_sample_rate(&mut declared);
+        assert_eq!(
+            declared.sample_rate, 16_000,
+            "an explicitly declared source rate must not be overwritten"
+        );
+
+        // 视频帧不涉及采样率，不应被改写。
+        let mut video = EncoderBuilder::new_video(64, 64).build()?;
+        let mut vframe = AVFrame::new();
+        vframe.set_sample_rate(0);
+        video.assign_pts_sample_rate(&mut vframe);
+        assert_eq!(vframe.sample_rate, 0);
+
+        Ok(())
+    }
+
+    /// 固定帧长音频（aac，frame_size = 1024）的输出 pts 由 `audio_fifo` 切帧时
+    /// 按已输出样本数维护，`assign_pts_sample_rate` 不参与编号。
+    #[test]
+    fn test_assign_pts_sample_rate_defers_to_audio_fifo_for_fixed_frame_size() -> Result<()> {
         let mut encoder =
             EncoderBuilder::new_audio(128_000, 2, 44_100, SampleFormat::FLTP).build()?;
         assert!(encoder.frame_size() > 0, "aac has a fixed frame size");
 
         let mut frame = AVFrame::new();
-        encoder.assign_pts(&mut frame);
+        encoder.assign_pts_sample_rate(&mut frame);
         assert_eq!(
             frame.pts,
             ffi::AV_NOPTS_VALUE,

@@ -126,8 +126,8 @@ fn main() -> anyhow::Result<()> {
     // `decode::<f32>()` does the same for audio.
     while let Some(frame) = decoder.decode_frame(&mut reader)? {
         println!(
-            "{}x{} pts={} channels={}",
-            frame.width, frame.height, frame.pts, frame.data.shape()[2]
+            "{}x{} pts={} planes={}",
+            frame.width, frame.height, frame.pts, frame.data.num_planes()
         );
     }
     Ok(())
@@ -166,13 +166,15 @@ fn main() -> anyhow::Result<()> {
     let v_idx = muxer.add_encoder(encoder)?;
 
     for i in 0..60i64 {
-        let mut frame =
-            MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, enc_tb)?;
+        // No time base to pass: the encoder interprets pts in its own input time
+        // base (1/fps here) and overwrites the frame's.
+        let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
         let rgb = colors::hsv_to_rgb(i as f32 / 60.0 * 360.0, 100.0, 100.0);
+        let samples = frame.data.as_packed_mut().expect("RGB24 is interleaved");
         for y in 0..height {
             for x in 0..width {
                 for c in 0..3 {
-                    frame.data[[y, x, c]] = rgb[c];
+                    samples[[y, x, c]] = rgb[c];
                 }
             }
         }
@@ -492,7 +494,7 @@ let encoder = EncoderBuilder::new_video(1920, 1080)
 | `filter` | `Filter` (any spec), `filter::video::*`, `filter::audio::*`, `FilterGraph` |
 | `scale` | `Scaler`, `ScaleAlgorithm`, `ScaleQuality`, `SwsDither/SwsAlphaBlend/SwsScaler/SwsIntent/SwsBackend` (version-dependent), `scale_frame`, `scale_with_flags` |
 | `resample` | `Resampler`, `convert`, `convert_frame` |
-| `frame` | `MediaFrame`, `ElementType`, `FrameSideData` (feature `ndarray`) |
+| `frame` | `MediaFrame`, `FrameData`, `MediaFrameType`, `FrameSideData` (feature `ndarray`) |
 | `subtitle` | `SubtitleSegment` |
 | `pcm` | `PcmSink`, `PcmSpec` |
 | `imgutils` | frame/plane ⇄ buffer, image conversion helpers |

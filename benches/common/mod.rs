@@ -12,7 +12,7 @@ use rsmedia::io::StreamWriter;
 use rsmedia::mux::Muxer;
 use rsmedia::pixel::PixelFormat;
 use rsmedia::subtitle::{SubtitleSegment, encode_subtitle_segments};
-use rsmedia::{MediaType, SampleFormat, time};
+use rsmedia::{MediaType, SampleFormat};
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -201,13 +201,7 @@ pub fn encode_subtitle(path: &Path, enc_threads: usize) -> Result<()> {
 
 fn rainbow_frame(p: f32) -> MediaFrame<u8> {
     let rgb = rsmedia::colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-    let mut frame = MediaFrame::<u8>::new_video_frame(
-        WIDTH,
-        HEIGHT,
-        PixelFormat::RGB24,
-        time::new_rational(1, FPS as i32),
-    )
-    .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(WIDTH, HEIGHT, PixelFormat::RGB24).unwrap();
     let samples = frame
         .data
         .as_packed_mut()
@@ -223,14 +217,9 @@ fn rainbow_frame(p: f32) -> MediaFrame<u8> {
 }
 
 fn sine_audio_frame(nb_samples: u32) -> MediaFrame<f32> {
-    let mut frame = MediaFrame::<f32>::new_audio_frame(
-        SampleFormat::FLT,
-        CHANNELS,
-        nb_samples,
-        SAMPLE_RATE,
-        time::new_rational(1, SAMPLE_RATE as i32),
-    )
-    .unwrap();
+    let mut frame =
+        MediaFrame::<f32>::new_audio_frame(SampleFormat::FLT, CHANNELS, nb_samples, SAMPLE_RATE)
+            .unwrap();
     let samples = frame
         .data
         .as_packed_mut()

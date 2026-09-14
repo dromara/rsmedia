@@ -523,9 +523,21 @@ pub struct MediaFrame<T> {
     pub format: FrameFormat,
     /// 帧的采样数据。布局随格式而变（见 [`FrameData`]），与音/视频无关。
     pub data: FrameData<T>,
-    /// 时间基。时间戳、时长等字段均按此换算物理时间。
-    /// Video: `1 / frame_rate`
-    /// Audio: `1 / sample_rate`
+    /// Time base: `pts`, durations and similar fields are counted in these units.
+    ///
+    /// Only two things set it: a frame copied out of an `AVFrame`, which carries
+    /// the container stream time base (`1/15360` for mp4, say), and an explicit
+    /// [`set_time_base`](Self::set_time_base) call. Audio frames get
+    /// `1/sample_rate` from their constructor; **video frames stay unset (`0/1`)**,
+    /// because a resolution carries no frame rate.
+    ///
+    /// Leaving it unset is safe. The encoder interprets pts in its *own* input time
+    /// base (video `1/fps`, audio `1/sample_rate`) and overwrites this field as soon
+    /// as it receives the frame; it only rescales when the frame carries a *valid
+    /// and different* time base, which is the case of pts inherited from a decoder's
+    /// container time base. So [`set_pts`](Self::set_pts) needs a matching
+    /// `set_time_base` only when the pts is not already counted in the encoder's
+    /// time base.
     pub time_base: ffi::AVRational,
     /// 媒体类型（仅 Video / Audio 二者之一）。
     /// only for Video / Audio: [`MediaType`]
@@ -538,7 +550,10 @@ pub struct MediaFrame<T> {
     /// 仅视频字段：图像类型（I/P/B 帧等，`AVPictureType`）。
     pub pict_type: ffi::AVPictureType,
     // Audio
-    /// 仅音频字段：采样率（Hz）。
+    /// 仅音频字段：采样率（Hz）—— 这批样本**实际**的采样率（源率）。
+    ///
+    /// 与编码器的目标率是两个量：二者不同时编码器会自动重采样，因此这里应填数据的真实
+    /// 速率。`0` 表示未声明，编码器接收该帧时按自己的目标率补齐。
     pub sample_rate: u32,
     /// 仅音频字段：本帧采样数（每通道）。
     pub nb_samples: u32,
@@ -687,18 +702,20 @@ where
     /// （见 [`PixelFormat::data_layout`]）：packed 格式为单个
     /// `(height, width, elements_per_pixel)` 数组，planar 格式为每平面一个数组。
     /// 传入 `ndarray::Array3` / `Vec<Array2>` 会分别视为交错 / 平面帧。
+    ///
+    /// 时间基保持未设置：分辨率里没有帧率信息，而编码器会用自己的输入时间基解释
+    /// pts（见 [`time_base`](Self::time_base)）。要按自己的时间基表达 pts 时再调
+    /// [`set_time_base`](Self::set_time_base)。
     pub fn new_video(
         width: usize,
         height: usize,
         format: PixelFormat,
-        time_base: ffi::AVRational,
         data: impl Into<FrameData<T>>,
     ) -> Result<Self> {
         Self {
             width,
             height,
             data: data.into(),
-            time_base,
             media_type: MediaType::VIDEO,
             format: FrameFormat::Pixel(format),
             ..Self::default()
@@ -707,19 +724,16 @@ where
     }
 
     /// 创建视频帧（各平面零初始化）。
-    pub fn new_video_frame(
-        width: usize,
-        height: usize,
-        format: PixelFormat,
-        time_base: ffi::AVRational,
-    ) -> Result<Self> {
+    ///
+    /// 只需 `width` / `height` / `format`；时间基的处理见 [`new_video`](Self::new_video)。
+    pub fn new_video_frame(width: usize, height: usize, format: PixelFormat) -> Result<Self> {
         let layout = format.data_layout(width, height).ok_or_else(|| {
             RsmediaError::custom(format!(
                 "Pixel format {} cannot be stored as sample planes at {width}x{height}",
                 format.get_pix_fmt_name()
             ))
         })?;
-        Self::new_video(width, height, format, time_base, FrameData::zeros(&layout))
+        Self::new_video(width, height, format, FrameData::zeros(&layout))
     }
 
     /// 创建音频帧。
@@ -727,18 +741,29 @@ where
     /// `data` 的布局必须与 `format` 一致（见 [`SampleFormat::data_layout`]）：
     /// 平面采样格式每声道一个 `(1, nb_samples)` 平面，交错格式为单个
     /// `(1, nb_samples, nb_channels)` 数组。
+    ///
+    /// 时间基自动取 `1/sample_rate` —— 音频的固有时间基，不需要调用方传递
+    /// （`sample_rate` 为 0 时保持未设置）。
+    ///
+    /// `sample_rate` 是**源率**（这批样本实际是多少 Hz），与编码器的目标率是两个量：
+    /// 二者不同时编码器会自动重采样，所以应当填数据真实的采样率。确实不想声明时可传
+    /// `0`，帧上留空（`time_base` 随之留空，见 [`time_base`](Self::time_base)），
+    /// 编码器接收该帧时会按自己的目标率补齐。
     pub fn new_audio(
         format: SampleFormat,
         nb_channels: u32,
         nb_samples: u32,
         sample_rate: u32,
-        time_base: ffi::AVRational,
         data: impl Into<FrameData<T>>,
     ) -> Result<Self> {
         Self {
             format: FrameFormat::Sample(format),
             data: data.into(),
-            time_base,
+            time_base: if sample_rate > 0 {
+                time::new_rational(1, sample_rate as i32)
+            } else {
+                time::new_rational(0, 1)
+            },
             sample_rate,
             nb_samples,
             nb_channels,
@@ -749,12 +774,14 @@ where
     }
 
     /// 创建音频帧（各平面零初始化）。
+    ///
+    /// 只需 `format` / `nb_channels` / `nb_samples` / `sample_rate`；时间基由
+    /// `sample_rate` 推出，见 [`new_audio`](Self::new_audio)。
     pub fn new_audio_frame(
         format: SampleFormat,
         nb_channels: u32,
         nb_samples: u32,
         sample_rate: u32,
-        time_base: ffi::AVRational,
     ) -> Result<Self> {
         if nb_channels == 0 || nb_samples == 0 {
             return Err(RsmediaError::custom(format!(
@@ -767,7 +794,6 @@ where
             nb_channels,
             nb_samples,
             sample_rate,
-            time_base,
             FrameData::zeros(&layout),
         )
     }
@@ -1197,19 +1223,17 @@ impl MediaFrame<u8> {
 
     /// Builds an RGB24 video frame from an [`image::DynamicImage`].
     ///
-    /// Any colour mode (RGB / RGBA / grey, ...) is converted to RGB8 first. The
-    /// frame takes the image's own dimensions and the given `time_base`.
-    pub fn from_dynamic_image(
-        img: &image::DynamicImage,
-        time_base: ffi::AVRational,
-    ) -> Result<Self> {
+    /// Any colour mode (RGB / RGBA / grey, ...) is converted to RGB8 first, and the
+    /// frame takes the image's own dimensions. Like every video frame it starts
+    /// with no time base (see [`time_base`](MediaFrame::time_base)).
+    pub fn from_dynamic_image(img: &image::DynamicImage) -> Result<Self> {
         let rgb = img.to_rgb8();
         let (width, height) = rgb.dimensions();
         let (width, height) = (width as usize, height as usize);
         let array = Array3::from_shape_vec((height, width, 3), rgb.into_raw()).map_err(|e| {
             RsmediaError::custom(format!("Failed to build ndarray from image: {e}"))
         })?;
-        Self::new_video(width, height, PixelFormat::RGB24, time_base, array)
+        Self::new_video(width, height, PixelFormat::RGB24, array)
     }
 }
 
@@ -1723,7 +1747,6 @@ mod tests {
             2,
             8,
             44100,
-            time::new_rational(1, 44100),
             FrameData::from(Array3::<u8>::zeros((1, 8, 2))),
         );
         assert!(audio.is_err(), "u8 data must not build an S16 frame");
@@ -1735,34 +1758,13 @@ mod tests {
             Array2::<u8>::zeros((2, 2)),
             Array2::<u8>::zeros((2, 2)),
         ];
-        let video = MediaFrame::<u8>::new_video(
-            4,
-            4,
-            PixelFormat::YUV420P10LE,
-            time::new_rational(1, 25),
-            FrameData::from(planes),
-        );
+        let video =
+            MediaFrame::<u8>::new_video(4, 4, PixelFormat::YUV420P10LE, FrameData::from(planes));
         assert!(video.is_err(), "u8 planes must not build a 10-bit frame");
 
         // 宽度匹配时照常通过：10bit 用 u16，8bit 用 u8。
-        assert!(
-            MediaFrame::<u16>::new_video_frame(
-                4,
-                4,
-                PixelFormat::YUV420P10LE,
-                time::new_rational(1, 25)
-            )
-            .is_ok()
-        );
-        assert!(
-            MediaFrame::<u8>::new_video_frame(
-                4,
-                4,
-                PixelFormat::YUV420P,
-                time::new_rational(1, 25)
-            )
-            .is_ok()
-        );
+        assert!(MediaFrame::<u16>::new_video_frame(4, 4, PixelFormat::YUV420P10LE).is_ok());
+        assert!(MediaFrame::<u8>::new_video_frame(4, 4, PixelFormat::YUV420P).is_ok());
     }
 
     #[test]
@@ -1861,12 +1863,8 @@ mod tests {
 
     #[test]
     fn test_frame_data_access() -> Result<()> {
-        let mut frame = MediaFrame::<u8>::new_video_frame(
-            TEST_WIDTH,
-            TEST_HEIGHT,
-            PixelFormat::RGB24,
-            TIME_BASE,
-        )?;
+        let mut frame =
+            MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
         assert_eq!(frame.data.num_planes(), 1);
         assert_eq!(
             frame.data.as_packed().map(|a| a.dim()),
@@ -1894,28 +1892,19 @@ mod tests {
     fn test_different_pixel_types() -> Result<()> {
         // 元素类型是泛型参数，但必须与该格式的每样本字节数一致：
         // 8bit 格式配 u8、10bit 格式配 u16、浮点采样配 f32。
-        let frame_u8 = MediaFrame::<u8>::new_video_frame(
-            TEST_WIDTH,
-            TEST_HEIGHT,
-            PixelFormat::RGB24,
-            TIME_BASE,
-        )?;
+        let frame_u8 =
+            MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
         assert_eq!(
             std::mem::size_of_val(&frame_u8.data.as_packed().unwrap()[[0, 0, 0]]),
             1
         );
 
-        let frame_u16 = MediaFrame::<u16>::new_video_frame(
-            TEST_WIDTH,
-            TEST_HEIGHT,
-            PixelFormat::YUV420P10LE,
-            TIME_BASE,
-        )?;
+        let frame_u16 =
+            MediaFrame::<u16>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::YUV420P10LE)?;
         let luma = &frame_u16.data.as_planes().unwrap()[0];
         assert_eq!(std::mem::size_of_val(&luma[[0, 0]]), 2);
 
-        let frame_f32 =
-            MediaFrame::<f32>::new_audio_frame(SampleFormat::FLT, 2, 128, 44100, TIME_BASE)?;
+        let frame_f32 = MediaFrame::<f32>::new_audio_frame(SampleFormat::FLT, 2, 128, 44100)?;
         assert_eq!(
             std::mem::size_of_val(&frame_f32.data.as_packed().unwrap()[[0, 0, 0]]),
             4
@@ -1924,6 +1913,8 @@ mod tests {
         Ok(())
     }
 
+    /// 视频帧默认**不带**时间基：pts 的物理时间换算只在调用方显式声明时间基时才有
+    /// 意义（`set_time_base` 的用途），否则编码器用自己的输入时间基解释 pts。
     #[test]
     fn test_frame_timestamps() -> Result<()> {
         let fps = TIME_BASE.den as f64 / TIME_BASE.num as f64;
@@ -1931,17 +1922,18 @@ mod tests {
 
         let mut frames = Vec::new();
         for i in 0..5 {
-            let mut frame = MediaFrame::<u8>::new_video_frame(
-                TEST_WIDTH,
-                TEST_HEIGHT,
-                PixelFormat::RGB24,
-                TIME_BASE,
-            )?;
+            let mut frame =
+                MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
+            assert_eq!(
+                frame.time_base.num, 0,
+                "video frames start with no time base"
+            );
+            frame.set_time_base(TIME_BASE);
             frame.set_pts(i as i64);
             frames.push(frame);
         }
 
-        // 验证时间戳的正确性
+        // 验证时间戳的正确性（pts 按显式声明的 1/30 换算为物理时间）
         for (i, frame) in frames.iter().enumerate() {
             let expected_time = frame_duration * i as u32;
             let actual_time = Duration::from_secs_f64(
@@ -1957,10 +1949,8 @@ mod tests {
     fn test_create_rgb24_frame() -> Result<()> {
         let width = 640;
         let height = 360;
-        let time_base = ffi::AVRational { num: 1, den: 30 }; // 30 fps
 
-        let mut frame =
-            MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, time_base)?;
+        let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
 
         // 验证元数据与布局
         assert_eq!(
@@ -1970,6 +1960,11 @@ mod tests {
         assert_eq!(frame.width, width);
         assert_eq!(frame.height, height);
         assert_eq!(frame.format, FrameFormat::Pixel(PixelFormat::RGB24));
+        // 视频帧不带时间基：分辨率里没有帧率信息，编码器会用自身的输入时间基解释 pts。
+        assert_eq!(
+            frame.time_base.num, 0,
+            "video frames start with no time base"
+        );
         assert!(
             frame.data.as_packed().unwrap().is_standard_layout(),
             "RGB24 应为行主序连续布局"
@@ -1998,12 +1993,8 @@ mod tests {
 
     #[test]
     fn test_create_yuv420p_planes() -> Result<()> {
-        let frame = MediaFrame::<u8>::new_video_frame(
-            TEST_WIDTH,
-            TEST_HEIGHT,
-            PixelFormat::YUV420P,
-            TIME_BASE,
-        )?;
+        let frame =
+            MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::YUV420P)?;
 
         // 平面原生尺寸：Y 满分辨率，U/V 各半尺寸（不复制成 2x2 块）
         let planes = frame.data.as_planes().expect("YUV420P is planar");
@@ -2027,7 +2018,6 @@ mod tests {
                 16,
                 16,
                 PixelFormat::RGB24,
-                TIME_BASE,
                 Array3::<u8>::zeros((16, 16, 4))
             )
             .is_err()
@@ -2039,7 +2029,6 @@ mod tests {
                 16,
                 16,
                 PixelFormat::RGB24,
-                TIME_BASE,
                 Array3::<u8>::zeros((16, 32, 3))
             )
             .is_err()
@@ -2051,7 +2040,6 @@ mod tests {
                 16,
                 16,
                 PixelFormat::YUV420P,
-                TIME_BASE,
                 Array3::<u8>::zeros((16, 16, 3))
             )
             .is_err()
@@ -2063,7 +2051,6 @@ mod tests {
                 16,
                 16,
                 PixelFormat::RGB24,
-                TIME_BASE,
                 vec![Array2::<u8>::zeros((16, 16))]
             )
             .is_err()
@@ -2075,7 +2062,6 @@ mod tests {
                 16,
                 16,
                 PixelFormat::RGB24,
-                TIME_BASE,
                 Array3::<u8>::zeros((16, 16, 3))
             )
             .is_ok()
@@ -2089,19 +2075,13 @@ mod tests {
         let samples = 1024;
         let channels = 2;
         let sample_rate = 44100;
-        let time_base = ffi::AVRational {
-            num: 1,
-            den: sample_rate as i32,
-        };
 
         // FLTP 是平面格式：每个声道一个 `(1, nb_samples)` 平面
-        let mut frame = MediaFrame::<f32>::new_audio_frame(
-            SampleFormat::FLTP,
-            channels,
-            samples,
-            sample_rate,
-            time_base,
-        )?;
+        let mut frame =
+            MediaFrame::<f32>::new_audio_frame(SampleFormat::FLTP, channels, samples, sample_rate)?;
+
+        // 音频帧的时间基由采样率推出，无需调用方传递。
+        assert_eq!((frame.time_base.num, frame.time_base.den), (1, 44100));
 
         assert_eq!(frame.data.num_planes(), channels as usize);
         assert_eq!(
@@ -2133,8 +2113,7 @@ mod tests {
     #[test]
     fn test_create_interleaved_audio_frame() -> Result<()> {
         // S16 是交错格式：单个 `(1, nb_samples, nb_channels)` 数组
-        let frame =
-            MediaFrame::<i16>::new_audio_frame(SampleFormat::S16, 2, 480, 48000, TIME_BASE)?;
+        let frame = MediaFrame::<i16>::new_audio_frame(SampleFormat::S16, 2, 480, 48000)?;
         assert_eq!(
             frame.data.as_packed().expect("S16 is interleaved").dim(),
             (1, 480, 2)
@@ -2153,7 +2132,6 @@ mod tests {
                 2,
                 16,
                 48000,
-                TIME_BASE,
                 Array3::<f32>::zeros((1, 16, 2))
             )
             .is_err()
@@ -2166,7 +2144,6 @@ mod tests {
                 2,
                 16,
                 48000,
-                TIME_BASE,
                 vec![Array2::<f32>::zeros((1, 16)), Array2::<f32>::zeros((1, 16))]
             )
             .is_err()
@@ -2179,7 +2156,6 @@ mod tests {
                 2,
                 16,
                 48000,
-                TIME_BASE,
                 vec![Array2::<f32>::zeros((1, 16))]
             )
             .is_err()
@@ -2191,20 +2167,14 @@ mod tests {
     #[test]
     fn test_format_getter() -> Result<()> {
         // 视频帧
-        let video = MediaFrame::<u8>::new_video_frame(
-            TEST_WIDTH,
-            TEST_HEIGHT,
-            PixelFormat::RGB24,
-            TIME_BASE,
-        )?;
+        let video = MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
         match video.format() {
             Some(FrameFormat::Pixel(PixelFormat::RGB24)) => {}
             other => panic!("video format = {other:?}"),
         }
 
         // 音频帧
-        let audio =
-            MediaFrame::<f32>::new_audio_frame(SampleFormat::FLTP, 2, 16, 48000, TIME_BASE)?;
+        let audio = MediaFrame::<f32>::new_audio_frame(SampleFormat::FLTP, 2, 16, 48000)?;
         match audio.format() {
             Some(FrameFormat::Sample(SampleFormat::FLTP)) => {}
             other => panic!("audio format = {other:?}"),

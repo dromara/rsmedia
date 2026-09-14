@@ -63,8 +63,6 @@ const TEST_WIDTH: usize = 320;
 
 const TEST_HEIGHT: usize = 240;
 
-const TIME_BASE: ffi::AVRational = ffi::AVRational { num: 1, den: 30 }; // 30 fps
-
 /// 断言 `b` 与 `a` 逐像素差值不超过 `max_diff`（用于有损的颜色空间转换）。
 fn assert_pixel_close(b: &MediaFrame<u8>, a: &MediaFrame<u8>, max_diff: i16) {
     let (b_rgb, a_rgb) = (
@@ -195,8 +193,7 @@ fn create_test_rgb_frame(width: usize, height: usize) -> AVFrame {
 
 #[test]
 fn test_rgb_yuv_roundtrip() -> Result<()> {
-    let mut rgb =
-        MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24, TIME_BASE)?;
+    let mut rgb = MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
     fill_rgb_data(&mut rgb, TEST_WIDTH, TEST_HEIGHT);
 
     // 单次往返：RGB -> YUV -> RGB
@@ -222,7 +219,7 @@ fn test_rgb_yuv_roundtrip() -> Result<()> {
 #[test]
 fn test_rgb_yuv_conversion_with_matrix() -> Result<()> {
     let mut rgb_frame =
-        MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24, TIME_BASE)?;
+        MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
     let _ = fill_rgb_data(&mut rgb_frame, TEST_WIDTH, TEST_HEIGHT);
 
     // 显式指定不同色彩矩阵，均应输出 YUV420P
@@ -577,8 +574,7 @@ fn test_audio_interleaved_frame_conversion() -> Result<()> {
 
 #[test]
 fn test_dynamic_image_conversion() -> Result<()> {
-    let mut frame =
-        MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24, TIME_BASE)?;
+    let mut frame = MediaFrame::<u8>::new_video_frame(TEST_WIDTH, TEST_HEIGHT, PixelFormat::RGB24)?;
     let (r, g, b) = fill_rgb_data(&mut frame, TEST_WIDTH, TEST_HEIGHT);
 
     // MediaFrame -> DynamicImage（格式由帧自身校验，不靠形状推断）
@@ -594,7 +590,7 @@ fn test_dynamic_image_conversion() -> Result<()> {
     }
 
     // DynamicImage -> MediaFrame
-    let back = MediaFrame::<u8>::from_dynamic_image(&img, TIME_BASE)?;
+    let back = MediaFrame::<u8>::from_dynamic_image(&img)?;
     assert_eq!(back.format, FrameFormat::Pixel(PixelFormat::RGB24));
     assert_eq!(
         back.data.as_packed().map(|a| a.dim()),
@@ -608,7 +604,7 @@ fn test_dynamic_image_conversion() -> Result<()> {
         TEST_HEIGHT as u32,
         image::Rgba([10, 20, 30, 255]),
     ));
-    let from_rgba = MediaFrame::<u8>::from_dynamic_image(&rgba, TIME_BASE)?;
+    let from_rgba = MediaFrame::<u8>::from_dynamic_image(&rgba)?;
     let packed = from_rgba.data.as_packed().unwrap();
     assert_eq!(packed[[0, 0, 0]], 10);
     assert_eq!(packed[[0, 0, 1]], 20);
@@ -623,8 +619,7 @@ fn test_rgb24_to_avframe_respects_linesize() -> Result<()> {
     // 验证 to_avframe 按行拷贝而非错误的连续内存拷贝。
     let width = 63usize;
     let height = 47usize;
-    let mut frame =
-        MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, TIME_BASE)?;
+    let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
     let packed = frame.data.as_packed_mut().unwrap();
     for y in 0..height {
         for x in 0..width {
@@ -752,7 +747,7 @@ fn test_yuv420p_odd_dimensions() -> Result<()> {
     }
 
     // 但 RGB24 -> YUV420P 转换仍要求偶数尺寸
-    let odd_rgb = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, TIME_BASE)?;
+    let odd_rgb = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
     assert!(odd_rgb.convert_rgb_to_yuv().is_err());
 
     Ok(())
@@ -895,8 +890,7 @@ fn test_planar_16bit_roundtrip() -> Result<()> {
 fn test_video_rgb24_data_roundtrip() -> Result<()> {
     let width = 65usize; // 非 32 对齐，强制 linesize padding，考察按行拷贝
     let height = 49usize;
-    let mut media =
-        MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24, TIME_BASE)?;
+    let mut media = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
     let packed = media.data.as_packed_mut().unwrap();
     for y in 0..height {
         for x in 0..width {
@@ -937,8 +931,7 @@ fn test_video_rgb24_data_roundtrip() -> Result<()> {
 fn test_video_yuv420p_data_roundtrip() -> Result<()> {
     let width = 64usize;
     let height = 48usize;
-    let mut media =
-        MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::YUV420P, TIME_BASE)?;
+    let mut media = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::YUV420P)?;
     // 平面原生尺寸写入：Y 逐像素变化，U/V 各自成平面。
     let planes = media.data.as_planes_mut().unwrap();
     for y in 0..height {
@@ -979,13 +972,8 @@ fn test_audio_fltp_data_roundtrip() -> Result<()> {
     let nb_samples = 256u32;
     let nb_channels = 2u32;
     let sample_rate = 48000u32;
-    let mut media = MediaFrame::new_audio_frame(
-        SampleFormat::FLTP,
-        nb_channels,
-        nb_samples,
-        sample_rate,
-        TIME_BASE,
-    )?;
+    let mut media =
+        MediaFrame::new_audio_frame(SampleFormat::FLTP, nb_channels, nb_samples, sample_rate)?;
     // 填充有区分度的样本（每采样点不同，且声道间不同）
     {
         let planes = media.data.as_planes_mut().expect("FLTP is planar");
@@ -1023,13 +1011,8 @@ fn test_audio_fltp_data_roundtrip() -> Result<()> {
 #[test]
 fn test_audio_interleaved_data_roundtrip() -> Result<()> {
     let (nb_samples, nb_channels) = (128u32, 2u32);
-    let mut media = MediaFrame::<i16>::new_audio_frame(
-        SampleFormat::S16,
-        nb_channels,
-        nb_samples,
-        48000,
-        TIME_BASE,
-    )?;
+    let mut media =
+        MediaFrame::<i16>::new_audio_frame(SampleFormat::S16, nb_channels, nb_samples, 48000)?;
     let packed = media.data.as_packed_mut().expect("S16 is interleaved");
     for s in 0..nb_samples as usize {
         for ch in 0..nb_channels as usize {

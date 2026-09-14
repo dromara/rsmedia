@@ -12,7 +12,7 @@
 
 use rsmedia::frame::MediaFrame;
 use rsmedia::mux::Muxer;
-use rsmedia::{EncoderBuilder, PixelFormat, SampleFormat, time};
+use rsmedia::{EncoderBuilder, PixelFormat, SampleFormat};
 
 const WIDTH: usize = 320;
 const HEIGHT: usize = 240;
@@ -82,13 +82,7 @@ fn encode_audio() -> anyhow::Result<()> {
 
 fn rainbow_frame(p: f32) -> MediaFrame<u8> {
     let rgb = rsmedia::colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-    let mut frame = MediaFrame::<u8>::new_video_frame(
-        WIDTH,
-        HEIGHT,
-        PixelFormat::RGB24,
-        time::new_rational(1, FPS as i32),
-    )
-    .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(WIDTH, HEIGHT, PixelFormat::RGB24).unwrap();
     let samples = frame
         .data
         .as_packed_mut()
@@ -104,14 +98,9 @@ fn rainbow_frame(p: f32) -> MediaFrame<u8> {
 }
 
 fn sine_audio_frame(nb_samples: u32) -> MediaFrame<f32> {
-    let mut frame = MediaFrame::<f32>::new_audio_frame(
-        SampleFormat::FLT,
-        CHANNELS,
-        nb_samples,
-        SAMPLE_RATE,
-        time::new_rational(1, SAMPLE_RATE as i32),
-    )
-    .unwrap();
+    let mut frame =
+        MediaFrame::<f32>::new_audio_frame(SampleFormat::FLT, CHANNELS, nb_samples, SAMPLE_RATE)
+            .unwrap();
     let samples = frame
         .data
         .as_packed_mut()

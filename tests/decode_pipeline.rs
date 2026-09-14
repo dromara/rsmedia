@@ -36,12 +36,7 @@ fn make_test_video(
     let video_index = muxer.add_encoder(video_encoder)?;
     for i in 0..n_frames {
         let rgb = colors::hsv_to_rgb(i as f32 / n_frames as f32 * 360.0, 100.0, 100.0);
-        let mut frame = MediaFrame::<u8>::new_video_frame(
-            width,
-            height,
-            PixelFormat::RGB24,
-            rsmedia::time::new_rational(1, 24),
-        )?;
+        let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
         let samples = frame
             .data
             .as_packed_mut()

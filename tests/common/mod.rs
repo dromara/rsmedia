@@ -37,13 +37,9 @@ pub fn remove_test_output(path: &std::path::Path) {
 #[allow(dead_code)]
 #[cfg(feature = "ndarray")]
 pub fn gradient_video_frame(width: usize, height: usize, phase: f32) -> rsmedia::MediaFrame<u8> {
-    let mut frame = rsmedia::MediaFrame::<u8>::new_video_frame(
-        width,
-        height,
-        rsmedia::PixelFormat::RGB24,
-        rsmedia::time::new_rational(1, 25),
-    )
-    .expect("video frame allocation");
+    let mut frame =
+        rsmedia::MediaFrame::<u8>::new_video_frame(width, height, rsmedia::PixelFormat::RGB24)
+            .expect("video frame allocation");
     let samples = frame
         .data
         .as_packed_mut()
@@ -75,7 +71,6 @@ pub fn sine_audio_frame(
         channels,
         nb_samples,
         sample_rate,
-        rsmedia::time::new_rational(1, sample_rate as i32),
     )
     .expect("audio frame allocation");
     let planes = frame.data.as_planes_mut().expect("FLTP frames are planar");

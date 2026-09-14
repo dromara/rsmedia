@@ -1,5 +1,5 @@
 use rsmedia::{EncoderBuilder, HWDeviceConfig, PixelFormat, StreamWriterBuilder, Writer};
-use rsmedia::{colors, filter, frame::MediaFrame, time};
+use rsmedia::{colors, filter, frame::MediaFrame};
 
 use rsmpeg::avfilter::AVFilter;
 
@@ -110,13 +110,7 @@ fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
 
     // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
     // pixel are equal, and determined by the `rgb` we chose above.
-    let mut frame = MediaFrame::<u8>::new_video_frame(
-        width,
-        height,
-        PixelFormat::RGB24,
-        time::new_rational(1, 24),
-    )
-    .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24).unwrap();
     let samples = frame
         .data
         .as_packed_mut()

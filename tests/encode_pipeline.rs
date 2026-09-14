@@ -72,9 +72,7 @@ fn assert_container_results(
 fn rainbow_video_frame(w: usize, h: usize, p: f32) -> MediaFrame<u8> {
     use rsmedia::colors;
     let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-    let mut frame =
-        MediaFrame::<u8>::new_video_frame(w, h, PixelFormat::RGB24, time::new_rational(1, 24))
-            .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(w, h, PixelFormat::RGB24).unwrap();
     let samples = frame
         .data
         .as_packed_mut()
@@ -135,14 +133,8 @@ fn sine_audio_frame<T: SineSample>(
     sample_rate: u32,
 ) -> MediaFrame<T> {
     use rsmedia::frame::MediaFrame;
-    let mut frame = MediaFrame::<T>::new_audio_frame(
-        T::format(),
-        channels,
-        nb_samples,
-        sample_rate,
-        time::new_rational(1, sample_rate as i32),
-    )
-    .unwrap();
+    let mut frame =
+        MediaFrame::<T>::new_audio_frame(T::format(), channels, nb_samples, sample_rate).unwrap();
     for i in 0..nb_samples as usize {
         let t = i as f32 / sample_rate as f32;
         let v = T::from_norm((2.0 * std::f32::consts::PI * freq * t).sin() * 0.5);
@@ -1623,7 +1615,6 @@ mod audio {
                     channels,
                     samples_per_frame,
                     sample_rate,
-                    time::new_rational(1, sample_rate as i32),
                 )?;
                 frame.set_pts(total_pts);
                 let mut av = frame.to_avframe()?;
@@ -1662,6 +1653,69 @@ mod audio {
         Ok(())
     }
 
+    /// 音频帧未声明采样率（0）时回退到编码器自己的率，而不是被当成「0 Hz」拒绝。
+    ///
+    /// 回归 `check_resampler_input` 的 `Invalid input frame.`：用户直接构造 `AVFrame`
+    /// （不经过 `MediaFrame`）时不会设置 `sample_rate`，而 `AVFrame` 默认就是 0。
+    #[test]
+    fn test_audio_frame_without_declared_sample_rate() -> Result<()> {
+        use rsmedia::frame::MediaFrame;
+        use rsmedia::{DecoderBuilder, MediaType};
+
+        let sample_rate = 44_100u32;
+        let channels = 2u32;
+        let format = SampleFormat::FLTP;
+        let samples_per_frame = 1024u32;
+        let frames_to_write = 5u32;
+
+        let path = common::test_output_path("encode", "rsmedia_audio_undeclared_rate.m4a");
+        common::remove_test_output(&path);
+
+        let encoder =
+            EncoderBuilder::new_audio(128_000, channels as i32, sample_rate as i32, format)
+                .build()?;
+        let enc_tb = encoder.time_base();
+
+        let mut total_pts: i64 = 0;
+        {
+            let mut muxer = rsmedia::mux::Muxer::new(&path)?;
+            let idx = muxer.add_encoder(encoder)?;
+            for _ in 0..frames_to_write {
+                let frame = MediaFrame::<f32>::new_audio_frame(
+                    format,
+                    channels,
+                    samples_per_frame,
+                    sample_rate,
+                )?;
+                let mut av = frame.to_avframe()?;
+                // 模拟「调用方没有声明采样率」——用户手搓的 AVFrame 就是这个状态。
+                av.set_sample_rate(0);
+                av.set_pts(total_pts);
+                av.set_time_base(enc_tb);
+                total_pts += samples_per_frame as i64;
+                muxer.mux(av, idx)?;
+            }
+            muxer.finish()?;
+        }
+
+        // 编码成功，且输出流用的是编码器的采样率。
+        let mut reader = rsmedia::StreamReader::new(&path)?;
+        let mut decoder = DecoderBuilder::new(MediaType::AUDIO).build_from_reader(&reader)?;
+        let mut total_samples = 0u64;
+        while let Some(frame) = decoder.decode::<f32>(&mut reader)? {
+            assert_eq!(frame.sample_rate, sample_rate, "sample rate mismatch");
+            total_samples += frame.nb_samples as u64;
+        }
+        let expected = frames_to_write as u64 * samples_per_frame as u64;
+        assert!(
+            total_samples >= expected,
+            "decoded {total_samples} samples, expected >= {expected}"
+        );
+
+        common::remove_test_output(&path);
+        Ok(())
+    }
+
     /// 末帧不足一帧（非 frame_size 整倍数）时，应作为合法末帧编码，而非被 `check_frame`
     /// 的帧长校验拒绝。回归测试：无滤镜向 aac 发非整倍数样本总数。
     #[test]
@@ -1693,7 +1747,6 @@ mod audio {
                     channels,
                     samples_per_frame,
                     sample_rate,
-                    time::new_rational(1, sample_rate as i32),
                 )?;
                 frame.set_pts(total_pts);
                 let mut av = frame.to_avframe()?;
@@ -1755,7 +1808,6 @@ mod audio {
                     channels,
                     samples_per_frame,
                     sample_rate,
-                    time::new_rational(1, sample_rate as i32),
                 )?;
                 frame.set_pts(total_pts);
                 let mut av = frame.to_avframe()?;

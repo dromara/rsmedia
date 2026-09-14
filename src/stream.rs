@@ -210,9 +210,13 @@ impl StreamInfo {
 
         let bytes_per_sample = format.into_sample().and_then(|s| s.get_bytes_per_sample());
 
-        // descriptor() 返回 Result，未知格式时返回错误而非 panic
+        // A video stream may legitimately carry no pixel format at all — a bare
+        // elementary stream such as `.h264` reports `AV_PIX_FMT_NONE`, which has
+        // no descriptor. That is the same "unknown but valid" placeholder the
+        // `format` computation above already accepts, so the derived bit counts
+        // degrade to 0 instead of the stream failing to open.
         let pix_fmt_desc = if codec_type.is_video() {
-            Some(PixelFormat::from(codecpar.format).descriptor()?)
+            PixelFormat::from(codecpar.format).descriptor().ok()
         } else {
             None
         };

@@ -122,8 +122,9 @@ fn main() -> anyhow::Result<()> {
     let mut reader = StreamReader::new("/tmp/test.mp4")?;
     let mut decoder = DecoderBuilder::new(MediaType::VIDEO).build_from_reader(&reader)?;
 
-    // `decode_frame` yields `MediaFrame<u8>` (ndarray-backed, RGB24 for video);
-    // `decode::<f32>()` does the same for audio.
+    // `decode_frame` yields `MediaFrame<u8>` (ndarray-backed; video defaults to
+    // planar YUV420P, see `DecoderBuilder::with_pix_fmt`); `decode::<f32>()`
+    // does the same for audio.
     while let Some(frame) = decoder.decode_frame(&mut reader)? {
         println!(
             "{}x{} pts={} planes={}",

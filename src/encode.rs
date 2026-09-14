@@ -37,9 +37,14 @@ pub struct EncoderBuilder {
     /// `None` = 未显式指定，`build()` 时按编码器支持列表自动协商。
     sample_format: Option<SampleFormat>,
     /// Common
-    bit_rate: i64,
-    gop_size: i32,
-    max_b_frames: i32,
+    /// 目标码率；`None` = 按媒体类型取默认值（视频 [`Self::VIDEO_BIT_RATE`]、
+    /// 音频 [`Self::AUDIO_BIT_RATE`]，与 ffmpeg CLI 一致）。
+    bit_rate: Option<i64>,
+    /// 关键帧间隔；`None` = 不设置，沿用编解码器自身默认值。
+    gop_size: Option<i32>,
+    /// B 帧上限；`None` = 不设置，沿用编解码器自身默认值（FFmpeg 的 `bf` 默认
+    /// -1，libx264 为 3）。
+    max_b_frames: Option<i32>,
     time_base: ffi::AVRational,
     pkt_time_base: ffi::AVRational,
     frame_rate: ffi::AVRational,
@@ -83,6 +88,11 @@ impl EncoderBuilder {
     /// * 超高清 UltraHd_4K:     (3840, 2160) => 20_000_000,  // 20 Mbps
     /// * 超高清 FullUltraHd_8K: (7680, 4320) => 60_000_000,  // 60 Mbps
     const VIDEO_BIT_RATE: i64 = 1_000_000;
+
+    /// Default audio bit rate，与 ffmpeg CLI 的 `-b:a` 默认一致（128 kbps）。
+    ///
+    /// 音频编码器此前沿用 `VIDEO_BIT_RATE`（1 Mbps），是音频合理码率的 8 倍。
+    const AUDIO_BIT_RATE: i64 = 128_000;
 
     /// default video codec
     const VIDEO_CODEC_NAME: &'static str = "libx264";
@@ -188,8 +198,11 @@ impl EncoderBuilder {
     }
 
     /// Set the bit rate.
+    ///
+    /// 未设置时按媒体类型取默认值：视频 1 Mbps、音频 128 kbps（与 ffmpeg CLI
+    /// 的 `-b:a` 默认一致）。
     pub fn with_bit_rate(mut self, bit_rate: i64) -> Self {
-        self.bit_rate = bit_rate;
+        self.bit_rate = Some(bit_rate);
         self
     }
 
@@ -271,15 +284,22 @@ impl EncoderBuilder {
     //     self
     // }
 
-    /// Set the GOP size.
+    /// Set the GOP size (keyframe interval, in frames).
+    ///
+    /// 未设置时沿用编解码器自身的默认值（FFmpeg 的 `g` 选项，通常为 12）。
+    /// 注意 `0` 会被 libx264 解释为**全 I 帧**（每个关键帧间隔为 1），除非
+    /// 明确想要全帧内编码，否则不要传 0。
     pub fn with_gop_size(mut self, gop_size: i32) -> Self {
-        self.gop_size = gop_size;
+        self.gop_size = Some(gop_size);
         self
     }
 
     /// Set the maximum number of B-frames.
+    ///
+    /// 未设置时沿用编解码器自身默认值（FFmpeg 的 `bf` 选项默认 -1 = 交给编码器，
+    /// libx264 为 3）。注意 `0` 会**显式禁用** B 帧，而不是"交给编码器"。
     pub fn with_max_b_frames(mut self, max_b_frames: i32) -> Self {
-        self.max_b_frames = max_b_frames;
+        self.max_b_frames = Some(max_b_frames);
         self
     }
 
@@ -405,7 +425,10 @@ impl EncoderBuilder {
     fn effective_bit_rate(&self) -> i64 {
         match self.quality {
             Some(Quality::Bitrate(bit_rate)) if bit_rate > 0 => bit_rate,
-            _ => self.bit_rate,
+            _ => match self.media_type {
+                MediaType::AUDIO => self.bit_rate.unwrap_or(Self::AUDIO_BIT_RATE),
+                _ => self.bit_rate.unwrap_or(Self::VIDEO_BIT_RATE),
+            },
         }
     }
 
@@ -443,8 +466,16 @@ impl EncoderBuilder {
             if !use_crf {
                 encoder.set_bit_rate(self.effective_bit_rate());
             }
-            encoder.set_gop_size(self.gop_size);
-            encoder.set_max_b_frames(self.max_b_frames);
+            // gop_size 未设置时不覆盖：`avcodec_alloc_context3` 已应用 FFmpeg 的
+            // 默认值（`g` 选项，通常为 12）；显式设 0 反而会被 libx264 解释为全 I 帧。
+            if let Some(gop_size) = self.gop_size {
+                encoder.set_gop_size(gop_size);
+            }
+            // B 帧上限未设置时不覆盖：avcodec 的 `bf` 默认 -1 = 交给编码器决定
+            // （libx264 为 3）；显式设 0 会禁用 B 帧，与 ffmpeg CLI 默认输出不一致。
+            if let Some(max_b_frames) = self.max_b_frames {
+                encoder.set_max_b_frames(max_b_frames);
+            }
             encoder.set_framerate(self.frame_rate);
             encoder.set_time_base(self.effective_time_base());
             encoder.set_pkt_timebase(self.pkt_time_base);
@@ -821,11 +852,11 @@ impl Default for EncoderBuilder {
             pixel_format: None,
             time_base: time::TIME_BASE,
             pkt_time_base: time::TIME_BASE,
-            bit_rate: Self::VIDEO_BIT_RATE,
+            bit_rate: None,
             frame_rate: time::new_rational(Self::FRAME_RATE, 1),
             fps: Self::FRAME_RATE as f32,
-            gop_size: 0,
-            max_b_frames: 0,
+            gop_size: None,
+            max_b_frames: None,
             ofmt_flag: AVFormatFlag::GLOBAL_HEADER.as_raw(),
             // audio
             nb_channels: 2,
@@ -1787,6 +1818,24 @@ mod tests {
             (tb.num, tb.den),
             (1, EncoderBuilder::SUBTITLE_TIME_BASE_DEN),
             "subtitle input time base = 1/1000"
+        );
+    }
+
+    /// 码率默认值按媒体类型区分：视频 1 Mbps、音频 128k（ffmpeg CLI 的 `-b:a`
+    /// 默认）；显式 `with_bit_rate` 与 `Quality::Bitrate` 均可覆盖。
+    #[test]
+    fn test_default_bit_rate_per_media_type() {
+        assert_eq!(
+            EncoderBuilder::new_video(64, 64).effective_bit_rate(),
+            EncoderBuilder::VIDEO_BIT_RATE,
+            "video default bit rate"
+        );
+        assert_eq!(
+            EncoderBuilder::default()
+                .with_media_type(MediaType::AUDIO)
+                .effective_bit_rate(),
+            EncoderBuilder::AUDIO_BIT_RATE,
+            "audio default bit rate is 128k, not the video default"
         );
     }
 

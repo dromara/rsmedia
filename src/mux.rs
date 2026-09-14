@@ -151,7 +151,11 @@ impl<W: Writer> Muxer<W> {
         Self {
             writer,
             streams: Vec::new(),
-            interleaved: false,
+            // 默认交错写入，与 ffmpeg CLI（`av_interleaved_write_frame`）一致。
+            // 编码器含 B 帧时 packet 按解码序输出（dts 先于 pts、首包 dts 为负），
+            // 非交错直写会让 FLV 等容器报 "Packets poorly interleaved / not in
+            // the proper order with respect to DTS"（AVERROR(EINVAL)）。
+            interleaved: true,
             have_written_header: false,
             have_written_trailer: false,
             metadata: Metadata::new(),
@@ -168,10 +172,13 @@ impl<W: Writer> Muxer<W> {
 
     /// 开关交错写入（interleaved）。
     ///
-    /// 部分容器（如 MP4/MOV）要求以交错方式写包（等价于
-    /// `av_interleaved_write_frame`），并将写入推迟到输出流时间基/时长可用
-    /// 时。透传（remux）MP4 时通常需要开启。默认关闭，与编码流挨个
-    /// [`Self::mux`] 逐帧写包的旧行为保持一致。
+    /// **默认开启**，等价于 ffmpeg CLI 的 `av_interleaved_write_frame`：跨流按
+    /// dts 交错排序、缓冲 B 帧导致的乱序，保证首包 dts 非负。编码器输出含
+    /// B 帧时（默认即含，见 [`EncoderBuilder::with_max_b_frames`]）必须使用
+    /// 交错写入，否则 FLV 等容器直接报错。
+    ///
+    /// 透传（remux）单流等场景可关闭，回到逐包直写
+    /// （`av_write_frame`）的旧行为。
     pub fn set_interleaved(&mut self, interleaved: bool) -> &mut Self {
         self.interleaved = interleaved;
         self

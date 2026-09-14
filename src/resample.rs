@@ -1,7 +1,7 @@
 use crate::error::{Context, Result, RsmediaError};
 use crate::{SampleFormat, imgutils, time};
 
-use rsmpeg::avutil::{AVFrame, AVSamples};
+use rsmpeg::avutil::{AVChannelLayout, AVFrame, AVSamples};
 use rsmpeg::ffi;
 use rsmpeg::swresample::SwrContext;
 
@@ -44,6 +44,20 @@ fn check_resampler_input(src_frame: &AVFrame) -> Result<()> {
         return Err(RsmediaError::custom("Invalid input frame."));
     }
     Ok(())
+}
+
+/// Frames decoded from containers that carry no channel mask (a plain WAV, say)
+/// report `AV_CHANNEL_ORDER_UNSPEC`. `swr_alloc_set_opts2` already replaces such
+/// an order with the default layout for the channel count when building the
+/// context, and `swr_convert` then rejects every input frame whose order still
+/// says UNSPEC with `AVERROR_INPUT_CHANGED`. Interpret the unspecified layout the
+/// way FFmpeg itself does — as the default layout for the channel count — by
+/// handing swr a frame that carries it. The samples are untouched; only the
+/// layout description is filled in.
+fn with_default_layout(frame: &AVFrame) -> AVFrame {
+    let mut copy = frame.clone();
+    copy.set_ch_layout(AVChannelLayout::from_nb_channels(frame.ch_layout.nb_channels).into_inner());
+    copy
 }
 
 /// Audio resampling frame
@@ -92,6 +106,26 @@ pub fn convert_frame(
     out_sample_rate: i32,
 ) -> Result<AVFrame> {
     check_resampler_input(src_frame)?;
+
+    let normalized;
+    let src_frame = if src_frame.ch_layout.order == ffi::AV_CHANNEL_ORDER_UNSPEC
+        && src_frame.ch_layout.nb_channels > 0
+    {
+        normalized = with_default_layout(src_frame);
+        &normalized
+    } else {
+        src_frame
+    };
+
+    // The *output* layout goes through the same check: the context is built from
+    // it, and the destination frame carries it back into every `swr_convert`, so
+    // an unspecified order here would trip `AVERROR_OUTPUT_CHANGED`.
+    let out_ch_layout =
+        if out_ch_layout.order == ffi::AV_CHANNEL_ORDER_UNSPEC && out_ch_layout.nb_channels > 0 {
+            AVChannelLayout::from_nb_channels(out_ch_layout.nb_channels).into_inner()
+        } else {
+            out_ch_layout
+        };
 
     let mut resampler = Resampler::new(
         src_frame.ch_layout,
@@ -188,6 +222,13 @@ impl Resampler {
     /// call `alloc_buffer`; after conversion, `dst.nb_samples` is the actual
     /// number of output samples.
     pub fn convert_frame(&mut self, src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
+        let normalized;
+        let src = if src.ch_layout.order == ffi::AV_CHANNEL_ORDER_UNSPEC {
+            normalized = with_default_layout(src);
+            &normalized
+        } else {
+            src
+        };
         self.swr
             .convert_frame(Some(src), dst)
             .context("Failed to convert frame with streaming resampler")
@@ -211,6 +252,13 @@ impl Resampler {
         out_ch_layout: ffi::AVChannelLayout,
         out_sample_fmt: ffi::AVSampleFormat,
     ) -> Result<AVSamples> {
+        let normalized;
+        let src_frame = if src_frame.ch_layout.order == ffi::AV_CHANNEL_ORDER_UNSPEC {
+            normalized = with_default_layout(src_frame);
+            &normalized
+        } else {
+            src_frame
+        };
         // 容量按输出样本数的上界分配，避免上采样（in < out）时尾部样本被丢弃。
         let capacity = self.get_out_samples(src_frame.nb_samples);
         let mut out_samples =
@@ -416,6 +464,31 @@ mod tests {
         }
 
         Ok(frame)
+    }
+
+    /// 无声道掩码的容器（如不带 `dwChannelMask` 的 WAV）解码出的帧布局是
+    /// `AV_CHANNEL_ORDER_UNSPEC`；重采样器必须接受它——此前 `swr_convert`
+    /// 会以 `AVERROR_INPUT_CHANGED`/`OUTPUT_CHANGED` 拒绝每一帧。
+    #[test]
+    fn test_convert_frame_with_unspec_channel_layout() -> Result<()> {
+        let mut frame = create_test_frame(&AUDIO_FORMATS[2], 44100, 2, 1024)?;
+        let mut unspec = AVChannelLayout::from_nb_channels(2).into_inner();
+        unspec.order = ffi::AV_CHANNEL_ORDER_UNSPEC;
+        unspec.u.mask = 0;
+        frame.set_ch_layout(unspec);
+
+        // 输入与输出布局都按 UNSPEC 传入：两侧都要被归一化。
+        let out = convert_frame(
+            &frame,
+            AVChannelLayout::from_nb_channels(2).into_inner(),
+            ffi::AV_SAMPLE_FMT_FLTP,
+            44100,
+        )?;
+        assert_eq!(out.format, ffi::AV_SAMPLE_FMT_FLTP);
+        assert_eq!(out.ch_layout.order, ffi::AV_CHANNEL_ORDER_NATIVE);
+        assert_eq!(out.ch_layout.nb_channels, 2);
+        assert_eq!(out.nb_samples, frame.nb_samples);
+        Ok(())
     }
 
     #[test]

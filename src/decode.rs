@@ -6,6 +6,7 @@ use crate::frame::{ElementType, MediaFrame};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::{Reader, Seekable};
 use crate::options::Options;
+use crate::resample;
 use crate::resize::Resize;
 use crate::scale::{ScaleAlgorithm, ScaleQuality, Scaler};
 use crate::stream::StreamInfo;
@@ -39,6 +40,8 @@ pub struct DecoderBuilder {
     resize: Option<Resize>,
     /// 解码输出目标像素格式（仅视频），默认 [`PixelFormat::YUV420P`]。
     pix_fmt: Option<PixelFormat>,
+    /// 解码输出目标采样格式（仅音频）。`None` 表示保留编解码器原生格式。
+    sample_fmt: Option<SampleFormat>,
 }
 
 impl DecoderBuilder {
@@ -61,6 +64,7 @@ impl DecoderBuilder {
             scale_pool: false,
             resize: None,
             pix_fmt: None,
+            sample_fmt: None,
         }
     }
 
@@ -173,6 +177,32 @@ impl DecoderBuilder {
     /// 8bit 格式用 `u8`，9..16bit 格式用 `u16`（见 [`PixelFormat::bytes_per_component`]）。
     pub fn with_pix_fmt(mut self, pix_fmt: PixelFormat) -> Self {
         self.pix_fmt = Some(pix_fmt);
+        self
+    }
+
+    /// Set the output sample format of decoded audio frames.
+    ///
+    /// 默认保留编解码器**原生**采样格式（AAC/AC-3 为 `FLTP`、MP2 为 `S16P`、
+    /// PCM 为各自的 `S16LE`/`S32LE`…）。指定本项后，解码输出统一重采样到目标
+    /// 格式，于是 `decode::<T>` 的元素类型不再需要随源文件而变 ——
+    /// 例如统一到 [`SampleFormat::FLTP`] 后，任何音频文件都能用 `decode::<f32>()`
+    /// 读取，不必先查 `codecpar().format`。
+    ///
+    /// 采样率与声道布局**不变**，只换采样格式（同一率下等长转换）。源格式已与
+    /// 目标相同时不做任何转换，因此该选项在无需转换时零开销。
+    ///
+    /// 解码输出 `MediaFrame::data` 的交错/平面变体随之变化（见
+    /// [`SampleFormat::data_layout`]）：平面格式（`FLTP` 等）每声道一个
+    /// `(1, nb_samples)` 平面，交错格式（`FLT` 等）为单个
+    /// `(1, nb_samples, nb_channels)` 数组。
+    ///
+    /// 仅对音频解码器有效；其他媒体类型构建时返回错误（fail-fast）。
+    ///
+    /// 注意：元素类型 `T` 的字节宽度必须与目标格式的每样本字节数一致
+    /// （见 [`SampleFormat::get_bytes_per_sample`]）——`FLTP` 用 `f32`、
+    /// `S16P` 用 `i16`、`S32P` 用 `i32`。
+    pub fn with_sample_fmt(mut self, sample_fmt: SampleFormat) -> Self {
+        self.sample_fmt = Some(sample_fmt);
         self
     }
 
@@ -318,6 +348,26 @@ impl DecoderBuilder {
             (_, None) => PixelFormat::YUV420P,
         };
 
+        // 输出采样格式：仅音频有效。`None` = 保留编解码器原生格式（默认），
+        // 代价为零；指定后解码帧在进滤镜图之前统一转换到目标格式。
+        // 非音频类型配置了 sample_fmt 视为调用方错误，快速失败而非静默忽略。
+        let output_sample_fmt = match (media_type, self.sample_fmt) {
+            (MediaType::AUDIO, None) => None,
+            (MediaType::AUDIO, Some(fmt)) if fmt != SampleFormat::NONE => Some(fmt),
+            (MediaType::AUDIO, Some(fmt)) => {
+                return Err(RsmediaError::custom(format!(
+                    "Unsupported output sample format: {fmt:?}"
+                )));
+            }
+            (media_type, Some(fmt)) => {
+                return Err(RsmediaError::custom(format!(
+                    "with_sample_fmt({fmt:?}) is only valid for audio decoders, got media type: \
+                     {media_type:?}"
+                )));
+            }
+            (_, None) => None,
+        };
+
         let filter_graph = if let Some(filters) = self.filters {
             let filter_params = match media_type {
                 MediaType::VIDEO => FilterParams::Video(VideoParams {
@@ -332,8 +382,12 @@ impl DecoderBuilder {
                 MediaType::AUDIO => FilterParams::Audio(AudioParams {
                     nb_channels: decode_ctx.ch_layout.nb_channels,
                     sample_rate: decode_ctx.sample_rate,
-                    format: SampleFormat::from(decode_ctx.sample_fmt),
-                    src_format: SampleFormat::from(decode_ctx.sample_fmt),
+                    // 滤镜图的输入格式须与送进去的帧一致：指定了输出采样格式时，
+                    // 帧在进图之前已转换（见 `receive_frame_from_decoder`），因此
+                    // 这里用目标格式而非编解码器原生格式。
+                    format: output_sample_fmt.unwrap_or(SampleFormat::from(decode_ctx.sample_fmt)),
+                    src_format: output_sample_fmt
+                        .unwrap_or(SampleFormat::from(decode_ctx.sample_fmt)),
                     time_base: decode_ctx.time_base,
                 }),
                 _ => {
@@ -373,6 +427,7 @@ impl DecoderBuilder {
                 .with_buffer_pool(self.scale_pool),
             resize: self.resize,
             output_pix_fmt,
+            output_sample_fmt,
         })
     }
 }
@@ -403,6 +458,8 @@ pub struct Decoder {
     resize: Option<Resize>,
     /// 解码输出目标像素格式（仅视频）
     output_pix_fmt: PixelFormat,
+    /// 解码输出目标采样格式（仅音频）；`None` = 保留编解码器原生格式
+    output_sample_fmt: Option<SampleFormat>,
 }
 
 impl Decoder {
@@ -535,6 +592,15 @@ impl Decoder {
 
     /// Decode a single frame.
     ///
+    /// `T` must match the width of the samples being decoded: the byte size of
+    /// the frame's format. For video that is the output pixel format's
+    /// [`bytes_per_component`](PixelFormat::bytes_per_component) — 8-bit formats
+    /// take `u8`, 9..16-bit ones `u16`. For audio it is the decoded sample
+    /// format: the codec's native one unless
+    /// [`with_sample_fmt`](DecoderBuilder::with_sample_fmt) unifies the output
+    /// (e.g. to `FLTP`, which every audio codec can be read as with `decode::<f32>()`).
+    /// A mismatch is rejected with the format and both widths in the error.
+    ///
     /// # Return value
     ///
     /// A tuple of the frame timestamp (relative to the stream) and the frame itself.
@@ -563,10 +629,11 @@ impl Decoder {
     /// Decode a single frame as a `MediaFrame<u8>`.
     ///
     /// Convenience for `decode::<u8>()` which is the common video path
-    /// (8-bit formats such as YUV420P/RGB24). For audio the sample type must
-    /// match the codec's native sample format size — use `decode::<f32>()`
-    /// for FLTP/FLT output or [`decode_raw`](Self::decode_raw) to avoid the
-    /// typed conversion entirely.
+    /// (8-bit formats such as YUV420P/RGB24). For audio the element type must
+    /// match the decoded sample format size: with the codec's native format by
+    /// default, or with the format [`with_sample_fmt`](DecoderBuilder::with_sample_fmt)
+    /// unifies the output to — e.g. `decode::<f32>()` for `FLTP`/`FLT`. Use
+    /// [`decode_raw`](Self::decode_raw) to avoid the typed conversion entirely.
     ///
     /// # Return value
     ///
@@ -876,6 +943,24 @@ impl Decoder {
                     target_sw_pix_fmt,
                 )?
             }
+            MediaType::AUDIO => match self.output_sample_fmt {
+                // 统一音频输出格式（由 `with_sample_fmt` 配置）。与视频侧一样在
+                // 进滤镜图之前完成，图内因此按目标格式声明输入（见 build_from_reader）。
+                // 只在格式真的不同、且帧确实带样本时转换：默认（未指定目标）与
+                // 「目标 == 原生」两种情况都零开销，空帧也无从转换。
+                Some(target)
+                    if target != SampleFormat::from(sw_frame.format) && sw_frame.nb_samples > 0 =>
+                {
+                    resample::convert_frame(
+                        &sw_frame,
+                        sw_frame.ch_layout,
+                        target.into(),
+                        sw_frame.sample_rate,
+                    )
+                    .context("Failed to convert decoded audio to the output sample format")?
+                }
+                _ => sw_frame,
+            },
             _ => {
                 // do nothing
                 sw_frame
@@ -1240,6 +1325,71 @@ mod tests {
                 }
             }
         }
+
+        Ok(())
+    }
+
+    /// `with_sample_fmt` 统一输出：无论编解码器原生格式是什么，解码帧都转换到
+    /// 目标格式，`decode::<T>` 的元素类型因此不必随源文件而变。
+    /// `assets/wav.wav` 的帧还带 `AV_CHANNEL_ORDER_UNSPEC` 布局（WAV 无声道
+    /// 掩码），顺带回归重采样器的 `AVERROR_INPUT/OUTPUT_CHANGED`。
+    #[test]
+    fn test_decode_audio_with_sample_fmt_unifies_output() -> Result<()> {
+        let audio_path = std::path::Path::new("assets/wav.wav");
+
+        // 统一到 FLTP：decode::<f32> 全程可用，且每帧的格式都是目标格式。
+        let mut reader = StreamReader::new(audio_path)?;
+        let mut decoder = DecoderBuilder::new(MediaType::AUDIO)
+            .with_sample_fmt(SampleFormat::FLTP)
+            .build_from_reader(&reader)?;
+        let mut unified_samples = 0u64;
+        while let Some(frame) = decoder.decode::<f32>(&mut reader)? {
+            assert_eq!(
+                frame.format().and_then(|f| f.into_sample()),
+                Some(SampleFormat::FLTP),
+                "decoded frame was not converted to the requested sample format"
+            );
+            unified_samples += frame.nb_samples as u64;
+        }
+        assert!(unified_samples > 0, "no audio decoded");
+
+        // 原生格式（默认）：pcm_s16le 解出 S16，样本总量一致——只换格式不变样本数。
+        let mut reader = StreamReader::new(audio_path)?;
+        let native_format = reader
+            .input()
+            .streams()
+            .iter()
+            .find(|stream| stream.codecpar().codec_type().is_audio())
+            .map(|stream| SampleFormat::from(stream.codecpar().format))
+            .expect("audio stream");
+        let mut decoder = DecoderBuilder::new(MediaType::AUDIO).build_from_reader(&reader)?;
+        let mut native_samples = 0u64;
+        while let Some(frame) = decoder.decode::<i16>(&mut reader)? {
+            native_samples += frame.nb_samples as u64;
+        }
+        assert_eq!(native_format, SampleFormat::S16);
+        assert_eq!(
+            native_samples, unified_samples,
+            "format conversion changed the decoded sample count"
+        );
+
+        Ok(())
+    }
+
+    /// `with_sample_fmt` 只对音频解码器有效，`NONE` 不是可用目标：构建时快速失败。
+    #[test]
+    fn test_decode_builder_sample_fmt_validation() -> Result<()> {
+        let reader = StreamReader::new("assets/mp4.mp4")?;
+        let video = DecoderBuilder::new(MediaType::VIDEO)
+            .with_sample_fmt(SampleFormat::FLTP)
+            .build_from_reader(&reader);
+        assert!(video.is_err(), "with_sample_fmt must be rejected for video");
+
+        let reader = StreamReader::new("assets/wav.wav")?;
+        let none = DecoderBuilder::new(MediaType::AUDIO)
+            .with_sample_fmt(SampleFormat::NONE)
+            .build_from_reader(&reader);
+        assert!(none.is_err(), "SampleFormat::NONE is not a valid target");
 
         Ok(())
     }

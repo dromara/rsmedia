@@ -229,6 +229,15 @@ impl FrameFormat {
     }
 }
 
+impl std::fmt::Display for FrameFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pixel(fmt) => write!(f, "[Pixel:{}]", fmt.get_pix_fmt_name()),
+            Self::Sample(fmt) => write!(f, "[Sample:{}]", fmt.get_sample_fmt_name()),
+        }
+    }
+}
+
 /// Raw FFmpeg format value: the numeric `AV_PIX_FMT_*` or `AV_SAMPLE_FMT_*`.
 ///
 /// Both arms convert through `Into`, so the two wrapped format types are handled identically, and

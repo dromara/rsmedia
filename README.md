@@ -492,7 +492,7 @@ let encoder = EncoderBuilder::new_video(1920, 1080)
 | `filter` | `Filter` (any spec), `filter::video::*`, `filter::audio::*`, `FilterGraph` |
 | `scale` | `Scaler`, `ScaleAlgorithm`, `ScaleQuality`, `SwsDither/SwsAlphaBlend/SwsScaler/SwsIntent/SwsBackend` (version-dependent), `scale_frame`, `scale_with_flags` |
 | `resample` | `Resampler`, `convert`, `convert_frame` |
-| `frame` | `MediaFrame`, `MediaFrameType`, `FrameSideData` (feature `ndarray`) |
+| `frame` | `MediaFrame`, `ElementType`, `FrameSideData` (feature `ndarray`) |
 | `subtitle` | `SubtitleSegment` |
 | `pcm` | `PcmSink`, `PcmSpec` |
 | `imgutils` | frame/plane ⇄ buffer, image conversion helpers |

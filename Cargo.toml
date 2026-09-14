@@ -25,14 +25,15 @@ link_vcpkg_ffmpeg = ["rsmpeg/link_vcpkg_ffmpeg"]
 [dependencies]
 libc = "0.2"
 log = "0.4"
-tracing = "0.1"
 url = "2.5"
+tracing = "0.1"
 dashmap = "6.1"
 once_cell = "1.21"
 num_cpus = "1.17"
-image = "0.25"
 colorous = "1.0"
+bytemuck = "1.25"
 num-traits = "0.2"
+image = "0.25"
 palette = "0.7"
 colorutils-rs = "0.8"
 yuv = { version = "0.8", features = ["rayon", "professional_mode"] }

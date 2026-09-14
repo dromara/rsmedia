@@ -34,26 +34,21 @@ use yuv::{
 /// floats that can be cloned, defaulted, compared and cast between one another.
 pub trait ElementType:
     'static
-    + Clone
-    + Copy
     + Send
     + Sync
-    + Default
-    + PartialOrd
+    + bytemuck::Pod
+    + std::fmt::Debug
     + num_traits::Zero
     + num_traits::NumCast
     + num_traits::NumAssign
 {
 }
 
-impl ElementType for i8 {}
 impl ElementType for u8 {}
-impl ElementType for i16 {}
 impl ElementType for u16 {}
-impl ElementType for i32 {}
 impl ElementType for u32 {}
-impl ElementType for i64 {}
-impl ElementType for u64 {}
+impl ElementType for i16 {}
+impl ElementType for i32 {}
 impl ElementType for f32 {}
 impl ElementType for f64 {}
 
@@ -792,7 +787,7 @@ where
                 self.data.shapes()
             )));
         }
-        validate_element_size::<T>(i32::from(self.format), self.element_size()?)?;
+        validate_element_size::<T>(self.format, self.element_size()?)?;
         Ok(self)
     }
 
@@ -877,13 +872,14 @@ where
         // 是最可靠的音频信号；width/height 是视频帧的固有属性。
         if frame.nb_samples > 0 {
             let sample_format = SampleFormat::from(format);
+            let frame_format = FrameFormat::Sample(sample_format);
             let element_bytes = sample_format
                 .get_bytes_per_sample()
                 .ok_or_else(|| RsmediaError::custom("Unsupported sample format"))?;
-            validate_element_size::<T>(format, element_bytes)?;
+            validate_element_size::<T>(frame_format, element_bytes)?;
 
             let mut media = Self {
-                format: FrameFormat::Sample(sample_format),
+                format: frame_format,
                 pts,
                 pkt_dts,
                 duration,
@@ -901,17 +897,18 @@ where
             Ok(media)
         } else if width > 0 && height > 0 {
             let pixel_format = PixelFormat::from(format);
+            let frame_format = FrameFormat::Pixel(pixel_format);
             let element_bytes = pixel_format
                 .bytes_per_component()
                 .ok_or_else(|| RsmediaError::custom("Unsupported pixel format"))?;
-            validate_element_size::<T>(format, element_bytes)?;
+            validate_element_size::<T>(frame_format, element_bytes)?;
 
             let mut media = Self {
                 width,
                 height,
                 pts,
                 pkt_dts,
-                format: FrameFormat::Pixel(pixel_format),
+                format: frame_format,
                 duration,
                 pkt_duration: duration,
                 time_base,
@@ -1056,7 +1053,7 @@ where
                 self.data.shapes()
             )));
         }
-        validate_element_size::<T>(i32::from(self.format), self.element_size()?)?;
+        validate_element_size::<T>(self.format, self.element_size()?)?;
 
         let mut frame = AVFrame::new();
         frame.set_format(i32::from(self.format));
@@ -1528,7 +1525,7 @@ fn yuv420_to_rgb_16bit(
 ///
 /// 两者不符时按 `T` 读写会越界（例如把 `u16` 样本写进 8bit 平面），因此这是
 /// 所有跨 FFI 拷贝的前置条件。
-fn validate_element_size<T>(format: i32, expected_size: usize) -> Result<()> {
+fn validate_element_size<T>(format: FrameFormat, expected_size: usize) -> Result<()> {
     let type_size = std::mem::size_of::<T>();
     if type_size != expected_size {
         return Err(RsmediaError::custom(format!(

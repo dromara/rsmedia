@@ -3,7 +3,7 @@ use crate::error::{Context, Result, RsmediaError};
 use crate::filter::{AudioParams, Filter, FilterGraph, FilterParams, VideoParams};
 use crate::fmt::{AVFormatFlag, FrameFormat};
 #[cfg(feature = "ndarray")]
-use crate::frame::{MediaFrame, MediaFrameType};
+use crate::frame::{ElementType, MediaFrame};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::Writer;
 use crate::options::{CRF_CAPABLE_CODECS, Options, Quality, VideoProfile};
@@ -952,7 +952,7 @@ impl Encoder {
     #[cfg(feature = "ndarray")]
     pub fn encode<T>(&mut self, frame: MediaFrame<T>) -> Result<Vec<AVPacket>>
     where
-        T: MediaFrameType,
+        T: ElementType,
     {
         let raw_frame = frame.to_avframe()?;
         self.encode_raw(raw_frame)

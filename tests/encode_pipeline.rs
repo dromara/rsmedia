@@ -75,11 +75,15 @@ fn rainbow_video_frame(w: usize, h: usize, p: f32) -> MediaFrame<u8> {
     let mut frame =
         MediaFrame::<u8>::new_video_frame(w, h, PixelFormat::RGB24, time::new_rational(1, 24))
             .unwrap();
+    let samples = frame
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..h {
         for x in 0..w {
-            frame.data[[y, x, 0]] = rgb[0];
-            frame.data[[y, x, 1]] = rgb[1];
-            frame.data[[y, x, 2]] = rgb[2];
+            samples[[y, x, 0]] = rgb[0];
+            samples[[y, x, 1]] = rgb[1];
+            samples[[y, x, 2]] = rgb[2];
         }
     }
     frame
@@ -89,7 +93,7 @@ fn rainbow_video_frame(w: usize, h: usize, p: f32) -> MediaFrame<u8> {
 ///
 /// 编码器原生采样格式各不相同（aac→FLTP、libopus→S16、mp2→S32P），
 /// 由 `CodecConfig::supported_sample_formats` 协商后据此选择帧数据类型。
-trait SineSample: rsmedia::frame::MediaFrameType {
+trait SineSample: rsmedia::frame::ElementType {
     /// 该存储类型对应的采样格式
     fn format() -> SampleFormat;
     /// 归一化浮点值 → 存储值
@@ -140,10 +144,21 @@ fn sine_audio_frame<T: SineSample>(
     )
     .unwrap();
     for i in 0..nb_samples as usize {
-        for c in 0..channels as usize {
-            let t = i as f32 / sample_rate as f32;
-            frame.data[[0, i, c]] =
-                T::from_norm((2.0 * std::f32::consts::PI * freq * t).sin() * 0.5);
+        let t = i as f32 / sample_rate as f32;
+        let v = T::from_norm((2.0 * std::f32::consts::PI * freq * t).sin() * 0.5);
+        // 采样数据的布局随格式而变：平面格式每声道一个 `(1, nb_samples)` 平面，
+        // 交错格式为单个 `(1, nb_samples, nb_channels)` 数组。
+        match &mut frame.data {
+            rsmedia::FrameData::Planar(planes) => {
+                for plane in planes.iter_mut() {
+                    plane[[0, i]] = v;
+                }
+            }
+            rsmedia::FrameData::Packed(packed) => {
+                for c in 0..channels as usize {
+                    packed[[0, i, c]] = v;
+                }
+            }
         }
     }
     frame

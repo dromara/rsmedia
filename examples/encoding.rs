@@ -117,11 +117,15 @@ fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
         time::new_rational(1, 24),
     )
     .unwrap();
+    let samples = frame
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..height {
         for x in 0..width {
-            frame.data[[y, x, 0]] = rgb[0];
-            frame.data[[y, x, 1]] = rgb[1];
-            frame.data[[y, x, 2]] = rgb[2];
+            samples[[y, x, 0]] = rgb[0];
+            samples[[y, x, 1]] = rgb[1];
+            samples[[y, x, 2]] = rgb[2];
         }
     }
     frame

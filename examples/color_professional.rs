@@ -23,12 +23,16 @@ fn main() -> anyhow::Result<()> {
     const H: usize = 180;
     let mut rgb =
         MediaFrame::<u8>::new_video_frame(W, H, PixelFormat::RGB24, time::new_rational(1, 30))?;
+    let samples = rgb
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..H {
         for x in 0..W {
             let t = (x as f32 / W as f32 * 255.0) as u8;
-            rgb.data[[y, x, 0]] = t;
-            rgb.data[[y, x, 1]] = 128;
-            rgb.data[[y, x, 2]] = 255 - t;
+            samples[[y, x, 0]] = t;
+            samples[[y, x, 1]] = 128;
+            samples[[y, x, 2]] = 255 - t;
         }
     }
     let auto = rgb.convert_rgb_to_yuv()?; // SD resolution -> BT.601 (automatic)

@@ -2,7 +2,7 @@ use crate::codec::{AVCodecFlag, CodecContextState};
 use crate::error::{Context, Result, RsmediaError};
 use crate::filter::{AudioParams, Filter, FilterGraph, FilterParams, VideoParams};
 #[cfg(feature = "ndarray")]
-use crate::frame::{MediaFrame, MediaFrameType};
+use crate::frame::{ElementType, MediaFrame};
 use crate::hwaccel::{HWContext, HWDeviceConfig};
 use crate::io::{Reader, Seekable};
 use crate::options::Options;
@@ -154,20 +154,23 @@ impl DecoderBuilder {
 
     /// Set the output pixel format of decoded video frames.
     ///
-    /// 默认 [`PixelFormat::YUV420P`]。支持：
-    /// - [`PixelFormat::YUV420P`]（专用分支，U/V 以 2x2 块代表值存入 `[H, W, 3]`）
-    /// - 全部 packed 8bit 格式（见 [`PixelFormat::packed_channels`]）：
-    ///   GRAY8 `[H,W,1]` / YUYV422、UYVY422 `[H,W,2]` / RGB24、BGR24 `[H,W,3]` /
-    ///   RGBA、BGRA、ARGB、ABGR `[H,W,4]`（无损往返）
+    /// 默认 [`PixelFormat::YUV420P`]。可指定任何能表示为数据平面的像素格式
+    /// （见 [`PixelFormat::data_layout`]）：
+    /// - packed 8bit：GRAY8 / YUYV422 / UYVY422 / RGB24 / BGR24 / RGBA 族
+    ///   —— 交错为单个数组；
+    /// - planar / 半平面 / 9..16bit：YUV420P / YUV422P / YUV444P / NV12 /
+    ///   GBRP / YUV420P10LE 等 —— 每平面一个数组。
+    ///
+    /// 解码输出 [`MediaFrame::data`](crate::frame::MediaFrame::data) 的变体与
+    /// 形状随目标格式而变。位流 / 调色板 / 硬件格式无法用数据平面表达，
+    /// 构建时即报错。
     ///
     /// 源格式与目标不一致时由 swscale 自动转换（如 NV12 → RGBA）。
-    /// 其他格式请用 [`decode_raw`](Decoder::decode_raw) 获取原始 `AVFrame`，
-    /// 或通过滤镜 `format` 转换。
     ///
     /// 仅对视频解码器有效；其他媒体类型构建时返回错误（fail-fast）。
     ///
-    /// 注意：[`PixelFormat::YUV420P`] 要求输出宽高为偶数（色度平面下采样），
-    /// 建议搭配 [`Resize::FitEven`] 保证尺寸约束。
+    /// 注意：解码输出帧的元素类型 `T` 必须与格式的每样本字节数一致 ——
+    /// 8bit 格式用 `u8`，9..16bit 格式用 `u16`（见 [`PixelFormat::bytes_per_component`]）。
     pub fn with_pix_fmt(mut self, pix_fmt: PixelFormat) -> Self {
         self.pix_fmt = Some(pix_fmt);
         self
@@ -291,17 +294,17 @@ impl DecoderBuilder {
         let stream_info = StreamInfo::from_stream(input_stream)?;
         log::info!("{stream_info}");
 
-        // 输出像素格式：仅视频有效。支持 YUV420P 专用分支 + 全部 packed 8bit
-        // 格式（GRAY8/RGB24/BGR24/RGBA/BGRA/ARGB/ABGR，见
-        // `PixelFormat::packed_channels`）；解码输出经 swscale 统一转换到目标格式。
+        // 输出像素格式：仅视频有效。任何能表示为数据平面的格式都接受
+        // （布局由描述符推导，见 `PixelFormat::data_layout`）；位流 / 调色板 /
+        // 硬件格式在构建期快速失败，而不是拖到运行时。解码输出经 swscale
+        // 统一转换到目标格式。
         // 非视频类型配置了 pix_fmt 视为调用方错误，快速失败而非静默忽略。
         let output_pix_fmt = match (media_type, self.pix_fmt) {
             (MediaType::VIDEO, Some(fmt)) => {
-                if fmt != PixelFormat::YUV420P && fmt.packed_channels().is_none() {
+                if !fmt.has_data_layout() {
                     return Err(RsmediaError::custom(format!(
-                        "Unsupported output pixel format: {fmt:?}, only YUV420P and packed 8-bit \
-                         formats (GRAY8/YUYV422/UYVY422/RGB24/BGR24/RGBA/BGRA/ARGB/ABGR) are \
-                         supported"
+                        "Unsupported output pixel format: {fmt:?}; it cannot be stored as sample \
+                         planes (bitstream, paletted and hardware formats are not supported)"
                     )));
                 }
                 fmt
@@ -547,7 +550,7 @@ impl Decoder {
     #[cfg(feature = "ndarray")]
     pub fn decode<T>(&mut self, reader: &mut impl Reader) -> Result<Option<MediaFrame<T>>>
     where
-        T: MediaFrameType,
+        T: ElementType,
     {
         decode_stream(
             self,
@@ -693,7 +696,7 @@ impl Decoder {
     #[cfg(feature = "ndarray")]
     pub fn decode_packet<T>(&mut self, packet: &AVPacket) -> Result<Option<MediaFrame<T>>>
     where
-        T: MediaFrameType,
+        T: ElementType,
     {
         match self.decode_raw_packet(packet) {
             Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(raw_frame)?)),
@@ -731,7 +734,7 @@ impl Decoder {
     #[cfg(feature = "ndarray")]
     pub fn drain<T>(&mut self) -> Result<Option<MediaFrame<T>>>
     where
-        T: MediaFrameType,
+        T: ElementType,
     {
         match self.drain_raw() {
             Ok(Some(raw_frame)) => Ok(Some(self.raw_frame_to_media_frame(raw_frame)?)),
@@ -743,7 +746,7 @@ impl Decoder {
     #[cfg(feature = "ndarray")]
     fn raw_frame_to_media_frame<T>(&self, frame: AVFrame) -> Result<MediaFrame<T>>
     where
-        T: MediaFrameType,
+        T: ElementType,
     {
         // Video Frame: YUV420P 专用分支 + packed 8bit 格式（GRAY8/YUYV422/UYVY422/RGB24/BGR24/RGBA/BGRA/ARGB/ABGR）
         MediaFrame::<T>::from_avframe(&frame)
@@ -1284,15 +1287,36 @@ mod tests {
         Ok(())
     }
 
-    /// `with_pix_fmt` 不支持的格式应在构建时返回错误而非 panic。
+    /// `with_pix_fmt` 只拒绝无法表示为数据平面的格式（位流 / 调色板 / 硬件），
+    /// 且在构建时返回错误而非 panic。
     #[test]
     fn test_decode_video_with_pix_fmt_unsupported() {
         let video_path = std::path::Path::new("assets/mp4.mp4");
-        let reader = StreamReader::new(video_path).unwrap();
-        let result = DecoderBuilder::new(MediaType::VIDEO)
-            .with_pix_fmt(PixelFormat::NV12)
-            .build_from_reader(&reader);
-        assert!(result.is_err());
+        for fmt in [
+            PixelFormat::MONOWHITE, // 位流：分量不足一字节
+            PixelFormat::PAL8,      // 调色板格式：样本指向独立调色板
+            PixelFormat::VAAPI,     // 硬件格式：没有主机端样本
+        ] {
+            let reader = StreamReader::new(video_path).unwrap();
+            let result = DecoderBuilder::new(MediaType::VIDEO)
+                .with_pix_fmt(fmt)
+                .build_from_reader(&reader);
+            assert!(result.is_err(), "{fmt:?} should be rejected");
+        }
+    }
+
+    /// 平面 / 半平面格式现在同样可以作为解码输出（每平面一个数组），
+    /// 输出格式不再是「YUV420P + packed 8bit」白名单。
+    #[test]
+    fn test_decode_video_with_planar_pix_fmt_accepted() {
+        let video_path = std::path::Path::new("assets/mp4.mp4");
+        for fmt in [PixelFormat::NV12, PixelFormat::YUV422P, PixelFormat::GBRP] {
+            let reader = StreamReader::new(video_path).unwrap();
+            let result = DecoderBuilder::new(MediaType::VIDEO)
+                .with_pix_fmt(fmt)
+                .build_from_reader(&reader);
+            assert!(result.is_ok(), "{fmt:?} should be accepted");
+        }
     }
 
     /// `with_pix_fmt` 对音频解码器应快速失败，而非静默忽略。

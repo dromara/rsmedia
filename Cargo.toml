@@ -1,8 +1,8 @@
 [package]
 name = "rsmedia"
-version = "0.4.0"
 edition = "2024"
-rust-version = "1.89.0"
+version = "0.5.0"
+rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "High-level video toolkit based on ffmpeg."
 keywords = ["video", "ffmpeg", "encoding", "decoding", "muxing"]
@@ -37,7 +37,7 @@ palette = "0.7"
 colorutils-rs = "0.8"
 yuv = { version = "0.8", features = ["rayon", "professional_mode"] }
 ndarray = { version = "0.17", optional = true }
-rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "ffmpeg9", default-features = false }
+rsmpeg = { git = "https://github.com/phial3/rsmpeg", branch = "main", default-features = false }
 
 [dev-dependencies]
 anyhow = "1.0"

@@ -120,7 +120,12 @@ fn save_frame(frame: &MediaFrame<u8>, index: usize) -> Result<()> {
     let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
         frame.width as u32,
         frame.height as u32,
-        rgb.data.as_slice().unwrap().to_vec(),
+        rgb.data
+            .as_packed()
+            .expect("RGB24 frames are interleaved")
+            .as_slice()
+            .unwrap()
+            .to_vec(),
     )
     .context("failed to build image buffer")?;
     let path = format!("{OUTPUT_DIR}/filtered_{:03}.png", index);

@@ -106,7 +106,13 @@ fn process_frame(yuv_frame: MediaFrame<u8>) -> Result<()> {
     let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
         yuv_frame.width as u32,
         yuv_frame.height as u32,
-        rgb_frame.data.as_slice().unwrap().to_vec(),
+        rgb_frame
+            .data
+            .as_packed()
+            .expect("RGB24 frames are interleaved")
+            .as_slice()
+            .unwrap()
+            .to_vec(),
     )
     .context("failed to create image buffer")?;
 

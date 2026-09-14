@@ -6,7 +6,7 @@ pub mod encode;
 #[cfg(feature = "ndarray")]
 pub mod frame;
 #[cfg(feature = "ndarray")]
-pub use frame::{FrameSideData, MediaFrame, MediaFrameType};
+pub use frame::{ElementType, FrameData, FrameSideData, MediaFrame};
 pub mod bsf;
 pub mod codec;
 pub mod colors;
@@ -37,7 +37,7 @@ pub use decode::{Decoder, DecoderBuilder, thumbnail};
 pub use encode::{Encoder, EncoderBuilder};
 pub use error::{Error, Result, RsmediaError};
 pub use filter::Filter;
-pub use fmt::{FrameFormat, SampleFormat};
+pub use fmt::{DataLayout, FrameFormat, SampleFormat};
 pub use hwaccel::{HWDeviceConfig, HWDeviceType};
 pub use init::init;
 pub use io::{AVSeekFlag, Reader, Seekable, Writer};

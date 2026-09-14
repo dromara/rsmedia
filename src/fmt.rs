@@ -84,6 +84,26 @@ impl SampleFormat {
         avutil::sample_fmt_is_planar(*self as _)
     }
 
+    /// The data layout this format uses for `channels` channels of
+    /// `samples` samples each.
+    ///
+    /// The split is by **memory layout, not media kind**: a planar format gives
+    /// one `(1, samples)` plane per channel, a packed format gives the single
+    /// set of `(1, samples, channels)` interleaved samples. Audio planes are
+    /// always exactly one row tall, which is what lets the same plane-copying
+    /// code serve audio and video alike.
+    pub fn data_layout(self, channels: usize, samples: usize) -> DataLayout {
+        if self.is_planar() {
+            DataLayout::Planar(vec![(1, samples); channels])
+        } else {
+            DataLayout::Interleaved {
+                rows: 1,
+                cols: samples,
+                components: channels,
+            }
+        }
+    }
+
     pub fn get_bytes_per_sample(&self) -> Option<usize> {
         avutil::get_bytes_per_sample(*self as _)
     }
@@ -100,6 +120,82 @@ impl SampleFormat {
 
     pub fn get_planar_sample_fmt(&self) -> Option<SampleFormat> {
         avutil::get_planar_sample_fmt(*self as _).map(SampleFormat::from)
+    }
+}
+
+/// The data layout a media format requires.
+///
+/// **Media-agnostic**: audio and video both use it, and it is reached through
+/// [`PixelFormat::data_layout`](crate::pixel::PixelFormat::data_layout) as well as
+/// [`SampleFormat::data_layout`]. The split is by memory layout, not media kind —
+/// a packed video format (e.g. `RGB24`) and a packed audio format (e.g. `S16`)
+/// are both [`Interleaved`](Self::Interleaved), while a planar video format
+/// (e.g. `YUV420P`) and a planar audio format (e.g. `FLTP`) are both
+/// [`Planar`](Self::Planar). Nothing here distinguishes the two media kinds.
+///
+/// Every plane is a row-major `rows x cols` block, with the component axis
+/// folded into the columns for an interleaved layout. Audio layouts are always
+/// one row tall, so the row stride never takes effect for them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataLayout {
+    /// One interleaved array of shape `(rows, cols, components)`.
+    Interleaved {
+        /// Rows of the array — the picture height for video, `1` for audio.
+        rows: usize,
+        /// Columns of the array — the picture width for video, the sample count
+        /// for audio.
+        cols: usize,
+        /// Storage elements per row-unit: the per-pixel element run for packed
+        /// video, the channel count for packed audio.
+        components: usize,
+    },
+    /// One array per plane, each of shape `(rows, cols)`.
+    ///
+    /// A video plane holds a single component (or several, for a semi-planar
+    /// chroma plane such as `NV12`'s), subsampled planes carrying their own
+    /// smaller size; an audio plane holds one channel.
+    Planar(Vec<(usize, usize)>),
+}
+
+impl DataLayout {
+    /// Number of arrays this layout is stored as.
+    pub fn num_planes(&self) -> usize {
+        match self {
+            Self::Interleaved { .. } => 1,
+            Self::Planar(planes) => planes.len(),
+        }
+    }
+
+    /// Plane `plane` as a flat `(rows, samples_per_row)` extent.
+    ///
+    /// The component axis of an interleaved layout is folded into
+    /// `samples_per_row`, which is exactly what a row-wise copy of the plane
+    /// needs.
+    pub fn plane_extent(&self, plane: usize) -> Option<(usize, usize)> {
+        match self {
+            Self::Interleaved {
+                rows,
+                cols,
+                components,
+            } => (plane == 0).then(|| (*rows, cols * components)),
+            Self::Planar(planes) => planes.get(plane).copied(),
+        }
+    }
+
+    /// The shape of the array [`FrameData`](crate::frame::FrameData) stores plane
+    /// `plane` as.
+    pub fn plane_shape(&self, plane: usize) -> Option<(usize, usize)> {
+        match self {
+            Self::Interleaved { rows, cols, .. } => (plane == 0).then_some((*rows, *cols)),
+            Self::Planar(planes) => planes.get(plane).copied(),
+        }
+    }
+
+    /// Every plane's shape, for diagnostics.
+    pub fn shapes(&self) -> Vec<(usize, usize)> {
+        (0..self.num_planes())
+            .filter_map(|plane| self.plane_shape(plane))
+            .collect()
     }
 }
 

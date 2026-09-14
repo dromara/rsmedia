@@ -66,8 +66,8 @@ impl RsmediaError {
     }
 
     /// Build an [`RsmediaError::Other`] from any displayable value.
-    pub fn custom(message: impl Into<String>) -> Self {
-        RsmediaError::Other(message.into())
+    pub fn custom(msg: impl Into<String>) -> Self {
+        RsmediaError::Other(msg.into())
     }
 
     /// Build an [`RsmediaError::CodecNotFound`].

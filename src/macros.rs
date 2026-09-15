@@ -14,11 +14,20 @@
 //! | combine flags into a raw mask | no | no | yes (`BitOr`, either operand order) |
 //! | fallback for an unlisted value | panics; every table fails fast (the expression form is still supported but unused) | n/a | n/a |
 //!
-//! In practice the split is clean: every `ffi_enum!` call site is a bit set (`AVCodecFlag`,
-//! `AVCodecFlag2`, `AVFormatFlag`, `AVPixFmtFlag`, `ScaleAlgorithm`, `AVSeekFlag`) and every
-//! `ffi_enum_wrap_from!` call site is an ID (`PixelFormat`, `SampleFormat`, `MediaType`,
-//! `HWDeviceType`). `ffi_enum_wrap!` currently has no user — see the note on the macro itself
-//! for why the need for it disappeared.
+//! In practice the split is mostly by kind: the `ffi_enum!` call sites are bit sets
+//! (`AVCodecFlag`, `AVCodecFlag2`, `AVFormatFlag`, `AVPixFmtFlag`, `AVSeekFlag`) and the
+//! `ffi_enum_wrap_from!` call sites are IDs (`PixelFormat`, `SampleFormat`, `MediaType`,
+//! `HWDeviceType`, plus the swscale value sets in `scale.rs`: `SwsDither`, `AlphaBlend`,
+//! `ScalerFlags`, `Intent`, `Backend`).
+//!
+//! One table is an ID **and** sits with bit sets: `ScaleAlgorithm` (`scale.rs`) is a mutually
+//! exclusive choice ("only one may be active at a time" per FFmpeg's header) whose members are
+//! `SWS_*` bits — it is therefore an `ffi_enum!` bit-set table even though callers pick one
+//! value, and combining two of its bits is a caller error FFmpeg rejects rather than something
+//! the type prevents.
+//!
+//! `ffi_enum_wrap!` currently has no user — see the note on the macro itself for why the need
+//! for it disappeared.
 //!
 //! Points worth remembering, because they are easy to get wrong:
 //!
@@ -151,6 +160,31 @@ macro_rules! ffi_enum_wrap_from {
             }
         }
 
+        /// The variant for `value`, or [`None`] when the table does not list it.
+        ///
+        /// [`From`] fails fast on an unlisted value because that usually signals a
+        /// programming error. This is the counterpart to use when the value comes
+        /// from *outside* the program — the format of an arbitrary media file, say —
+        /// where "unsupported" has to be reported instead of aborting the process.
+        #[allow(non_upper_case_globals)]
+        impl $enum {
+            pub fn from_ffi_checked(value: $ffi) -> Option<Self> {
+                $(
+                    $(#[$m])*
+                    #[allow(unused_doc_comments)]
+                    const $variant: $repr = $const as $repr;
+                )*
+                match value as $repr {
+                    $(
+                        $(#[$m])*
+                        #[allow(unused_doc_comments)]
+                        $variant => Some($enum::$variant),
+                    )*
+                    _ => None,
+                }
+            }
+        }
+
         impl From<$enum> for $ffi {
             fn from(value: $enum) -> Self {
                 match value {
@@ -198,6 +232,31 @@ macro_rules! ffi_enum_wrap_from {
                         $variant => $enum::$variant,
                     )*
                     _ => $fallback,
+                }
+            }
+        }
+
+        /// The variant for `value`, or [`None`] when the table does not list it.
+        ///
+        /// [`From`] fails fast on an unlisted value because that usually signals a
+        /// programming error. This is the counterpart to use when the value comes
+        /// from *outside* the program — the format of an arbitrary media file, say —
+        /// where "unsupported" has to be reported instead of aborting the process.
+        #[allow(non_upper_case_globals)]
+        impl $enum {
+            pub fn from_ffi_checked(value: $ffi) -> Option<Self> {
+                $(
+                    $(#[$m])*
+                    #[allow(unused_doc_comments)]
+                    const $variant: $repr = $const as $repr;
+                )*
+                match value as $repr {
+                    $(
+                        $(#[$m])*
+                        #[allow(unused_doc_comments)]
+                        $variant => Some($enum::$variant),
+                    )*
+                    _ => None,
                 }
             }
         }

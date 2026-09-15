@@ -4,7 +4,7 @@
 //! rsmedia 的裸 `Encoder` + `Muxer`（`EncoderBuilder::preset_h264_yuv420p` +
 //! `add_stream` + `mux`）即可逐帧写出，pts 手动按帧率递增。
 
-use rsmedia::{EncoderBuilder, PixelFormat, frame::MediaFrame, mux::Muxer, time};
+use rsmedia::{EncoderBuilder, PixelFormat, frame::MediaFrame, mux::Muxer};
 
 fn main() -> anyhow::Result<()> {
     rsmedia::init()?;
@@ -39,18 +39,16 @@ fn main() -> anyhow::Result<()> {
 
 fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
     let rgb = rsmedia::colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-    let mut frame = MediaFrame::<u8>::new_video_frame(
-        width,
-        height,
-        PixelFormat::RGB24,
-        time::new_rational(1, 30),
-    )
-    .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24).unwrap();
+    let samples = frame
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..height {
         for x in 0..width {
-            frame.data[[y, x, 0]] = rgb[0];
-            frame.data[[y, x, 1]] = rgb[1];
-            frame.data[[y, x, 2]] = rgb[2];
+            samples[[y, x, 0]] = rgb[0];
+            samples[[y, x, 1]] = rgb[1];
+            samples[[y, x, 2]] = rgb[2];
         }
     }
     frame

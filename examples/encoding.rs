@@ -1,5 +1,5 @@
 use rsmedia::{EncoderBuilder, HWDeviceConfig, PixelFormat, StreamWriterBuilder, Writer};
-use rsmedia::{colors, filter, frame::MediaFrame, time};
+use rsmedia::{colors, filter, frame::MediaFrame};
 
 use rsmpeg::avfilter::AVFilter;
 
@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
 
     // 容器（MP4 的 movenc）可能在 `write_header` 时重设流时间基，因此写包前
     // 实时取一次输出流时间基。
-    let out_stream_time_base = writer.stream_time_base(stream_idx);
+    let out_stream_time_base = writer.stream_time_base(stream_idx)?;
 
     let mut total_bytes = 0u64;
     let mut lost = 0usize;
@@ -110,18 +110,16 @@ fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
 
     // This creates a frame with height 720, width 1280 and three channels. The RGB values for each
     // pixel are equal, and determined by the `rgb` we chose above.
-    let mut frame = MediaFrame::<u8>::new_video_frame(
-        width,
-        height,
-        PixelFormat::RGB24,
-        time::new_rational(1, 24),
-    )
-    .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24).unwrap();
+    let samples = frame
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..height {
         for x in 0..width {
-            frame.data[[y, x, 0]] = rgb[0];
-            frame.data[[y, x, 1]] = rgb[1];
-            frame.data[[y, x, 2]] = rgb[2];
+            samples[[y, x, 0]] = rgb[0];
+            samples[[y, x, 1]] = rgb[1];
+            samples[[y, x, 2]] = rgb[2];
         }
     }
     frame

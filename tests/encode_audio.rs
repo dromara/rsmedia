@@ -13,7 +13,7 @@ use rsmpeg::{
 
 use anyhow::{Context, Result, anyhow};
 use rsmedia::codec::CodecConfig;
-use rsmedia::{EncoderBuilder, SampleFormat, filter, strutils};
+use rsmedia::{EncoderBuilder, RsmediaError, SampleFormat, filter, strutils};
 use std::ffi::{CStr, CString};
 
 /// 生成正弦波音频样本（优化内存访问）
@@ -466,9 +466,9 @@ const COMMON_AUDIO_CONTAINERS: &[(&str, &str, i64)] = &[
 /// 编码 1 秒立体声正弦波并封装到对应容器。
 fn encode_audio_container(container_type: &str, codec_name: &str, bit_rate: i64) -> Result<()> {
     // 编码器是否存在取决于 FFmpeg 编译配置（如 libmp3lame、libopus），
-    // 缺失时跳过该容器而不是失败
+    // 缺失时跳过该容器而不是失败：用类型化 CodecNotFound 标记，调用方按变体跳过
     let Some(codec) = AVCodec::find_encoder_by_name(&strutils::str_to_cstring(codec_name)) else {
-        anyhow::bail!("encoder {codec_name} not available in this FFmpeg build");
+        return Err(RsmediaError::codec_not_found(codec_name).into());
     };
     let codec_config = CodecConfig::from_codec(codec);
 
@@ -545,7 +545,11 @@ fn test_encode_audio_containers() -> Result<()> {
     for (container_type, codec_name, bit_rate) in COMMON_AUDIO_CONTAINERS {
         match encode_audio_container(container_type, codec_name, *bit_rate) {
             Ok(()) => encoded += 1,
-            Err(e) if e.to_string().contains("not available in this FFmpeg build") => {
+            // 编码器缺失（如 libmp3lame）：匹配类型化 CodecNotFound 变体优雅跳过。
+            Err(e)
+                if e.downcast_ref::<RsmediaError>()
+                    .is_some_and(|e| e.is_codec_not_found()) =>
+            {
                 skipped.push(*container_type)
             }
             Err(e) => return Err(anyhow!("encode {container_type} failed: {e:#}")),

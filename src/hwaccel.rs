@@ -148,7 +148,7 @@ static HW_CTX_CACHE: Lazy<DashMap<HWDeviceConfig, Arc<HWContext>>> = Lazy::new(D
 /// 硬件设备上下文持有 GPU 资源，长驻进程中持续切换配置（device_id / 选项 /
 /// 设备类型组合不同）会不断产生新条目；不设上限会导致 GPU 资源泄漏。
 /// 典型应用只使用 1~2 种配置，8 已留足余量。仍在使用的条目不会被驱逐，
-/// 全部在使用中时可超额容纳（等待 [`clear_hw_ctx_cache`] 后续清理）。
+/// 全部在使用中时可超额容纳（等待 `clear_hw_ctx_cache` 后续清理）。
 const HW_CTX_CACHE_MAX_ENTRIES: usize = 8;
 
 /// 容量超限时驱逐未使用条目（保留使用中的与新创建的 `keep` 条目）。
@@ -182,13 +182,15 @@ fn prune_hw_ctx_cache(keep: &HWDeviceConfig) {
 /// 释放对应的 GPU 资源。仍在被解码器/编码器使用的上下文会保留，待其释放后
 /// 可再次调用清理。
 ///
-/// 除本手动 API 外，缓存超过 [`HW_CTX_CACHE_MAX_ENTRIES`] 时会在新建条目时
-/// 自动驱逐未使用条目。
+/// 日常驱逐由 `prune_hw_ctx_cache`（容量超限时）负责；本函数是给测试用的确定性
+/// 清空入口，故仅在测试构建中存在。
 ///
 /// 返回被移除的条目数。
-pub fn clear_hw_ctx_cache() -> usize {
+#[cfg(test)]
+pub(crate) fn clear_hw_ctx_cache() -> usize {
     let mut removed = 0;
-    // retain 逐条检查：仅保留仍在使用或为当前 config 未缓存的条目。
+    // retain 逐条检查：只保留仍被外部持有的条目（strong_count > 1）；其余条目
+    // 已无人使用，可以释放。
     HW_CTX_CACHE.retain(|_config, ctx| {
         if Arc::strong_count(ctx) > 1 {
             true
@@ -203,22 +205,24 @@ pub fn clear_hw_ctx_cache() -> usize {
     removed
 }
 
-/// `HWContext` represents a hardware context.
+/// A live hardware device context, plus the frame setup derived from it.
 ///
-/// It includes methods for setting up hardware frames, downloading frames from hardware to system memory,
-/// and uploading frames from system memory to hardware.
+/// Crate-internal: a caller configures [`HWDeviceConfig`] and hands it to
+/// [`EncoderBuilder::with_hw_device_config`](crate::encode::EncoderBuilder::with_hw_device_config)
+/// or the decoder equivalent; the context itself is the plumbing between those
+/// builders and FFmpeg, never something a user holds.
 ///
 /// 所有方法只做共享访问（`&self`）：底层 `av_hwframe_ctx_alloc` / `av_buffer_ref`
 /// 均为 FFmpeg 保证的线程安全原子操作，因此 [`Send`]/[`Sync`] 实现成立，
 /// 相同配置的多个解码器/编码器可跨线程共享同一 `Arc<HWContext>`。
-pub struct HWContext {
+pub(crate) struct HWContext {
     config: HWDeviceConfig,
     device_ctx: AVHWDeviceContext,
 }
 
 impl HWContext {
     /// create a new HWContext with the given HWDeviceConfig
-    pub fn new(config: HWDeviceConfig) -> Result<Arc<HWContext>> {
+    pub(crate) fn new(config: HWDeviceConfig) -> Result<Arc<HWContext>> {
         // Try to get existing context from cache (lock-free read)
         if let Some(ctx) = HW_CTX_CACHE.get(&config) {
             log::debug!("Reusing existing hardware device context. config:{config:?}");
@@ -256,7 +260,7 @@ impl HWContext {
     /// Initialize the hardware frames context for a **decoder**.
     ///
     /// Besides creating and attaching the `AVHWFramesContext`, this also:
-    /// - installs the [`hwaccel_get_format`] callback so the decoder picks the
+    /// - installs the `hwaccel_get_format` callback so the decoder picks the
     ///   hardware surface format during `avcodec_open2`;
     /// - sets `sw_pix_fmt` to the configured software format;
     /// - holds an independent reference (`av_buffer_ref`) to the hardware
@@ -268,7 +272,7 @@ impl HWContext {
     /// * `codec_ctx` - The decoder codec context to initialize
     /// * `width` - The width of the decoded frames
     /// * `height` - The height of the decoded frames
-    pub fn setup_decoder_frames(
+    pub(crate) fn setup_decoder_frames(
         &self,
         codec_ctx: &mut AVCodecContext,
         width: i32,
@@ -302,7 +306,7 @@ impl HWContext {
     /// * `codec_ctx` - The encoder codec context to initialize
     /// * `width` - The width of the frames to encode
     /// * `height` - The height of the frames to encode
-    pub fn setup_encoder_frames(
+    pub(crate) fn setup_encoder_frames(
         &self,
         codec_ctx: &mut AVCodecContext,
         width: i32,
@@ -350,12 +354,12 @@ impl HWContext {
     ///
     /// # Returns
     /// * `Result<AVFrame>` - A new frame in system memory with transferred data
-    pub fn hw_download(&self, hw_frame: &AVFrame) -> Result<AVFrame> {
+    pub(crate) fn hw_download(&self, hw_frame: &AVFrame) -> Result<AVFrame> {
         let hw_down_start = std::time::Instant::now();
 
         // Check if input frame is actually in hardware memory
         if !self.is_hw_frame(hw_frame) {
-            return Err(RsmediaError::custom(format!(
+            return Err(RsmediaError::msg(format!(
                 "Input frame is not a valid hardware frame: format={:?}, expected={:?}, hw_frames_ctx={:p}",
                 hw_frame.format, self.config.hw_pixel_format, hw_frame.hw_frames_ctx
             )));
@@ -401,12 +405,16 @@ impl HWContext {
     ///
     /// # Returns
     /// * `Result<AVFrame>` - A new frame in hardware memory with transferred data
-    pub fn hw_upload(&self, encoder: &mut AVCodecContext, sw_frame: &AVFrame) -> Result<AVFrame> {
+    pub(crate) fn hw_upload(
+        &self,
+        encoder: &mut AVCodecContext,
+        sw_frame: &AVFrame,
+    ) -> Result<AVFrame> {
         let hw_up_start = std::time::Instant::now();
 
         // Check if input frame format matches our software format
         if !self.is_sw_frame(sw_frame) {
-            return Err(RsmediaError::custom(format!(
+            return Err(RsmediaError::msg(format!(
                 "Input frame format ({:?}) doesn't match expected software format ({:?})",
                 sw_frame.format, self.config.sw_pixel_format
             )));
@@ -415,7 +423,7 @@ impl HWContext {
         // 确保编码器上下文有硬件帧上下文
         let mut hw_frames_ctx = encoder
             .hw_frames_ctx_mut()
-            .ok_or_else(|| RsmediaError::custom("Encoder has no hardware frames context"))?;
+            .ok_or_else(|| RsmediaError::msg("Encoder has no hardware frames context"))?;
 
         // 创建硬件帧
         let mut hw_frame = AVFrame::new();
@@ -456,8 +464,8 @@ impl HWContext {
     /// 复制视频帧属性（时间戳/画面类型/宽高比等）与 side-data 元数据。
     ///
     /// # Arguments
-    /// * `dst` - The destination frame to which properties will be copied.
     /// * `src` - The source frame from which properties will be copied.
+    /// * `dst` - The destination frame to which properties will be copied.
     fn copy_frame_props(&self, src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
         dst.set_pts(src.pts);
         dst.set_time_base(src.time_base);
@@ -483,7 +491,7 @@ impl HWContext {
     ///
     /// # Returns
     /// * `bool` - True if the frame is in hardware memory
-    pub fn is_hw_frame(&self, frame: &AVFrame) -> bool {
+    pub(crate) fn is_hw_frame(&self, frame: &AVFrame) -> bool {
         // 检查硬件帧上下文是否为空
         if frame.hw_frames_ctx.is_null() {
             log::debug!("Frame hardware context is null");
@@ -495,12 +503,12 @@ impl HWContext {
     }
 
     /// Check if a frame is in software memory format
-    pub fn is_sw_frame(&self, frame: &AVFrame) -> bool {
+    pub(crate) fn is_sw_frame(&self, frame: &AVFrame) -> bool {
         frame.format == self.get_format(false)
     }
 
     /// Helper function to get the appropriate pixel format for a frame
-    pub fn get_format(&self, is_hw: bool) -> ffi::AVPixelFormat {
+    pub(crate) fn get_format(&self, is_hw: bool) -> ffi::AVPixelFormat {
         if is_hw {
             self.config.hw_pixel_format.into()
         } else {
@@ -613,7 +621,7 @@ impl HWDeviceType {
             None => Self::platform_preference(),
         };
         if preference.is_empty() {
-            return Err(RsmediaError::custom(format!(
+            return Err(RsmediaError::unsupported(format!(
                 "No hardware acceleration preference defined for platform: {}",
                 std::env::consts::OS
             )));
@@ -625,7 +633,7 @@ impl HWDeviceType {
             .find(|ty| ty.is_available())
             .copied()
             .ok_or_else(|| {
-                RsmediaError::custom(format!(
+                RsmediaError::unsupported(format!(
                     "No available hardware acceleration device on {} (candidates probed: {preference:?})",
                     std::env::consts::OS
                 ))
@@ -897,11 +905,7 @@ mod tests {
                 );
             }
             Err(err) => {
-                let message = format!("{err:#}");
-                assert!(
-                    message.contains("No available hardware acceleration"),
-                    "unexpected error: {message}"
-                );
+                assert!(err.is_unsupported(), "unexpected error: {err:#}");
             }
         }
     }
@@ -917,11 +921,7 @@ mod tests {
                 assert_eq!(config.sw_pixel_format, PixelFormat::NV12);
             }
             Err(err) => {
-                let message = format!("{err:#}");
-                assert!(
-                    message.contains("No available hardware acceleration"),
-                    "unexpected error: {message}"
-                );
+                assert!(err.is_unsupported(), "unexpected error: {err:#}");
             }
         }
     }

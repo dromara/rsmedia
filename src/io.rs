@@ -43,7 +43,7 @@ pub trait Reader {
     ///
     /// 成功时返回 `(packet 所属流的 index, packet)`；调用方如需更多流信息
     /// （time_base、metadata 等），可通过 `self.input().streams().get(index)`
-    /// 直接使用 rsmpeg 的 [`AVStream`]。
+    /// 直接使用 rsmpeg 的 [`AVStream`](rsmpeg::avformat::AVStream)。
     fn read_packet(&mut self) -> Result<Option<(usize, AVPacket)>> {
         match self.input_mut().read_packet() {
             Ok(Some(pkt)) => Ok(Some((pkt.stream_index as usize, pkt))),
@@ -61,7 +61,7 @@ pub trait Reader {
         self.input()
             .find_best_stream(media_type as _)?
             .map(|(index, codec)| (index, strutils::cstr_to_string_lossy(codec.name())))
-            .ok_or(RsmediaError::custom(format!(
+            .ok_or(RsmediaError::msg(format!(
                 "No stream found for MediaType:{media_type:?}"
             )))
     }
@@ -193,6 +193,11 @@ pub trait Seekable: Reader {
     /// seeking is best-effort: it lands on the nearest **keyframe** unless
     /// `AVSeekFlag::ANY` is combined.
     ///
+    /// A `stream_index` outside the input's streams is rejected here, before FFmpeg
+    /// sees it: `av_seek_frame` dereferences the `AVStream` it is given without
+    /// bounds-checking, so an out-of-range index is undefined behaviour rather than
+    /// an error code.
+    ///
     /// # Arguments
     ///
     /// * `stream_index` - The index of the stream to seek to.
@@ -210,6 +215,14 @@ pub trait Seekable: Reader {
         frame_ts: i64,
         flags: AVSeekFlag,
     ) -> Result<()> {
+        // 越界的流索引必须先拦下：`av_seek_frame` 会直接按索引取 `AVStream` 并
+        // 读它的时间基，越界即未定义行为（实测 segfault），而不是返回错误码。
+        let nb_streams = self.input().nb_streams as usize;
+        if stream_index >= nb_streams {
+            return Err(RsmediaError::msg(format!(
+                "Cannot seek stream {stream_index}: the input has {nb_streams} stream(s)"
+            )));
+        }
         unsafe {
             let res = ffi::av_seek_frame(
                 self.input_mut().as_mut_ptr(),
@@ -218,7 +231,7 @@ pub trait Seekable: Reader {
                 flags.into(),
             );
             if res < 0 {
-                return Err(RsmediaError::custom(format!(
+                return Err(RsmediaError::msg(format!(
                     "Seek to frame failed: stream={stream_index}, ts={frame_ts}, flags={:?}, err={res}",
                     flags
                 )));
@@ -251,7 +264,7 @@ fn seek_file(
     let res = unsafe { ffi::avformat_seek_file(input.as_mut_ptr(), stream_index, min, ts, max, 0) };
     if res < 0 {
         // >=0 on success, error code otherwise
-        return Err(RsmediaError::custom(format!("Seek file failed: {res}")));
+        return Err(RsmediaError::msg(format!("Seek file failed: {res}")));
     }
     Ok(())
 }
@@ -500,7 +513,7 @@ impl<'a> StreamReaderBuilder<'a> {
         let filename = strutils::path_to_cstring(&self.source.as_path());
         let protocol = unsafe { ffi::avio_find_protocol_name(filename.as_ptr()) };
         if protocol.is_null() {
-            return Err(RsmediaError::custom(format!(
+            return Err(RsmediaError::msg(format!(
                 "Unsupported input source protocol: {}",
                 self.source
             )));
@@ -906,12 +919,46 @@ pub trait Writer {
     /// 注意：`write_header` 之后 muxer 可能调整 stream 的时间基（例如 MP4 的
     /// movenc 会重设 timescale）。因此写包时应**实时获取**，不要缓存 write 前
     /// 的值，否则 packet 的 pts/duration 会按错误的 time_base 解析。
-    fn stream_time_base(&self, stream_index: usize) -> ffi::AVRational {
+    ///
+    /// 流不存在时返回错误：早先这里回退为 [`TIME_BASE`](crate::time::TIME_BASE)
+    /// （1/1000000），会让 `rescale_ts` 静默算出完全错误的时间戳。
+    fn stream_time_base(&self, stream_index: usize) -> Result<ffi::AVRational> {
         self.output()
             .streams()
             .get(stream_index)
-            .map(|s| s.time_base)
-            .unwrap_or(crate::time::TIME_BASE)
+            .map(|stream| stream.time_base)
+            .ok_or_else(|| {
+                RsmediaError::msg(format!(
+                    "Output stream {stream_index} does not exist ({} streams)",
+                    self.output().nb_streams
+                ))
+            })
+    }
+
+    /// Folds one more write's output into an accumulator.
+    ///
+    /// For the buffering writers `Out` is the *incremental* new output of a single
+    /// write, so a step that produces several packets must accumulate instead of
+    /// overwrite — [keeping only the last chunk would silently hand back a
+    /// truncated stream][mux]. The default suits writers whose `Out` carries
+    /// nothing to accumulate, such as [`StreamWriter`]'s `()`.
+    ///
+    /// [mux]: crate::mux::Muxer::mux
+    fn merge_out(acc: &mut Self::Out, out: Self::Out) {
+        *acc = out;
+    }
+
+    /// Folds one more write's output into an accumulator that may still be empty.
+    ///
+    /// [`merge_out`](Self::merge_out) folds into an existing value; this is the
+    /// same fold for the first write, so a loop writing several packets reads as
+    /// a single call instead of the four-line `match` it would otherwise need.
+    /// (That `match` used to be written out at every one of these loops.)
+    fn fold_out(acc: &mut Option<Self::Out>, out: Self::Out) {
+        match acc {
+            Some(acc) => Self::merge_out(acc, out),
+            None => *acc = Some(out),
+        }
     }
 }
 
@@ -969,7 +1016,7 @@ impl<'a> StreamWriterBuilder<'a> {
     ///
     /// * `format` - Container format to use. eg. `"mp4"`, `"mkv"`, `"mov"`, `"avi"`, `"flv"`.
     ///
-    /// reference: https://trac.ffmpeg.org/wiki/HWAccelIntro
+    /// reference: <https://trac.ffmpeg.org/wiki/HWAccelIntro>
     ///
     /// | Format                          | Filename Extension | H.264/AVC | H.265/HEVC | AV1   |
     /// |---------------------------------|--------------------|-----------|------------|-------|
@@ -1279,6 +1326,11 @@ impl Writer for BufferWriter {
         Ok(self.take_written())
     }
 
+    /// 追加而不是覆盖：一帧可能产出多个 packet，只保留最后一块会丢字节。
+    fn merge_out(acc: &mut Vec<u8>, out: Vec<u8>) {
+        acc.extend(out);
+    }
+
     fn write_trailer(&mut self) -> Result<Vec<u8>> {
         self.output.write_trailer()?;
         flush_avio(&mut self.output);
@@ -1424,6 +1476,11 @@ impl Writer for PacketizedBufWriter {
         self.output.interleaved_write_frame(packet)?;
         flush_avio(&mut self.output);
         Ok(self.take_buffers())
+    }
+
+    /// 追加而不是覆盖：一帧可能产出多个 packet，只保留最后一批会丢字节块。
+    fn merge_out(acc: &mut Vec<Vec<u8>>, out: Vec<Vec<u8>>) {
+        acc.extend(out);
     }
 
     fn write_trailer(&mut self) -> Result<Vec<Vec<u8>>> {
@@ -1701,6 +1758,30 @@ fn log_filter_hacks(line: &str) -> bool {
     !(line.contains(HACK_1_PELCO_NEEDLE_1) && line.contains(HACK_1_PELCO_NEEDLE_2))
 }
 
+/// 当前 FFmpeg 构建支持的**输入**协议名（`file`、`http`、`rtsp`、`rtp`、`tcp`…）。
+///
+/// 可用于构建前探测能力：URL 的协议不在列表中时，`avformat_open_input` 必然
+/// 失败。列表内容取决于 FFmpeg 编译配置。
+pub fn input_protocols() -> Vec<String> {
+    rsmpeg::avformat::AVIOProtocol::inputs()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// 当前 FFmpeg 构建支持的**输出**协议名。
+pub fn output_protocols() -> Vec<String> {
+    rsmpeg::avformat::AVIOProtocol::outputs()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// 返回将处理该 URL 的协议名（如 `"file"`、`"http"`），无匹配协议时为 `None`。
+pub fn find_protocol_name(url: &str) -> Option<String> {
+    let url_c = strutils::str_to_cstring(url);
+    rsmpeg::avformat::AVIOProtocol::find_protocol_name(&url_c)
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1760,9 +1841,12 @@ mod tests {
 
     /// 图片序列写入（image2 muxer + png 编码器）：写入 N 帧 => 磁盘上生成
     /// N 个按 `%03d` 模式编号的 PNG 文件。
+    ///
+    /// 输出目录独占（`images_write`）：image2 会按编号截断重建文件，与其它
+    /// 测试共用目录时，并行调度下会互相把对方已写完的文件截成 0 字节。
     #[test]
     fn test_write_image_sequence() -> Result<()> {
-        let pattern = crate::test_support::test_output_path("images", "img_%03d.png");
+        let pattern = crate::test_support::test_output_path("images_write", "img_%03d.png");
         let n_frames = 8;
 
         let writer = StreamWriterBuilder::new(&pattern)
@@ -1787,7 +1871,7 @@ mod tests {
         for i in 1..=n_frames {
             let file = dir.join(format!("img_{i:03}.png"));
             let meta = std::fs::metadata(&file).map_err(|e| {
-                RsmediaError::custom(format!("expected sequence file {}: {e}", file.display()))
+                RsmediaError::msg(format!("expected sequence file {}: {e}", file.display()))
             })?;
             assert!(meta.len() > 0, "sequence file {} is empty", file.display());
         }
@@ -1799,11 +1883,13 @@ mod tests {
 
     /// 图片序列读取（image2 demuxer）：按 `%03d` 模式打开序列，解码帧数应与
     /// 写入帧数一致，且尺寸正确。
+    ///
+    /// 序列在自己独占的 `images_read` 目录中现场生成：不复用写入测试的产物
+    /// —— 那样两个测试会争用同一组文件名（见 [`test_write_image_sequence`]）。
     #[test]
     fn test_read_image_sequence() -> Result<()> {
-        // 复用写入测试生成的序列；若不存在则现场生成
-        let pattern = crate::test_support::test_output_path("images", "img_%03d.png");
-        if !pattern.with_file_name("img_001.png").exists() {
+        let pattern = crate::test_support::test_output_path("images_read", "img_%03d.png");
+        {
             let writer = StreamWriterBuilder::new(&pattern)
                 .with_format("image2")
                 .build()?;
@@ -2001,5 +2087,129 @@ mod tests {
         assert!(!sink.is_empty(), "custom io writer produced no output");
 
         Ok(())
+    }
+
+    /// `file` 协议在任何 FFmpeg 构建中都存在。
+    #[test]
+    fn test_input_protocols_contain_file() {
+        let protocols = input_protocols();
+        assert!(
+            protocols.iter().any(|p| p == "file"),
+            "protocols: {protocols:?}"
+        );
+    }
+
+    /// URL 的协议识别与枚举结果一致。
+    #[test]
+    fn test_find_protocol_name() {
+        assert_eq!(find_protocol_name("/tmp/a.mp4").as_deref(), Some("file"));
+        assert_eq!(
+            find_protocol_name("http://example.com/a.mp4").as_deref(),
+            Some("http")
+        );
+    }
+
+    /// `seek_to_timestamp` 真的把读位置前移了：从 2s 处续读得到的帧数，必须明显
+    /// 少于从头读完整段（seek 自己"成功"却什么都没移动是最难查的一类问题）。
+    ///
+    /// 这里必须**自己造一个 GOP 已知的文件**：`assets/mp4.mp4` 的 166 帧只有一个
+    /// 关键帧，向前的 BACKWARD seek 无论请求哪个时间点都只能落回第 0 帧。
+    #[test]
+    fn test_seek_to_timestamp_advances_the_read_position() -> Result<()> {
+        let path = crate::test_support::test_output_path("io", "test_seek_advances.mp4");
+        {
+            let mut muxer = crate::Muxer::new(&path)?;
+            let encoder = EncoderBuilder::new_video(64, 64)
+                .with_fps(25.0)
+                .with_gop_size(10)
+                .build()?;
+            let index = muxer.add_encoder(encoder)?;
+            for frame_index in 0..100i64 {
+                let mut frame = AVFrame::new();
+                frame.set_width(64);
+                frame.set_height(64);
+                frame.set_format(PixelFormat::YUV420P.into());
+                frame
+                    .alloc_buffer()
+                    .context("Failed to allocate frame buffer")?;
+                frame.set_pts(frame_index);
+                muxer.mux(frame, index)?;
+            }
+            muxer.finish()?;
+        }
+
+        let count_frames = |seek_ms: Option<i64>| -> Result<usize> {
+            let mut reader = StreamReader::new(&path)?;
+            if let Some(ms) = seek_ms {
+                reader.seek_to_timestamp(ms)?;
+            }
+            let mut decoder = DecoderBuilder::new(MediaType::VIDEO).build_from_reader(&reader)?;
+            let mut frames = 0usize;
+            while decoder.decode::<u8>(&mut reader)?.is_some() {
+                frames += 1;
+            }
+            Ok(frames)
+        };
+
+        let all = count_frames(None)?;
+        let from_two_seconds = count_frames(Some(2_000))?;
+        assert_eq!(all, 100, "the whole 4s stream should decode 100 frames");
+        assert!(
+            from_two_seconds < all,
+            "seeking to 2s then reading gave the same frame count as reading from the start \
+             ({from_two_seconds} vs {all}): the seek did not move the read position"
+        );
+        assert!(
+            from_two_seconds > 0,
+            "the second half of the stream must still decode"
+        );
+
+        crate::test_support::remove_test_output(&path);
+        Ok(())
+    }
+
+    /// `seek_to_frame` 是**可失败**的：不存在的流索引必须报错，而不是静默不动。
+    /// （MP4 等容器不支持按帧索引 seek，见该方法的文档。）
+    #[test]
+    fn test_seek_to_frame_rejects_an_unknown_stream() -> Result<()> {
+        let mut reader = StreamReader::new(std::path::Path::new("assets/mp4.mp4"))?;
+        assert!(
+            reader.seek_to_frame(99, 0, AVSeekFlag::BACKWARD).is_err(),
+            "seeking a stream that does not exist must fail"
+        );
+        Ok(())
+    }
+
+    /// 中断句柄：新建时未触发，`abort` 立即触发，零超时也立即触发。
+    ///
+    /// 已触发的句柄会让读操作失败——这是取消一个卡住的网络读取的唯一途径。
+    #[test]
+    fn test_interrupt_abort_and_timeout() -> Result<()> {
+        let fresh = Interrupt::new();
+        assert!(!fresh.triggered(), "a fresh handle must not be triggered");
+
+        let expired = Interrupt::new();
+        expired.set_timeout(std::time::Duration::ZERO);
+        assert!(expired.triggered(), "a zero timeout fires immediately");
+
+        let aborted = Interrupt::new();
+        aborted.abort();
+        assert!(aborted.triggered(), "abort must trigger");
+
+        // 句柄可以挂到 reader 上（`abort` 是取消**阻塞**读取的途径；本地文件不会
+        // 阻塞，所以这里只验证装配成功，无法验证中止效果）。
+        StreamReaderBuilder::new("assets/mp4.mp4")
+            .with_interrupt(aborted)
+            .build()?;
+        Ok(())
+    }
+
+    /// 输出协议枚举与输入协议对称（至少都包含 `file`）。
+    #[test]
+    fn test_output_protocols_contain_file() {
+        assert!(
+            output_protocols().iter().any(|name| name == "file"),
+            "the `file` output protocol must be available"
+        );
     }
 }

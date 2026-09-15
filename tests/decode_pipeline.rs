@@ -36,17 +36,16 @@ fn make_test_video(
     let video_index = muxer.add_encoder(video_encoder)?;
     for i in 0..n_frames {
         let rgb = colors::hsv_to_rgb(i as f32 / n_frames as f32 * 360.0, 100.0, 100.0);
-        let mut frame = MediaFrame::<u8>::new_video_frame(
-            width,
-            height,
-            PixelFormat::RGB24,
-            rsmedia::time::new_rational(1, 24),
-        )?;
+        let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24)?;
+        let samples = frame
+            .data
+            .as_packed_mut()
+            .expect("RGB24 frames are interleaved");
         for y in 0..height {
             for x in 0..width {
-                frame.data[[y, x, 0]] = rgb[0];
-                frame.data[[y, x, 1]] = rgb[1];
-                frame.data[[y, x, 2]] = rgb[2];
+                samples[[y, x, 0]] = rgb[0];
+                samples[[y, x, 1]] = rgb[1];
+                samples[[y, x, 2]] = rgb[2];
             }
         }
         let mut avframe = frame.to_avframe()?;

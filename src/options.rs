@@ -391,7 +391,7 @@ impl std::fmt::Display for Options {
 
 /// Video encoders whose FFmpeg wrapper exposes a `crf` private option.
 ///
-/// Single source of truth: used by [`EncoderBuilder::with_quality`] /
+/// Single source of truth: used by [`EncoderBuilder::with_quality`](crate::EncoderBuilder::with_quality) /
 /// [`Quality::Crf`] (fall back to bit-rate control for other codecs) and the
 /// [`Quality::Crf`] capability documentation.
 pub const CRF_CAPABLE_CODECS: &[&str] = &[
@@ -410,9 +410,17 @@ pub const CRF_CAPABLE_CODECS: &[&str] = &[
 pub enum Quality {
     /// Constant Rate Factor — quality-targeted, file size varies.
     /// Lower value = higher quality (x264 scale, sane range 0..=51,
-    /// defaults around 18-28). Only supported by the encoders listed in
-    /// [`CRF_CAPABLE_CODECS`]; others fall back to [`Quality::Bitrate`]
-    /// with a warning.
+    /// defaults around 18-28).
+    ///
+    /// Only the codecs in [`CRF_CAPABLE_CODECS`] take the `crf` option; for any
+    /// other encoder the builder logs a warning and rate control falls back to the
+    /// configured bit rate ([`EncoderBuilder::with_bit_rate`], else the
+    /// per-media-type default shown on [`EncoderBuilder`]) — it does **not**
+    /// silently become `Quality::Bitrate`.
+    ///
+    /// [`CRF_CAPABLE_CODECS`]: crate::options::CRF_CAPABLE_CODECS
+    /// [`EncoderBuilder`]: crate::EncoderBuilder
+    /// [`EncoderBuilder::with_bit_rate`]: crate::EncoderBuilder::with_bit_rate
     Crf(u8),
     /// Explicit target bit rate in bits per second.
     Bitrate(i64),

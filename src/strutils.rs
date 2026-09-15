@@ -3,6 +3,11 @@ use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 
 /// &Path -> &Cstr
+///
+/// # Panics
+///
+/// Panics if the path contains an interior NUL byte — `CString::new` rejects it,
+/// and there is no sensible C string for such a path.
 pub fn path_to_cstring<P: AsRef<Path> + ?Sized>(path: &P) -> CString {
     #[cfg(unix)]
     {
@@ -38,22 +43,20 @@ pub fn cstr_to_path<C: AsRef<CStr> + ?Sized>(cstr: &C) -> PathBuf {
 
     #[cfg(not(unix))]
     {
-        // let bytes = cstr.as_ref().to_bytes();
-        // match std::str::from_utf8(bytes) {
-        //     Ok(s) => Path::new(s),
-        //     Err(_) => {
-        //         // not UTF-8
-        //         let os_str = unsafe { OsStr::from_encoded_bytes_unchecked(bytes) };
-        //         Path::new(os_str)
-        //     }
-        // }
-        // 按 UTF-8 解码（丢失字节替换为 U+FFFD）。不再使用 from_encoded_bytes_unchecked，
-        // 因为直接拼凑出的字节不保证满足 Windows OsStr 的 WTF-8 不变量，属未定义行为。
+        // 按 UTF-8 解码（无效字节替换为 U+FFFD）。这里不用
+        // `OsStr::from_encoded_bytes_unchecked`：拼凑出的字节不满足 Windows
+        // OsStr 的 WTF-8 不变量，属未定义行为。
         PathBuf::from(cstr.as_ref().to_string_lossy().into_owned())
     }
 }
 
 /// &str -> CString
+///
+/// # Panics
+///
+/// Panics if the string contains an interior NUL byte. Callers that take the
+/// string from a user (see `Options`, which filters NULs out first) must handle
+/// that case themselves.
 pub fn str_to_cstring<S: AsRef<str> + ?Sized>(s: &S) -> CString {
     CString::new(s.as_ref()).unwrap()
 }
@@ -85,7 +88,7 @@ pub fn os_str_to_string(os: impl AsRef<OsStr>) -> String {
 
 /// Path -> String
 ///
-/// 便捷封装 [`cstr_to_string`/`os_str_to_string`]：路径转可读字符串（lossy）。
+/// 便捷封装 [`os_str_to_string`]：路径转可读字符串（lossy）。
 pub fn path_to_string(path: impl AsRef<Path>) -> String {
     os_str_to_string(path.as_ref().as_os_str())
 }
@@ -99,6 +102,10 @@ pub fn str_to_os_string(s: impl AsRef<str>) -> OsString {
 }
 
 /// OsStr -> CString
+///
+/// # Panics
+///
+/// Panics if the value contains an interior NUL byte.
 pub fn os_str_to_cstring(path_or_url: impl AsRef<OsStr>) -> CString {
     #[cfg(unix)]
     {
@@ -319,15 +326,12 @@ mod tests {
     }
 
     #[test]
-    fn test_os_str_and_path_to_string() {
+    fn test_os_str_to_string() {
         let s = "媒体/文件.txt";
         // OsStr -> String
         assert_eq!(os_str_to_string(s), s);
-        // Path -> String
-        assert_eq!(path_to_string(Path::new(s)), s);
-        // PathBuf -> String
-        assert_eq!(path_to_string(PathBuf::from(s)), s);
-        // 断言 os_str/path_to_string 与 lossy 一致（含非法字节时也往返为 lossy 字符串）
+        // Path / PathBuf -> String（经 OsStr 的同一条转换）
+        assert_eq!(os_str_to_string(Path::new(s).as_os_str()), s);
         assert_eq!(os_str_to_string(PathBuf::from(s).as_os_str()), s);
     }
 

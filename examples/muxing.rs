@@ -1,5 +1,6 @@
 use rsmedia::{
     EncoderBuilder, MediaType, Options, PixelFormat, SampleFormat, StreamWriterBuilder,
+    error::RsmediaError,
     mux::{Demuxer, Muxer},
 };
 
@@ -46,7 +47,7 @@ fn main() -> anyhow::Result<()> {
             EncoderBuilder::new_video(info.width as usize, info.height as usize)
                 .with_codec_name("libx264".to_string())
                 .with_bit_rate(info.bit_rate)
-                .with_pixel_format(info.format.into_pixel().unwrap_or(PixelFormat::YUV420P))
+                .with_pix_fmt(info.format.into_pixel().unwrap_or(PixelFormat::YUV420P))
                 .build()?
         } else if info.media_type == MediaType::AUDIO {
             EncoderBuilder::new_audio(
@@ -66,7 +67,10 @@ fn main() -> anyhow::Result<()> {
 
         let out_index = muxer.add_encoder(encoder)?;
         in_to_out.push((info.index, out_index));
-        muxer.dump(out_index)?;
+        println!(
+            "output stream {out_index}: {}",
+            muxer.dump_stream_info(out_index)?
+        );
     }
 
     // Demux (decode) one frame at a time and mux (re-encode) it into the output.
@@ -79,7 +83,7 @@ fn main() -> anyhow::Result<()> {
                     .find(|(i, _)| *i == in_index)
                     .map(|&(_, o)| o)
                     .ok_or_else(|| {
-                        rsmedia::Error::custom(format!(
+                        RsmediaError::msg(format!(
                             "decoded frame of unmapped input stream {in_index}"
                         ))
                     })?;

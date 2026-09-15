@@ -19,7 +19,7 @@
 //!
 //! FFmpeg Documentation: <https://ffmpeg.org/doxygen/trunk/group__lavc__subtitle.html>
 
-use crate::error::Result;
+use crate::error::{Result, RsmediaError};
 use crate::io::{Reader, Writer};
 
 use rsmpeg::avcodec::AVSubtitle;
@@ -40,19 +40,22 @@ pub fn copy_subtitle_stream<R: Reader, W: Writer>(
     src_index: usize,
     out_index: usize,
 ) -> Result<usize> {
+    // 两个流索引都必须存在：源索引写错会让每个时间戳都按错误的时间基换算，
+    // 目标索引写错则包会被投到不存在的流上。这里按索引错误上报，而不是回退到一个
+    // 猜测的时间基（1/1000）——那只会静默产出时间戳错乱的字幕。
     let src_tb = reader
         .input()
         .streams()
         .get(src_index)
         .map(|s| s.time_base)
-        .unwrap_or(ffi::AVRational { num: 1, den: 1000 });
+        .ok_or_else(|| {
+            RsmediaError::msg(format!(
+                "Input stream {src_index} does not exist ({} streams)",
+                reader.input().nb_streams
+            ))
+        })?;
 
-    let out_tb = writer
-        .output()
-        .streams()
-        .get(out_index)
-        .map(|s| s.time_base)
-        .unwrap_or(src_tb);
+    let out_tb = writer.stream_time_base(out_index)?;
 
     let mut count = 0usize;
     while let Some((stream_index, mut packet)) = reader.read_packet()? {
@@ -68,7 +71,7 @@ pub fn copy_subtitle_stream<R: Reader, W: Writer>(
     Ok(count)
 }
 
-/// Encode a list of subtitle segments through a bare [`Encoder`] into the
+/// Encode a list of subtitle segments through a bare [`Encoder`](crate::encode::Encoder) into the
 /// container written by `writer` (see [`crate::io::StreamWriter`]).
 ///
 /// 字幕编码走同步 API（`encode_subtitle_segment`，无 send/receive 缓冲），
@@ -86,7 +89,7 @@ pub fn encode_subtitle_segments(
     let enc_tb = encoder.time_base();
     let index = writer.add_stream(encoder.codecpar(), enc_tb);
     writer.write_header()?;
-    let out_tb = writer.stream_time_base(index);
+    let out_tb = writer.stream_time_base(index)?;
 
     for segment in segments {
         for mut packet in encoder.encode_subtitle_segment(segment)? {
@@ -150,9 +153,17 @@ impl SubtitleSegment {
             return None;
         }
 
+        // `AVSubtitle.pts` 可能是 `AV_NOPTS_VALUE`（换算出来约 -9.2e12 ms）：没有
+        // 可用的时间信息，按"无段落"处理，而不是产出一个荒谬的时间戳。
+        if subtitle.pts == ffi::AV_NOPTS_VALUE {
+            log::warn!("Subtitle has no presentation timestamp; skipping it");
+            return None;
+        }
         let pts_ms = subtitle.pts / 1000;
         let start_ms = pts_ms + subtitle.start_display_time as i64;
-        let end_ms = pts_ms + subtitle.end_display_time as i64;
+        // `end_display_time` 常为 0（未声明结束时间），此时至少保证 end >= start，
+        // 否则下游会拿到时长为负的段落。
+        let end_ms = (pts_ms + subtitle.end_display_time as i64).max(start_ms);
 
         let mut texts: Vec<String> = Vec::new();
         for rect in subtitle.rect_iter() {
@@ -374,7 +385,7 @@ mod tests {
 
         // 3) Decode roundtrip: demux packets -> decode_subtitle -> rect payload
         let decoder = AVCodec::find_decoder(codec_id)
-            .ok_or_else(|| RsmediaError::custom("mov_text decoder not available"))?;
+            .ok_or_else(|| RsmediaError::msg("mov_text decoder not available"))?;
         let mut dctx = AVCodecContext::new(&decoder);
         dctx.open(None)?;
 
@@ -551,7 +562,7 @@ mod tests {
 
         // 3) Decode roundtrip: demux packets -> decode_subtitle -> rect payload
         let decoder = AVCodec::find_decoder(codec_id)
-            .ok_or_else(|| RsmediaError::custom("ass decoder not available"))?;
+            .ok_or_else(|| RsmediaError::msg("ass decoder not available"))?;
         let mut dctx = AVCodecContext::new(&decoder);
         dctx.open(None)?;
 
@@ -597,7 +608,7 @@ mod tests {
         let err = encoder
             .encode_subtitle_segment(&SubtitleSegment::new(0, 1000, "x"))
             .unwrap_err();
-        assert!(err.to_string().contains("subtitle encoder"));
+        assert!(err.is_unsupported(), "{err}");
         Ok(())
     }
 
@@ -607,9 +618,14 @@ mod tests {
     fn test_missing_subtitle_header_is_rejected() -> Result<()> {
         let err = match EncoderBuilder::new_subtitle().build() {
             Err(e) => e,
-            Ok(_) => return Err(RsmediaError::custom("build should fail without header")),
+            Ok(_) => return Err(RsmediaError::msg("build should fail without header")),
         };
-        assert!(err.to_string().contains("header"));
+        // 编码器缺失的环境（构建不含 mov_text）跳过，环境差异不算失败。
+        if err.is_codec_not_found() {
+            println!("SKIP: subtitle encoder unavailable: {err}");
+            return Ok(());
+        }
+        assert!(err.is_invalid_config(), "{err}");
         Ok(())
     }
 }

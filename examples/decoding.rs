@@ -67,9 +67,9 @@ async fn main() -> Result<()> {
                         .format()
                         .map(|f| match f {
                             FrameFormat::Pixel(p) => p.get_pix_fmt_name(),
-                            _ => "N/A",
+                            _ => "N/A".to_string(),
                         })
-                        .unwrap_or("N/A")
+                        .unwrap_or("N/A".to_string())
                 );
 
                 process_frame(yuv_frame)?;
@@ -101,12 +101,18 @@ async fn main() -> Result<()> {
 }
 
 fn process_frame(yuv_frame: MediaFrame<u8>) -> Result<()> {
-    let rgb_frame = yuv_frame.convert_yuv_to_rgb()?;
+    let rgb_frame = yuv_frame.convert_yuv420p_to_rgb24()?;
 
     let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
         yuv_frame.width as u32,
         yuv_frame.height as u32,
-        rgb_frame.data.as_slice().unwrap().to_vec(),
+        rgb_frame
+            .data
+            .as_packed()
+            .expect("RGB24 frames are interleaved")
+            .as_slice()
+            .unwrap()
+            .to_vec(),
     )
     .context("failed to create image buffer")?;
 

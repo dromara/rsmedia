@@ -31,18 +31,6 @@ impl Time {
         Self { time, time_base }
     }
 
-    /// Align the timestamp with a different time base.
-    ///
-    /// # Arguments
-    ///
-    /// # Return value
-    ///
-    /// The same timestamp, with the time base changed.
-    #[inline]
-    pub fn with_time_base(&self, time_base: AVRational) -> Self {
-        self.aligned_with_rational(time_base)
-    }
-
     /// Creates a new timestamp that reprsents `nth` of a second.
     ///
     /// # Arguments
@@ -93,21 +81,25 @@ impl Time {
     }
 
     /// Create a new zero-valued timestamp.
+    ///
+    /// 时间基取 [`TIME_BASE`]，因此与 `Time::new(Some(0), TIME_BASE)`（以及
+    /// `Time::from_secs(0.0)`）完全相等 —— 早先这里硬编码 `1/90000`，会出现
+    /// "同为 0 秒却不相等" 的荒谬结果。
     pub fn zero() -> Self {
         Time {
             time: Some(0),
-            time_base: new_rational(1, 90000),
+            time_base: TIME_BASE,
         }
     }
 
-    /// Whether the [`Time`] has a time at all.
+    /// Whether the [`Time`] carries a usable value at all.
+    ///
+    /// Both "no time" spellings report `false`: no value whatsoever (`None`), and
+    /// the `AV_NOPTS_VALUE` sentinel FFmpeg writes when a stream simply has no
+    /// timestamp. This is the predicate to branch on before converting to seconds
+    /// — converting a NOPTS would yield ≈ -9.2e13 seconds.
     pub fn has_value(&self) -> bool {
-        self.time.is_some()
-    }
-
-    /// Whether or not the [`Time`] value is `AV_NOPTS_VALUE`.
-    pub fn has_no_pts(&self) -> bool {
-        self.time == Some(ffi::AV_NOPTS_VALUE)
+        self.time.is_some_and(|time| time != ffi::AV_NOPTS_VALUE)
     }
 
     /// Align the timestamp with another timestamp, which will convert the `rhs` timestamp to the
@@ -154,11 +146,6 @@ impl Time {
         } else {
             0.0
         }
-    }
-
-    /// Convert to underlying parts: the `time` and `time_base`.
-    pub fn into_parts(self) -> (Option<i64>, AVRational) {
-        (self.time, self.time_base)
     }
 
     /// Convert to underlying time to `i64` (the number of time units).
@@ -234,11 +221,6 @@ pub fn av_rational_eq(a: &AVRational, b: &AVRational) -> bool {
     a.num == b.num && a.den == b.den
 }
 
-#[inline(always)]
-pub fn av_rational_contains(arr: &[AVRational], a: &AVRational) -> bool {
-    arr.iter().any(|b| av_rational_eq(a, b))
-}
-
 impl PartialEq for Time {
     fn eq(&self, other: &Self) -> bool {
         self.time == other.time
@@ -250,36 +232,24 @@ impl PartialEq for Time {
 impl Eq for Time {}
 
 impl PartialOrd for Time {
+    /// 与 [`PartialEq`] 的契约保持一致：只有**可比且相等**时才返回 `Equal`。
+    ///
+    /// 两个时间基不同的值不可比较（返回 `None`），这在两个都有值时已经成立；
+    /// 两个都无值时同样如此，否则会出现 `a != b` 却 `partial_cmp(a, b) == Equal`
+    /// 的矛盾（`PartialEq` 把时间基也算作相等的一部分）。
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        // 时间基不同即不可比较，与有无值无关。
+        if !av_rational_eq(&self.time_base, &other.time_base) {
+            return None;
+        }
+
         match (self.time, other.time) {
-            // None的特殊处理规则
+            // "无值" 排在 "有值" 之前，两者不会判等。
             (None, None) => Some(std::cmp::Ordering::Equal),
             (None, Some(_)) => Some(std::cmp::Ordering::Less),
             (Some(_), None) => Some(std::cmp::Ordering::Greater),
-
-            // 有效时间的比较逻辑
-            (Some(t1), Some(t2)) => {
-                // 时间基不同时返回不可比较
-                if !av_rational_eq(&self.time_base, &other.time_base) {
-                    return None;
-                }
-
-                // 相同时间基直接比较
-                t1.partial_cmp(&t2)
-            }
+            (Some(t1), Some(t2)) => t1.partial_cmp(&t2),
         }
-    }
-}
-
-impl PartialEq<(Option<i64>, AVRational)> for Time {
-    fn eq(&self, other: &(Option<i64>, AVRational)) -> bool {
-        *self == Time::new(other.0, other.1)
-    }
-}
-
-impl PartialEq<Time> for (Option<i64>, AVRational) {
-    fn eq(&self, other: &Time) -> bool {
-        other == self
     }
 }
 
@@ -373,10 +343,10 @@ mod tests {
     }
 
     #[test]
-    fn test_with_time_base() {
+    fn test_aligned_with_rational() {
         let time = Time::new(Some(2), new_rational(3, 9));
         assert_eq!(time.as_secs(), 2.0 / 3.0);
-        let time = time.with_time_base(new_rational(1, 9));
+        let time = time.aligned_with_rational(new_rational(1, 9));
         assert_eq!(time.as_secs(), 2.0 / 3.0);
         assert_eq!(time.into_value(), Some(6));
     }
@@ -425,6 +395,49 @@ mod tests {
         assert_eq!(time.into_value(), Some(0));
     }
 
+    /// `Time::zero()` 与同样表示 0 秒的值完全相等（含时间基）。
+    #[test]
+    fn test_zero_equals_other_zero_values() {
+        assert_eq!(Time::zero(), Time::new(Some(0), TIME_BASE));
+        assert_eq!(Time::zero(), Time::from_secs(0.0));
+        assert_eq!(Time::zero(), Time::from_secs_f64(0.0));
+    }
+
+    /// "无值" 与 `AV_NOPTS_VALUE` 都表示"没有可用时间戳"，`has_value` 一律为 false。
+    #[test]
+    fn test_has_value_rejects_missing_and_nopts() {
+        let missing = Time::new(None, TIME_BASE);
+        let nopts = Time::new(Some(ffi::AV_NOPTS_VALUE), TIME_BASE);
+
+        assert!(!missing.has_value());
+        assert!(!nopts.has_value());
+        assert!(!missing.has_value());
+        assert!(!nopts.has_value());
+
+        assert!(Time::new(Some(0), TIME_BASE).has_value());
+    }
+
+    /// `partial_cmp` 与 `PartialEq` 保持一致：时间基不同即不可比较，且不会报 `Equal`。
+    #[test]
+    fn test_partial_cmp_is_consistent_with_eq() {
+        let a = Time::new(None, new_rational(1, 2));
+        let b = Time::new(None, new_rational(1, 4));
+        assert_ne!(a, b);
+        assert_eq!(
+            a.partial_cmp(&b),
+            None,
+            "different time bases must be unordered"
+        );
+
+        let same = Time::new(None, new_rational(1, 2));
+        assert_eq!(a, same);
+        assert_eq!(a.partial_cmp(&same), Some(std::cmp::Ordering::Equal));
+
+        let later = Time::new(Some(3), new_rational(1, 2));
+        assert_eq!(a.partial_cmp(&later), Some(std::cmp::Ordering::Less));
+        assert_eq!(later.partial_cmp(&a), Some(std::cmp::Ordering::Greater));
+    }
+
     #[test]
     fn test_aligned_with() {
         let a = Time::from_units(3, 16);
@@ -461,12 +474,6 @@ mod tests {
         assert_eq!(time.as_secs_f64(), 0.3);
         let time = Time::new(None, new_rational(0, 0));
         assert_eq!(time.as_secs_f64(), 0.0);
-    }
-
-    #[test]
-    fn test_into_parts() {
-        let time = Time::new(Some(1), new_rational(2, 3));
-        assert_eq!(time, (Some(1), new_rational(2, 3)));
     }
 
     #[test]

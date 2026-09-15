@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::{Result, RsmediaError};
 use crate::io::init_logging;
 
 use once_cell::sync::OnceCell;
@@ -14,7 +14,7 @@ pub fn init() -> Result<()> {
         // Redirect logging to the Rust `tracing` crate.
         init_logging();
 
-        Ok::<(), Error>(())
+        Ok::<(), RsmediaError>(())
     })?;
 
     Ok(())

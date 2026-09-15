@@ -2,7 +2,7 @@
 mod common;
 use anyhow::{Context, Result, anyhow};
 use common::test_output_path;
-use rsmedia::{EncoderBuilder, strutils};
+use rsmedia::{EncoderBuilder, RsmediaError, strutils};
 use rsmpeg::{
     avcodec::{AVCodec, AVCodecContext},
     avutil::{AVFrame, opt_set, ra},
@@ -133,9 +133,9 @@ const COMMON_VIDEO_CONTAINERS: &[(&str, &str)] = &[
 /// 25 帧 25fps 的 YUV420P 测试图封装到对应容器。
 fn encode_video_container(container_type: &str, codec_name: &str) -> Result<()> {
     // 编码器是否存在取决于 FFmpeg 编译配置（如 libx264、libtheora），
-    // 缺失时跳过该容器而不是失败
+    // 缺失时跳过该容器而不是失败：用类型化 CodecNotFound 标记，调用方按变体跳过
     if AVCodec::find_encoder_by_name(&strutils::str_to_cstring(codec_name)).is_none() {
-        anyhow::bail!("encoder {codec_name} not available in this FFmpeg build");
+        return Err(RsmediaError::codec_not_found(codec_name).into());
     }
 
     let output_path = test_output_path("encode_video", &format!("test.{container_type}"));
@@ -179,7 +179,11 @@ fn test_encode_video_containers() -> Result<()> {
     for (container_type, codec_name) in COMMON_VIDEO_CONTAINERS {
         match encode_video_container(container_type, codec_name) {
             Ok(()) => encoded += 1,
-            Err(e) if e.to_string().contains("not available in this FFmpeg build") => {
+            // 编码器缺失（如 libtheora）：匹配类型化 CodecNotFound 变体优雅跳过。
+            Err(e)
+                if e.downcast_ref::<RsmediaError>()
+                    .is_some_and(|e| e.is_codec_not_found()) =>
+            {
                 skipped.push(*container_type)
             }
             Err(e) => return Err(anyhow!("encode {container_type} failed: {e:#}")),

@@ -5,7 +5,7 @@
 //! 2. **Explicit RGB -> YUV color matrices** (BT.601 / BT.709 / BT.2020) via `yuv`.
 //! 3. **Colormap pseudo-color rendering** via `colorous`.
 
-use rsmedia::{PixelFormat, colors, frame::MediaFrame, time};
+use rsmedia::{PixelFormat, colors, frame::MediaFrame};
 
 fn main() -> anyhow::Result<()> {
     // 1. Perceptual color difference (CIEDE2000)
@@ -21,19 +21,22 @@ fn main() -> anyhow::Result<()> {
     // 2. Explicit RGB -> YUV color matrices
     const W: usize = 320;
     const H: usize = 180;
-    let mut rgb =
-        MediaFrame::<u8>::new_video_frame(W, H, PixelFormat::RGB24, time::new_rational(1, 30))?;
+    let mut rgb = MediaFrame::<u8>::new_video_frame(W, H, PixelFormat::RGB24)?;
+    let samples = rgb
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..H {
         for x in 0..W {
             let t = (x as f32 / W as f32 * 255.0) as u8;
-            rgb.data[[y, x, 0]] = t;
-            rgb.data[[y, x, 1]] = 128;
-            rgb.data[[y, x, 2]] = 255 - t;
+            samples[[y, x, 0]] = t;
+            samples[[y, x, 1]] = 128;
+            samples[[y, x, 2]] = 255 - t;
         }
     }
-    let auto = rgb.convert_rgb_to_yuv()?; // SD resolution -> BT.601 (automatic)
-    let bt709 = rgb.convert_rgb_to_yuv_with_matrix(yuv::YuvStandardMatrix::Bt709)?;
-    let bt2020 = rgb.convert_rgb_to_yuv_with_matrix(yuv::YuvStandardMatrix::Bt2020)?;
+    let auto = rgb.convert_rgb24_to_yuv420p()?; // SD resolution -> BT.601 (automatic)
+    let bt709 = rgb.convert_rgb24_to_yuv420p_with_matrix(yuv::YuvStandardMatrix::Bt709)?;
+    let bt2020 = rgb.convert_rgb24_to_yuv420p_with_matrix(yuv::YuvStandardMatrix::Bt2020)?;
     println!("auto   -> {:?}", auto.format());
     println!("BT709  -> {:?}", bt709.format());
     println!("BT2020 -> {:?}", bt2020.format());

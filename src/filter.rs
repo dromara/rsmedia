@@ -7,6 +7,7 @@ use crate::MediaType;
 use crate::error::{Context, Result, RsmediaError};
 use crate::fmt::{FrameFormat, SampleFormat};
 use crate::pixel::PixelFormat;
+use crate::strutils;
 
 use rsmpeg::avfilter::{AVFilter, AVFilterContextMut, AVFilterGraph, AVFilterInOut};
 use rsmpeg::avutil::{AVChannelLayout, AVFrame};
@@ -66,6 +67,15 @@ impl Filter {
     }
 }
 
+/// Whether the named FFmpeg filter exists in this build（如 `drawtext` 依赖
+/// libfreetype，许多发行版构建不含）。用于**前置**跳过不可用滤镜，避免依赖
+/// FFmpeg 运行时错误字符串来判断。
+pub fn is_available(name: &str) -> bool {
+    let name_c = strutils::str_to_cstring(name);
+    // SAFETY: `name_c` 是合法的 NUL 结尾 C 字符串；查询函数只读且线程安全。
+    unsafe { !ffi::avfilter_get_by_name(name_c.as_ptr()).is_null() }
+}
+
 /// Escapes characters that are special within FFmpeg filtergraph descriptions.
 ///
 /// This function uses FFmpeg's native av_escape function to properly escape
@@ -84,11 +94,15 @@ fn escape_filter_str(input: &str) -> String {
         return String::new();
     }
 
+    // FFmpeg 无法处理 NUL 字节；同时在 `av_escape` 失败/返回空指针时，
+    // 退化为「剥离 NUL 后原样放行」。这是有意的降级：宁可未转义，也不拒绝输出。
+    let fallback = || input.replace('\0', "");
+
     unsafe {
         // Create a C string from our input
         let c_input = match CString::new(input) {
             Ok(s) => s,
-            Err(_) => return input.replace('\0', "").to_string(), // Handle null bytes
+            Err(_) => return fallback(), // Handle null bytes
         };
 
         // Characters that need escaping in filtergraph descriptions
@@ -110,16 +124,16 @@ fn escape_filter_str(input: &str) -> String {
 
         // 检查返回值是否为错误
         if result < 0 {
-            eprintln!("av_escape failed with error code: {}", result);
+            log::warn!("av_escape failed with error code: {result}");
             // 使用安全的回退方案
-            return input.replace('\0', "").to_string();
+            return fallback();
         }
 
         // 检查返回的指针是否为空
         if escaped_ptr.is_null() {
-            eprintln!("av_escape returned null pointer");
+            log::warn!("av_escape returned null pointer");
             // 使用安全的回退方案
-            return input.replace('\0', "").to_string();
+            return fallback();
         }
 
         // Convert back to Rust String and free the memory
@@ -186,7 +200,9 @@ pub mod video {
     ///
     /// See: <https://ffmpeg.org/ffmpeg-scaler.html#Scaler-Options>
     pub fn scale(width: u32, height: u32, flags: Option<&str>) -> Filter {
-        let flags_str = flags.unwrap_or("fast_bilinear");
+        // 默认与 FFmpeg `scale` 滤镜一致，也与本 crate 的 `Scaler::default()`
+        // 一致（BICUBIC）；早先这里是 `fast_bilinear`，与上方文档矛盾。
+        let flags_str = flags.unwrap_or("bicubic");
 
         Filter::new(
             "scale",
@@ -196,8 +212,8 @@ pub mod video {
     }
 
     /// Converts video pixel format.
-    /// `format`: https://ffmpeg.org/ffmpeg-filters.html#format
-    /// `aformat`: https://ffmpeg.org/ffmpeg-filters.html#aformat-1
+    /// `format`: <https://ffmpeg.org/ffmpeg-filters.html#format>
+    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1>
     pub fn format(format: PixelFormat) -> Filter {
         Filter::new(
             "format",
@@ -697,7 +713,7 @@ pub mod audio {
 
     /// Converts audio sample format.
     /// `format`: <https://ffmpeg.org/ffmpeg-filters.html#format>
-    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1.
+    /// `aformat`: <https://ffmpeg.org/ffmpeg-filters.html#aformat-1>
     pub fn format(nb_channels: u32, sample_rate: u32, format: SampleFormat) -> Filter {
         let channel_desc = audio_channel_desc(nb_channels);
 
@@ -775,7 +791,7 @@ pub mod audio {
     /// See: <https://ffmpeg.org/ffmpeg-filters.html#acompressor>
     pub fn compressor(ratio: f32, attack: Option<f32>, release: Option<f32>) -> Result<Filter> {
         if ratio < 1.0 {
-            return Err(RsmediaError::custom(format!(
+            return Err(RsmediaError::msg(format!(
                 "Compressor ratio must be >= 1.0: {ratio}"
             )));
         }
@@ -900,20 +916,28 @@ pub mod audio {
     }
 }
 
+/// 按媒体类型选择同名滤镜：音频滤镜在视频滤镜名前加 `a` 前缀
+/// （如 `asetpts`/`setpts`、`atrim`/`trim`）。
+fn audio_or_video_filter_name(
+    audio: &'static str,
+    video: &'static str,
+    mt: MediaType,
+) -> &'static str {
+    if mt == MediaType::AUDIO { audio } else { video }
+}
+
 /// 修改时间戳表达式（加速、减速、对齐等）。
 /// 典型值：`"0.5*PTS"`（2倍速）、`"1.5*PTS"`（慢放）、`"PTS-STARTPTS"`。
 /// `expr`: FFmpeg expression (e.g., "0.5*PTS", "PTS-STARTPTS").
 pub fn setpts(media_type: MediaType, expr: &str) -> Filter {
-    #[rustfmt::skip]
-    let name = if media_type == MediaType::AUDIO { "asetpts" } else { "setpts" };
+    let name = audio_or_video_filter_name("asetpts", "setpts", media_type);
     let escaped_expr = escape_filter_str(expr);
     Filter::new(name, media_type, format!("{name}={escaped_expr}"))
 }
 
 /// 将视频/音频裁剪到指定的时间范围。
 pub fn trim(media_type: MediaType, start: f32, end: f32) -> Filter {
-    #[rustfmt::skip]
-    let name = if media_type == MediaType::AUDIO { "atrim" } else { "trim" };
+    let name = audio_or_video_filter_name("atrim", "trim", media_type);
     Filter::new(name, media_type, format!("{name}={start}:{end}"))
 }
 
@@ -988,6 +1012,26 @@ impl FilterGraph {
         }
     }
 
+    /// Rebuilds the graph from scratch, discarding everything the old one held.
+    ///
+    /// A filter graph has no "rewind": frames that went in cannot be taken back
+    /// (`av_buffersrc_add_frame` offers no such operation), and once the sink has
+    /// seen EOF it stays at EOF forever — every later `av_buffersrc_add_frame`
+    /// fails with `AVERROR_EOF`. So the only correct way to restart a filtered
+    /// pipeline (after a seek, or to reuse a drained decoder) is to throw the
+    /// graph away and build a new one, which is what this does. The old
+    /// `AVFilterGraph` is dropped, freeing its filters and every frame still
+    /// buffered inside them.
+    ///
+    /// `params`/`filters` are the same values [`Self::init`] was given; the caller
+    /// has to keep them for exactly this reason.
+    pub(crate) fn rebuild(&mut self, params: &FilterParams, filters: &[Filter]) -> Result<()> {
+        self.graph = AVFilterGraph::new();
+        self.state = FilterGraphState::Normal;
+        self.initialized.store(false, DEFAULT_ORDERING);
+        self.init(params, filters)
+    }
+
     pub fn is_initialized(&self) -> bool {
         self.initialized.load(DEFAULT_ORDERING)
     }
@@ -1003,13 +1047,13 @@ impl FilterGraph {
     /// 初始化过滤器图表
     pub fn init(&mut self, params: &FilterParams, filters: &[Filter]) -> Result<()> {
         if self.is_initialized() {
-            return Err(RsmediaError::custom("Filter graph already initialized"));
+            return Err(RsmediaError::msg("Filter graph already initialized"));
         }
 
         // check
         for filter in filters {
             if filter.media_type() != params.media_type() {
-                return Err(RsmediaError::custom(format!(
+                return Err(RsmediaError::msg(format!(
                     "Filter media type mismatch: expected {:?}, got {:?}",
                     params.media_type(),
                     filter.media_type()
@@ -1197,7 +1241,7 @@ impl FilterGraph {
     /// 处理单帧
     pub fn process_frame(&mut self, frame: Option<AVFrame>) -> Result<Option<AVFrame>> {
         if !self.is_initialized() {
-            return Err(RsmediaError::custom("Filter graph not initialized"));
+            return Err(RsmediaError::msg("Filter graph not initialized"));
         }
 
         {
@@ -1227,7 +1271,7 @@ impl FilterGraph {
                 self.state = FilterGraphState::Flushed;
                 Ok(None)
             }
-            Err(e) => Err(RsmediaError::custom(format!(
+            Err(e) => Err(RsmediaError::msg(format!(
                 "Get frame from buffer sink Error: {e}"
             ))),
         }
@@ -1236,7 +1280,7 @@ impl FilterGraph {
     /// 刷新过滤器链
     pub fn flush(&mut self) -> Result<Vec<AVFrame>> {
         if !self.is_initialized() {
-            return Err(RsmediaError::custom("Filter graph not initialized"));
+            return Err(RsmediaError::msg("Filter graph not initialized"));
         }
         if self.is_flushed() {
             log::debug!("Filter graph already flushed.");
@@ -1244,14 +1288,29 @@ impl FilterGraph {
         }
 
         let mut frames = Vec::new();
+        let mut drained_iterations = 0usize;
 
         loop {
             match self.process_frame(None) {
-                Ok(Some(frame)) => frames.push(frame),
+                Ok(Some(frame)) => {
+                    drained_iterations = 0;
+                    frames.push(frame);
+                }
                 Ok(None) => {
                     if self.is_flushed() {
                         break;
                     }
+                    // EAGAIN：图里仍有缓冲帧要出，继续拉取；但个别滤镜可能一直回
+                    // EAGAIN 而不进入 Flushed，故设上限收尾（与解码/编码排空一致）。
+                    if drained_iterations >= crate::MAX_DRAIN_ITERATIONS {
+                        log::error!(
+                            "Filter graph keeps returning EAGAIN while flushing; \
+                             giving up after {} iterations",
+                            crate::MAX_DRAIN_ITERATIONS
+                        );
+                        break;
+                    }
+                    drained_iterations += 1;
                     log::trace!("Filter graph draining during flush...");
                 }
                 Err(e) => {
@@ -1312,57 +1371,6 @@ impl std::fmt::Debug for FilterGraph {
             self.is_initialized(),
             self.state,
         )
-    }
-}
-
-/// 流过滤器配置
-#[derive(Debug, Clone)]
-pub struct FilterConfig {
-    pub params: FilterParams,
-    pub filters: Vec<Filter>,
-}
-
-/// 流过滤器
-pub struct FilterContext {
-    pub stream_index: usize,
-    pub config: FilterConfig,
-    pub graph: FilterGraph,
-}
-
-impl FilterContext {
-    /// 为指定流添加过滤器
-    pub fn new(stream_index: usize, config: FilterConfig) -> Result<Self> {
-        log::debug!("new filter context:{config:?}");
-
-        // 创建并初始化过滤器图表
-        let mut graph = FilterGraph::new();
-        graph.init(&config.params, &config.filters)?;
-
-        Ok(Self {
-            stream_index,
-            config,
-            graph,
-        })
-    }
-
-    /// 处理指定流的帧
-    pub fn process_frame(&mut self, frame: Option<AVFrame>) -> Result<Option<AVFrame>> {
-        self.graph.process_frame(frame)
-    }
-
-    /// 刷新指定流的过滤器链
-    pub fn flush(&mut self) -> Result<Vec<AVFrame>> {
-        self.graph.flush()
-    }
-}
-
-impl std::fmt::Debug for FilterContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FilterContext")
-            .field("stream_index", &self.stream_index)
-            .field("config", &self.config)
-            .field("graph", &self.graph)
-            .finish()
     }
 }
 
@@ -1568,12 +1576,14 @@ mod tests {
         // ---- Video filters ----
         let cases: Vec<(String, String, MediaType)> = vec![
             (
-                "scale=w=640:h=360:flags=bicubic".into(),
-                video::scale(640, 360, Some("bicubic")).spec(),
+                "scale=w=640:h=360:flags=lanczos".into(),
+                video::scale(640, 360, Some("lanczos")).spec(),
                 VIDEO,
             ),
+            // 不指定 flags 时用 FFmpeg `scale` 滤镜的默认算法（bicubic），
+            // 与本 crate 的 `Scaler::default()` 一致。
             (
-                "scale=w=640:h=360:flags=fast_bilinear".into(),
+                "scale=w=640:h=360:flags=bicubic".into(),
                 video::scale(640, 360, None).spec(),
                 VIDEO,
             ),

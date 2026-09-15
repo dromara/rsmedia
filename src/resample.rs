@@ -1,7 +1,7 @@
 use crate::error::{Context, Result, RsmediaError};
 use crate::{SampleFormat, imgutils, time};
 
-use rsmpeg::avutil::{AVFrame, AVSamples};
+use rsmpeg::avutil::{AVChannelLayout, AVFrame, AVSamples};
 use rsmpeg::ffi;
 use rsmpeg::swresample::SwrContext;
 
@@ -41,50 +41,66 @@ fn check_resampler_input(src_frame: &AVFrame) -> Result<()> {
     }
 
     if src_frame.sample_rate < 1 || src_frame.nb_samples < 1 {
-        return Err(RsmediaError::custom("Invalid input frame."));
+        return Err(RsmediaError::msg("Invalid input frame."));
     }
     Ok(())
 }
 
-/// Audio resampling frame
-pub fn convert(
-    src_frame: &AVFrame,
-    out_ch_layout: ffi::AVChannelLayout,
-    out_sample_fmt: ffi::AVSampleFormat,
-    out_sample_rate: i32,
-) -> Result<AVSamples> {
-    check_resampler_input(src_frame)?;
-
-    let mut resampler = Resampler::new(
-        src_frame.ch_layout,
-        src_frame.format,
-        src_frame.sample_rate,
-        out_ch_layout,
-        out_sample_fmt,
-        out_sample_rate,
-    )
-    .context("Failed to create resample context.")?;
-
-    let samples = resampler.convert(src_frame, out_ch_layout, out_sample_fmt)?;
-
-    log::debug!(
-        "Swr convert from src:[{}, {:?}, {}] to dst:[{}, {:?}, {}]",
-        src_frame.ch_layout.nb_channels,
-        SampleFormat::from(src_frame.format),
-        src_frame.sample_rate,
-        out_ch_layout.nb_channels,
-        SampleFormat::from(out_sample_fmt),
-        out_sample_rate
-    );
-
-    Ok(samples)
+/// The default channel layout for `layout`, or [`None`] when it is already
+/// specified (or names no channels at all).
+///
+/// Frames decoded from containers that carry no channel mask (a plain WAV, say)
+/// report `AV_CHANNEL_ORDER_UNSPEC`. `swr_alloc_set_opts2` replaces such an order
+/// with the default layout for the channel count when it builds the context, and
+/// `swr_convert` then rejects every frame whose order still says UNSPEC with
+/// `AVERROR_INPUT_CHANGED` / `AVERROR_OUTPUT_CHANGED`. Interpreting the
+/// unspecified layout as the default one is what FFmpeg itself does; this is the
+/// one place that decision is made, for input frames and output layouts alike.
+fn default_layout_for(layout: ffi::AVChannelLayout) -> Option<ffi::AVChannelLayout> {
+    (layout.order == ffi::AV_CHANNEL_ORDER_UNSPEC && layout.nb_channels > 0)
+        .then(|| AVChannelLayout::from_nb_channels(layout.nb_channels).into_inner())
 }
 
-/// Audio resampling frame
+/// Runs `convert` with `frame`'s unspecified channel layout filled in.
+///
+/// The clone only happens in that one case; a frame whose layout is specified is
+/// passed through untouched, samples and all.
+fn with_normalized_layout<R>(
+    frame: &AVFrame,
+    convert: impl FnOnce(&AVFrame) -> Result<R>,
+) -> Result<R> {
+    let normalized;
+    let frame = match default_layout_for(frame.ch_layout) {
+        Some(layout) => {
+            let mut copy = frame.clone();
+            copy.set_ch_layout(layout);
+            normalized = copy;
+            &normalized
+        }
+        None => frame,
+    };
+    convert(frame)
+}
+
+/// Resamples one frame into a new frame, in one call.
+///
+/// The context is created fresh for this call, so this is for isolated
+/// conversions; a stream should use [`Resampler`] instead, whose delay buffers
+/// carry samples across calls (and whose [`flush`](Resampler::flush) drains the
+/// tail).
+///
+/// The output is allocated at the *upper bound* of what the conversion can
+/// produce, so `dst.nb_samples` after the call is the real count. Metadata is
+/// copied from the source frame (pts included), and the result's time base is
+/// `1 / out_sample_rate`.
 ///
 /// # Arguments
 ///
-///
+/// * `src_frame` - Decoded frame to convert; must be a software frame with a
+///   valid sample rate and at least one sample.
+/// * `out_ch_layout` - Channel layout of the output.
+/// * `out_sample_fmt` - Sample format of the output.
+/// * `out_sample_rate` - Sample rate of the output.
 pub fn convert_frame(
     src_frame: &AVFrame,
     out_ch_layout: ffi::AVChannelLayout,
@@ -92,6 +108,13 @@ pub fn convert_frame(
     out_sample_rate: i32,
 ) -> Result<AVFrame> {
     check_resampler_input(src_frame)?;
+
+    let normalized = with_normalized_layout(src_frame, |frame| Ok(frame.clone()))?;
+    let src_frame = &normalized;
+
+    // 输出布局同样要归一化：上下文按它构建，目标帧每次调用又把它交回 swr，
+    // 未指定的 order 会触发 `AVERROR_OUTPUT_CHANGED`。
+    let out_ch_layout = default_layout_for(out_ch_layout).unwrap_or(out_ch_layout);
 
     let mut resampler = Resampler::new(
         src_frame.ch_layout,
@@ -188,53 +211,58 @@ impl Resampler {
     /// call `alloc_buffer`; after conversion, `dst.nb_samples` is the actual
     /// number of output samples.
     pub fn convert_frame(&mut self, src: &AVFrame, dst: &mut AVFrame) -> Result<()> {
-        self.swr
-            .convert_frame(Some(src), dst)
-            .context("Failed to convert frame with streaming resampler")
+        with_normalized_layout(src, |src| {
+            self.swr
+                .convert_frame(Some(src), dst)
+                .context("Failed to convert frame with streaming resampler")
+        })
     }
 
-    /// Raw sample conversion (direct `swr_convert` wrapper), for caller-managed
-    /// sample buffers such as [`AVSamples`].
+    /// Raw sample conversion (a direct `swr_convert`), for caller-managed sample
+    /// buffers such as [`AVSamples`].
     ///
-    /// Returns the number of samples output per channel; a negative value has
-    /// been mapped to an error. Returns 0 when the input sample count is > 0,
-    /// indicating that the conversion result is temporarily buffered inside swr
-    /// (possible during resampling) and will be output along with subsequent inputs.
+    /// Returns the buffer and **the number of samples per channel it holds**. The
+    /// buffer is allocated at the upper bound from
+    /// [`get_out_samples`](Self::get_out_samples) — upsampling produces more
+    /// samples than went in — so the count, not the capacity, says how much of it
+    /// is valid:
     ///
-    /// # Safety
+    /// * `> 0` — that many samples were written for each channel;
+    /// * `0` — the input had samples but nothing came out yet: swr holds them in
+    ///   its internal delay buffer and emits them with the following input
+    ///   (possible whenever the sample rate changes).
     ///
-    /// The buffers pointed to by `out`/`in_` and their sample counts must satisfy
-    /// the validity requirements of `swr_convert`.
+    /// A negative `swr_convert` result becomes an error, never a count.
     pub fn convert(
         &mut self,
         src_frame: &AVFrame,
         out_ch_layout: ffi::AVChannelLayout,
         out_sample_fmt: ffi::AVSampleFormat,
-    ) -> Result<AVSamples> {
-        // 容量按输出样本数的上界分配，避免上采样（in < out）时尾部样本被丢弃。
-        let capacity = self.get_out_samples(src_frame.nb_samples);
-        let mut out_samples =
-            AVSamples::new(out_ch_layout.nb_channels, capacity, out_sample_fmt, 0)
-                .context("Create samples buffer failed.")?;
+    ) -> Result<(AVSamples, i32)> {
+        let out_ch_layout = default_layout_for(out_ch_layout).unwrap_or(out_ch_layout);
 
-        let ret = unsafe {
-            self.swr
-                .convert(
-                    out_samples.audio_data.as_mut_ptr(),
-                    out_samples.nb_samples,
-                    src_frame.extended_data as *const _,
-                    src_frame.nb_samples,
-                )
-                .context("Could not convert input samples")?
-        };
+        with_normalized_layout(src_frame, |src_frame| {
+            // 容量按输出样本数的上界分配，避免上采样（in < out）时尾部样本被丢弃。
+            let capacity = self.get_out_samples(src_frame.nb_samples);
+            let mut out_samples =
+                AVSamples::new(out_ch_layout.nb_channels, capacity, out_sample_fmt, 0)
+                    .context("Create samples buffer failed.")?;
 
-        if ret < 0 {
-            return Err(RsmediaError::custom(format!(
-                "Failed to convert input samples, ret: {ret}"
-            )));
-        }
+            let converted = unsafe {
+                self.swr
+                    .convert(
+                        out_samples.audio_data.as_mut_ptr(),
+                        capacity,
+                        src_frame.extended_data as *const _,
+                        src_frame.nb_samples,
+                    )
+                    .context("Could not convert input samples")?
+            };
 
-        Ok(out_samples)
+            // `AVSamples::nb_samples` 是**容量**（rsmpeg 的约定），所以实际样本数
+            // 单独返回，调用方无需猜测缓冲区里有多少是有效的。
+            Ok((out_samples, converted))
+        })
     }
 
     /// Drain the remaining samples from the resampler (EOF flush).
@@ -388,7 +416,7 @@ mod tests {
             ffi::AV_SAMPLE_FMT_S64 | ffi::AV_SAMPLE_FMT_S64P => {
                 fill_samples!(i64, i64::MAX)
             }
-            _ => return Err(RsmediaError::custom("Unsupported sample format")),
+            _ => return Err(RsmediaError::msg("Unsupported sample format")),
         }
         Ok(())
     }
@@ -416,6 +444,31 @@ mod tests {
         }
 
         Ok(frame)
+    }
+
+    /// 无声道掩码的容器（如不带 `dwChannelMask` 的 WAV）解码出的帧布局是
+    /// `AV_CHANNEL_ORDER_UNSPEC`；重采样器必须接受它——此前 `swr_convert`
+    /// 会以 `AVERROR_INPUT_CHANGED`/`OUTPUT_CHANGED` 拒绝每一帧。
+    #[test]
+    fn test_convert_frame_with_unspec_channel_layout() -> Result<()> {
+        let mut frame = create_test_frame(&AUDIO_FORMATS[2], 44100, 2, 1024)?;
+        let mut unspec = AVChannelLayout::from_nb_channels(2).into_inner();
+        unspec.order = ffi::AV_CHANNEL_ORDER_UNSPEC;
+        unspec.u.mask = 0;
+        frame.set_ch_layout(unspec);
+
+        // 输入与输出布局都按 UNSPEC 传入：两侧都要被归一化。
+        let out = convert_frame(
+            &frame,
+            AVChannelLayout::from_nb_channels(2).into_inner(),
+            ffi::AV_SAMPLE_FMT_FLTP,
+            44100,
+        )?;
+        assert_eq!(out.format, ffi::AV_SAMPLE_FMT_FLTP);
+        assert_eq!(out.ch_layout.order, ffi::AV_CHANNEL_ORDER_NATIVE);
+        assert_eq!(out.ch_layout.nb_channels, 2);
+        assert_eq!(out.nb_samples, frame.nb_samples);
+        Ok(())
     }
 
     #[test]
@@ -589,6 +642,58 @@ mod tests {
             }
         }
 
+        Ok(())
+    }
+
+    /// 流式重采样器会在内部保留采样率换算的余数，跨调用携带；`flush` 必须把尾巴
+    /// 排空。否则每个 chunk 都会丢掉不足一个输出样本的余量，长音频累计起来就是
+    /// 可听的时长缺失——一次性 `convert_frame` 每次新建上下文，暴露不出这个问题。
+    #[test]
+    fn test_streaming_resampler_carries_delay_and_flushes() -> Result<()> {
+        let (in_rate, out_rate) = (48_000, 44_100);
+        let (channels, in_samples, chunks) = (2, 1024, 5);
+        let layout = || AVChannelLayout::from_nb_channels(channels).into_inner();
+
+        let mut resampler = Resampler::new(
+            layout(),
+            ffi::AV_SAMPLE_FMT_FLTP,
+            in_rate,
+            layout(),
+            ffi::AV_SAMPLE_FMT_FLTP,
+            out_rate,
+        )?;
+
+        let mut produced = 0i64;
+        for chunk in 0..chunks {
+            let src = create_test_frame(&AUDIO_FORMATS[7], in_rate, channels, in_samples)?;
+            let (_, converted) = resampler.convert(&src, layout(), ffi::AV_SAMPLE_FMT_FLTP)?;
+            assert!(
+                converted >= 0,
+                "chunk {chunk}: swr_convert returned {converted}"
+            );
+            produced += i64::from(converted);
+        }
+
+        // 排空延迟缓冲：容量按输出上界分配，`nb_samples` 回填实际数量。
+        let mut tail = AVFrame::new();
+        tail.set_format(ffi::AV_SAMPLE_FMT_FLTP);
+        tail.set_ch_layout(layout());
+        tail.set_sample_rate(out_rate);
+        tail.set_nb_samples(resampler.get_out_samples(in_samples));
+        tail.alloc_buffer()
+            .context("Failed to allocate flush frame")?;
+        resampler.flush(&mut tail)?;
+        assert!(
+            tail.nb_samples > 0,
+            "flush produced nothing: the delay line was never drained"
+        );
+        produced += i64::from(tail.nb_samples);
+
+        let expected = f64::from(in_samples * chunks) * f64::from(out_rate) / f64::from(in_rate);
+        assert!(
+            (produced as f64 - expected).abs() <= 2.0,
+            "expected ~{expected:.0} samples across {chunks} chunks + flush, got {produced}"
+        );
         Ok(())
     }
 }

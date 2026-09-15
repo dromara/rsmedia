@@ -2,24 +2,21 @@ use rsmedia::{
     DecoderBuilder, EncoderBuilder, MediaType, PixelFormat, colors,
     frame::MediaFrame,
     hwaccel::{HWDeviceConfig, HWDeviceType},
-    time,
 };
 use std::path::PathBuf;
 
 fn rainbow_frame(width: usize, height: usize, p: f32) -> MediaFrame<u8> {
     let rgb = colors::hsv_to_rgb(p * 360.0, 100.0, 100.0);
-    let mut frame = MediaFrame::<u8>::new_video_frame(
-        width,
-        height,
-        PixelFormat::RGB24,
-        time::new_rational(1, 24),
-    )
-    .unwrap();
+    let mut frame = MediaFrame::<u8>::new_video_frame(width, height, PixelFormat::RGB24).unwrap();
+    let samples = frame
+        .data
+        .as_packed_mut()
+        .expect("RGB24 frames are interleaved");
     for y in 0..height {
         for x in 0..width {
-            frame.data[[y, x, 0]] = rgb[0];
-            frame.data[[y, x, 1]] = rgb[1];
-            frame.data[[y, x, 2]] = rgb[2];
+            samples[[y, x, 0]] = rgb[0];
+            samples[[y, x, 1]] = rgb[1];
+            samples[[y, x, 2]] = rgb[2];
         }
     }
     frame

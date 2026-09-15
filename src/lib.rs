@@ -1,12 +1,19 @@
 #[macro_use]
 mod macros;
 
+/// 排空循环的迭代上限，供解码器、编码器与滤镜图三处的 EOF 排空共用。
+///
+/// 这些循环都在等 FFmpeg 报"结束"，而个别编解码器/滤镜图在收到 EOS 后可能一直
+/// 回 EAGAIN 而不报 EOF；没有上限就是挂死（`Drop` 里更不能卡住），故统一收尾。
+pub(crate) const MAX_DRAIN_ITERATIONS: usize = 1_000;
+
 pub mod decode;
 pub mod encode;
 #[cfg(feature = "ndarray")]
 pub mod frame;
 #[cfg(feature = "ndarray")]
-pub use frame::{FrameSideData, MediaFrame, MediaFrameType};
+pub use frame::{ElementType, FrameData, FrameSideData, MediaFrame};
+pub mod bsf;
 pub mod codec;
 pub mod colors;
 pub mod error;
@@ -29,13 +36,14 @@ pub mod strutils;
 pub mod subtitle;
 pub mod time;
 
+pub use bsf::Bsf;
 pub use codec::{CodecConfig, FormatInfo, Profile};
 pub use colors::Color;
 pub use decode::{Decoder, DecoderBuilder, thumbnail};
 pub use encode::{Encoder, EncoderBuilder};
-pub use error::{Error, Result, RsmediaError};
+pub use error::{Result, RsmediaError};
 pub use filter::Filter;
-pub use fmt::{FrameFormat, SampleFormat};
+pub use fmt::{DataLayout, FrameFormat, SampleFormat};
 pub use hwaccel::{HWDeviceConfig, HWDeviceType};
 pub use init::init;
 pub use io::{AVSeekFlag, Reader, Seekable, Writer};

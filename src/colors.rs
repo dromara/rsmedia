@@ -110,23 +110,39 @@ impl Color {
         }
     }
 
-    /// HSV
+    /// Builds a colour from HSV.
+    ///
+    /// `h` is in degrees (0..=360) and `s` / `v` are **percentages** (0..=100),
+    /// matching [`rgb_to_hsv`] and [`hsv_to_rgb`]. Note the mismatch with
+    /// [`Self::to_hsv`]: that returns a [`colorutils_rs::Hsv`], whose own
+    /// convention is fractions (0..=1) — multiply its `s` / `v` by 100 to feed
+    /// them back here.
     pub fn from_hsv(h: u16, s: u16, v: u16) -> Self {
         let rgb = colorutils_rs::Hsv::new(h, s, v).to_rgb8();
         Self::from_rgb(rgb.r, rgb.g, rgb.b)
     }
 
+    /// Converts this colour to HSV.
+    ///
+    /// The result keeps [`colorutils_rs::Hsv`]'s own units — hue in degrees,
+    /// saturation and value as **fractions** (0..=1) — which is *not* what
+    /// [`Self::from_hsv`] and [`rgb_to_hsv`] use (percentages). Scale by 100 when
+    /// passing the values on to them.
     pub fn to_hsv(&self) -> colorutils_rs::Hsv {
         let (r, g, b, _a) = self.as_tuple();
         colorutils_rs::Rgb::<u8>::new(r, g, b).to_hsv()
     }
 
-    /// HSL
+    /// Builds a colour from HSL; `h` in degrees (0..=360), `s` / `l` as
+    /// **percentages** (0..=100).
+    ///
+    /// As with HSV, [`Self::to_hsl`] returns fractional `s` / `l` (0..=1).
     pub fn from_hsl(h: u16, s: u16, l: u16) -> Self {
         let rgb = colorutils_rs::Hsl::new(h, s, l).to_rgb8();
         Self::from_rgb(rgb.r, rgb.g, rgb.b)
     }
 
+    /// Converts this colour to HSL; see [`Self::to_hsv`] for the units.
     pub fn to_hsl(&self) -> colorutils_rs::Hsl {
         let (r, g, b, _a) = self.as_tuple();
         colorutils_rs::Rgb::<u8>::new(r, g, b).to_hsl()
@@ -222,7 +238,7 @@ impl From<[u8; 4]> for Color {
 
 impl From<Color> for (u8, u8, u8, u8) {
     fn from(color: Color) -> Self {
-        color.rgba()
+        color.as_tuple()
     }
 }
 

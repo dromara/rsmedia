@@ -66,8 +66,8 @@ impl RsmediaError {
     }
 
     /// Build an [`RsmediaError::Other`] from any displayable value.
-    pub fn custom(message: impl Into<String>) -> Self {
-        RsmediaError::Other(message.into())
+    pub fn msg(msg: impl Into<String>) -> Self {
+        RsmediaError::Other(msg.into())
     }
 
     /// Build an [`RsmediaError::CodecNotFound`].
@@ -88,6 +88,44 @@ impl RsmediaError {
     /// Build an [`RsmediaError::InvalidConfig`].
     pub fn invalid_config(reason: impl Into<String>) -> Self {
         RsmediaError::InvalidConfig(reason.into())
+    }
+
+    /// Peel off all [`Context`] wrappers and return the root error, so callers
+    /// can match on the originating variant even when the error passed through
+    /// several `context(...)` layers.
+    pub fn root(&self) -> &Self {
+        let mut current = self;
+        while let RsmediaError::Context { source, .. } = current {
+            current = source;
+        }
+        current
+    }
+
+    /// Whether the root cause is a codec/encoder/decoder missing from this
+    /// FFmpeg build ([`RsmediaError::CodecNotFound`]) — e.g. a distro build
+    /// without libx264. Use this to skip gracefully instead of matching
+    /// error strings.
+    pub fn is_codec_not_found(&self) -> bool {
+        matches!(self.root(), RsmediaError::CodecNotFound(_))
+    }
+
+    /// Whether the root cause is a container format missing from this FFmpeg
+    /// build ([`RsmediaError::FormatNotFound`]).
+    pub fn is_format_not_found(&self) -> bool {
+        matches!(self.root(), RsmediaError::FormatNotFound(_))
+    }
+
+    /// Whether the root cause is an operation unsupported on this platform,
+    /// build or environment ([`RsmediaError::Unsupported`]) — e.g. no GPU
+    /// device is available.
+    pub fn is_unsupported(&self) -> bool {
+        matches!(self.root(), RsmediaError::Unsupported(_))
+    }
+
+    /// Whether the root cause is an invalid or contradictory configuration
+    /// ([`RsmediaError::InvalidConfig`]).
+    pub fn is_invalid_config(&self) -> bool {
+        matches!(self.root(), RsmediaError::InvalidConfig(_))
     }
 }
 
@@ -155,10 +193,6 @@ impl From<image::ImageError> for RsmediaError {
 
 /// Library-level `Result` alias used by all public APIs.
 pub type Result<T> = std::result::Result<T, RsmediaError>;
-
-/// Alias so call sites written as `Result<T, Error>` keep working, and so
-/// downstream users can `use rsmedia::Error`.
-pub type Error = RsmediaError;
 
 /// Internal convenience macro: build an [`RsmediaError::Other`] with
 /// `format!`-style arguments (migrates `anyhow!` call sites).
@@ -249,8 +283,43 @@ mod tests {
 
     #[test]
     fn test_nested_context_joins() {
-        let err = RsmediaError::custom("inner failure");
+        let err = RsmediaError::msg("inner failure");
         let wrapped = err.with_context("outer").with_context("outermost");
         assert_eq!(wrapped.to_string(), "outermost: outer: inner failure");
+    }
+
+    /// 每个 `is_*` 谓词都要认出自己的变体，且**穿透 context 链**识别根因——
+    /// 新增变体时这张表会跟着漏掉，所以逐条对着变体列出来。
+    #[test]
+    fn test_is_predicates_track_their_variants() {
+        for (error, test) in [
+            (
+                RsmediaError::format_not_found("nope"),
+                RsmediaError::is_format_not_found as fn(&RsmediaError) -> bool,
+            ),
+            (
+                RsmediaError::codec_not_found("nope"),
+                RsmediaError::is_codec_not_found as fn(&RsmediaError) -> bool,
+            ),
+            (
+                RsmediaError::unsupported("nope"),
+                RsmediaError::is_unsupported as fn(&RsmediaError) -> bool,
+            ),
+            (
+                RsmediaError::invalid_config("nope"),
+                RsmediaError::is_invalid_config as fn(&RsmediaError) -> bool,
+            ),
+        ] {
+            assert!(
+                test(&error),
+                "{error:?} must be recognised by its predicate"
+            );
+            // 加了 context 之后根因仍是同一个，谓词必须继续生效。
+            let wrapped = error.with_context("outer");
+            assert!(
+                test(&wrapped),
+                "context must not hide the root cause: {wrapped:?}"
+            );
+        }
     }
 }

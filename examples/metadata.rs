@@ -48,10 +48,10 @@ fn main() -> Result<()> {
     );
     println!(
         "frame_rate: (real={}, avg={})",
-        decoder.frame_rate().0,
-        decoder.frame_rate().1
+        decoder.frame_rates().0,
+        decoder.frame_rates().1
     );
-    println!("frames: {}", decoder.frames());
+    println!("frames: {}", decoder.nb_frames());
 
     Ok(())
 }

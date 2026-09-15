@@ -1,4 +1,5 @@
 use crate::error::{Result, RsmediaError};
+use crate::fmt::DataLayout;
 
 use rsmpeg::avutil::AVPixFmtDescriptorRef;
 use rsmpeg::ffi;
@@ -339,11 +340,24 @@ ffi_enum_wrap_from!(
 //////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////
 
+/// Formats whose samples cannot be expressed as whole sample planes.
+///
+/// Bitstream formats pack components into sub-byte fields, paletted formats
+/// address a separate palette, and hardware formats keep their samples on the
+/// device. Both [`PixelFormat::data_layout`] and
+/// [`PixelFormat::is_plane_storable`] turn on this one predicate, so the two
+/// cannot disagree about which formats are storable.
+fn has_no_sample_planes(desc: &AVPixFmtDescriptorRef) -> bool {
+    const UNSUPPORTED: u32 =
+        ffi::AV_PIX_FMT_FLAG_BITSTREAM | ffi::AV_PIX_FMT_FLAG_PAL | ffi::AV_PIX_FMT_FLAG_HWACCEL;
+    desc.flags as u32 & UNSUPPORTED != 0
+}
+
 impl PixelFormat {
     /// 获取像素格式描述符；未知/无效格式返回错误而非 panic。
     pub fn descriptor(&self) -> Result<AVPixFmtDescriptorRef> {
         AVPixFmtDescriptorRef::get((*self).into()).ok_or_else(|| {
-            RsmediaError::custom(format!(
+            RsmediaError::msg(format!(
                 "No pix_fmt descriptor for {}",
                 self.get_pix_fmt_name()
             ))
@@ -351,13 +365,15 @@ impl PixelFormat {
     }
 
     /// 获取像素格式名称（FFmpeg 返回静态字符串，借用即可，避免每次分配 String）
-    pub fn get_pix_fmt_name(&self) -> &'static str {
+    pub fn get_pix_fmt_name(&self) -> String {
         unsafe {
             let name = ffi::av_get_pix_fmt_name((*self).into());
             if name.is_null() {
-                "unknown"
+                "unknown".to_string()
             } else {
-                std::ffi::CStr::from_ptr(name).to_str().unwrap_or("unknown")
+                std::ffi::CStr::from_ptr(name)
+                    .to_string_lossy()
+                    .into_owned()
             }
         }
     }
@@ -366,32 +382,131 @@ impl PixelFormat {
     pub fn count_planes(&self) -> Result<i32> {
         let cnt = unsafe { ffi::av_pix_fmt_count_planes((*self).into()) };
         if cnt < 0 {
-            return Err(RsmediaError::custom(format!(
+            return Err(RsmediaError::msg(format!(
                 "Failed to get plane count:{cnt}"
             )));
         }
         Ok(cnt)
     }
 
-    /// packed（单平面、8bit/分量）像素格式的每像素分量数。
+    /// Whether this format can be stored as whole sample planes at all.
     ///
-    /// 这些格式可直接映射为 `[H, W, C]` ndarray（C=1/2/3/4）：
-    /// - GRAY8=1 / RGB24、BGR24=3 / RGBA 族=4：无损往返
-    /// - YUYV422、UYVY422=2：每像素 2 字节（Y + 半采样色度），
-    ///   `[H, W, 2]` u8 的行内存与格式字节流完全一致；语义上偶数列的
-    ///   分量 1 是第一色度（YUYV 为 U），奇数列是第二色度（V）
+    /// The size-independent counterpart of [`Self::data_layout`], for callers
+    /// judging a format before a frame size is known: bitstream, paletted and
+    /// hardware formats have no host samples per plane whatever the size, while
+    /// every other format does at every non-zero size.
+    pub fn is_plane_storable(self) -> bool {
+        AVPixFmtDescriptorRef::get(self.into()).is_some_and(|desc| !has_no_sample_planes(&desc))
+    }
+
+    /// The data layout this pixel format uses at `width` x `height`.
     ///
-    /// 返回 `None` 表示非 packed 8bit 格式（planar / 半平面 / 位流 / 硬件格式等），
-    /// 需经 swscale 转换或专用分支处理。
-    pub const fn packed_channels(self) -> Option<usize> {
-        match self {
-            Self::GRAY8 => Some(1),
-            Self::YUYV422 | Self::UYVY422 => Some(2),
-            Self::RGB24 | Self::BGR24 => Some(3),
-            Self::RGBA | Self::BGRA | Self::ARGB | Self::ABGR => Some(4),
-            _ => None,
+    /// Derived entirely from FFmpeg's pixel-format descriptor, so this method
+    /// knows no format by name and every format FFmpeg describes gets a layout
+    /// for free:
+    ///
+    /// * a format **without** `AV_PIX_FMT_FLAG_PLANAR` is interleaved — one
+    ///   `(height, width, n)` array whose per-pixel element run `n` follows from
+    ///   the component steps and chroma subsampling (`rgb24` → 3, `rgba` → 4,
+    ///   `yuyv422` → 2, `gray8` → 1);
+    /// * a **planar** format is one array per plane, each chroma plane carrying
+    ///   its own subsampled size, taken from `log2_chroma_w` / `log2_chroma_h`.
+    ///
+    /// `None` means the format cannot be expressed as whole sample arrays at
+    /// this size: bitstream, paletted and hardware formats (whose components are
+    /// not whole samples), or a zero dimension.
+    pub fn data_layout(self, width: usize, height: usize) -> Option<DataLayout> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let desc = AVPixFmtDescriptorRef::get(self.into())?;
+        if has_no_sample_planes(&desc) {
+            return None;
+        }
+
+        let components = desc.nb_components as usize;
+        if components == 0 {
+            return None;
+        }
+        let element_bytes = element_bytes(&desc)?;
+
+        // FFmpeg models planes 1 and 2 as the chroma planes (`av_image_fill_plane_sizes`
+        // does the same) and reports the chroma shifts as 0 for RGB formats, so this
+        // predicate is a no-op for them.
+        let w_shift = |plane: usize| match plane {
+            1 | 2 => desc.log2_chroma_w as u32,
+            _ => 0,
+        };
+        let h_shift = |plane: usize| match plane {
+            1 | 2 => desc.log2_chroma_h as u32,
+            _ => 0,
+        };
+        let ceil_shift = |value: usize, shift: u32| (value + (1usize << shift) - 1) >> shift;
+
+        if desc.flags & ffi::AV_PIX_FMT_FLAG_PLANAR as u64 == 0 {
+            // Interleaved: one plane, `bytes_per_pixel` elements per pixel. The
+            // largest component step spans one pixel per `2^log2_chroma_w` columns
+            // for a horizontally subsampled format (`yuyv422`: 4 >> 1 = 2 bytes).
+            let max_step = (0..components)
+                .map(|c| desc.comp[c].step.max(0) as usize)
+                .max()?;
+            let bytes_per_pixel = max_step >> desc.log2_chroma_w;
+            if bytes_per_pixel == 0 || !bytes_per_pixel.is_multiple_of(element_bytes) {
+                return None;
+            }
+            Some(DataLayout::Interleaved {
+                rows: height,
+                cols: width,
+                components: bytes_per_pixel / element_bytes,
+            })
+        } else {
+            let plane_count = self.count_planes().ok()? as usize;
+            let mut planes = Vec::with_capacity(plane_count);
+            for plane in 0..plane_count {
+                // Elements this plane stores per luma column, e.g. 1 for a planar
+                // Y/U/V plane and 2 for a semi-planar `NV12` chroma plane.
+                let plane_bytes: usize = (0..components)
+                    .filter(|&c| desc.comp[c].plane.max(0) as usize == plane)
+                    .map(|c| component_bytes(&desc, c))
+                    .sum();
+                if plane_bytes == 0 || !plane_bytes.is_multiple_of(element_bytes) {
+                    return None;
+                }
+                planes.push((
+                    ceil_shift(height, h_shift(plane)),
+                    ceil_shift(width, w_shift(plane)) * (plane_bytes / element_bytes),
+                ));
+            }
+            Some(DataLayout::Planar(planes))
         }
     }
+
+    /// Bytes one component of this format occupies in memory.
+    ///
+    /// Components are whole bytes in every format this crate models, so 8-bit
+    /// formats give 1 and 9..16-bit ones give 2 (`YUV420P10LE`, `P016LE`, ...).
+    /// This is the element size a [`MediaFrame`](crate::frame::MediaFrame)'s type
+    /// parameter has to match.
+    ///
+    /// `None` for formats without host samples (hardware formats).
+    pub fn bytes_per_component(self) -> Option<usize> {
+        let desc = AVPixFmtDescriptorRef::get(self.into())?;
+        element_bytes(&desc)
+    }
+}
+
+/// Bytes a component of `desc` occupies, rounded up to whole bytes: 10-bit and
+/// 12-bit samples live in 16-bit elements.
+fn component_bytes(desc: &ffi::AVPixFmtDescriptor, component: usize) -> usize {
+    (desc.comp[component].depth.max(0) as usize).div_ceil(8)
+}
+
+/// Bytes one element of `desc`'s format occupies, i.e. its widest component.
+fn element_bytes(desc: &ffi::AVPixFmtDescriptor) -> Option<usize> {
+    (0..desc.nb_components as usize)
+        .map(|component| component_bytes(desc, component))
+        .max()
+        .filter(|&bytes| bytes > 0)
 }
 
 /// 返回最佳像素格式，或错误
@@ -403,8 +518,9 @@ pub fn find_best_pix_fmt(
 ) -> Result<PixelFormat> {
     let alpha = if has_alpha { 1 } else { 0 };
 
-    // Combination of flags informing you what kind of losses will occur (maximum loss for an invalid dst_pix_fmt).
-    let flags = unsafe {
+    // 返回的是**选中的像素格式**（`AV_PIX_FMT_NONE` 表示无法选择）。`loss_ptr`
+    // 才承载"会损失什么"的位掩码，这里不需要，故传 NULL。
+    let best = unsafe {
         ffi::av_find_best_pix_fmt_of_2(
             dst_pix_fmt1.into(),
             dst_pix_fmt2.into(),
@@ -414,11 +530,12 @@ pub fn find_best_pix_fmt(
         )
     };
 
-    match PixelFormat::from(flags) {
-        PixelFormat::NONE => Err(RsmediaError::custom(format!(
-            "Failed to find best pix fmt:{flags}"
+    match PixelFormat::from_ffi_checked(best) {
+        // 返回 `AV_PIX_FMT_NONE`（或本 crate 未收录的值）都表示"没有可用的目标格式"。
+        None | Some(PixelFormat::NONE) => Err(RsmediaError::msg(format!(
+            "Failed to find a best pixel format among the candidates (got {best})"
         ))),
-        fmt => Ok(fmt),
+        Some(fmt) => Ok(fmt),
     }
 }
 
@@ -441,7 +558,7 @@ pub fn find_codec_best_pix_fmt(
         )
     };
     if ret < 0 {
-        return Err(RsmediaError::custom(format!(
+        return Err(RsmediaError::msg(format!(
             "Failed to find codec best pix fmt, ret: {ret}"
         )));
     }
@@ -467,7 +584,7 @@ pub fn get_pix_fmt_loss(
     };
 
     if loss < 0 {
-        return Err(RsmediaError::custom(format!(
+        return Err(RsmediaError::msg(format!(
             "Failed to get pix fmt loss, ret: {loss}"
         )));
     }

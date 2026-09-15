@@ -130,7 +130,7 @@ impl<W: Writer> PcmSink<W> {
                 )));
             }
             let encoder = mux_stream.encoder.as_ref().ok_or_else(|| {
-                RsmediaError::custom(format!(
+                RsmediaError::msg(format!(
                     "stream {stream_index} is a copy stream; PCM playback requires an encoder stream"
                 ))
             })?;
@@ -212,11 +212,15 @@ impl<W: Writer> PcmSink<W> {
             return Ok(None);
         }
 
-        let mut last_out = None;
+        // 逐块累积：`Out` 对缓冲型 Writer 是**增量**字节，既不能被后续块的输出
+        // 覆盖，也不能因为末块因内部缓冲没有输出而丢掉前面已产生的字节。
+        let mut collected: Option<W::Out> = None;
         for chunk in interleaved.chunks(MAX_CHUNK_SAMPLES * channels) {
-            last_out = self.write_chunk(chunk, sample_format)?;
+            if let Some(out) = self.write_chunk(chunk, sample_format)? {
+                W::fold_out(&mut collected, out);
+            }
         }
-        Ok(last_out)
+        Ok(collected)
     }
 
     fn write_chunk<T: Copy>(

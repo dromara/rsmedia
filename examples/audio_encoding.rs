@@ -8,7 +8,6 @@
 //! - `Decoder::decode::<f32>` —— 解码为音频 [`MediaFrame`]
 //! - `MediaFrame::format` —— 读取音频帧的采样格式（`MediaFrameFormat::Sample` 变体）
 
-use rsmedia::time;
 use rsmedia::{DecoderBuilder, EncoderBuilder, mux::Muxer};
 use rsmedia::{FrameFormat, MediaFrame, MediaType, SampleFormat, StreamReader};
 
@@ -103,21 +102,17 @@ fn decode_audio(source: &'static str) -> Result<()> {
     Ok(())
 }
 
-/// 生成一段正弦波音频帧（FLTP 平面格式，数据布局 `(1, nb_samples, channels)`）。
+/// 生成一段正弦波音频帧（FLTP 平面格式，每个声道一个 `(nb_samples,)` 平面）。
 fn sine_frame(t_start: f32) -> Result<MediaFrame<f32>> {
-    let mut frame = MediaFrame::<f32>::new_audio_frame(
-        SampleFormat::FLTP,
-        CHANNELS,
-        NB_SAMPLES,
-        SAMPLE_RATE,
-        time::new_rational(1, SAMPLE_RATE as i32),
-    )?;
+    let mut frame =
+        MediaFrame::<f32>::new_audio_frame(SampleFormat::FLTP, CHANNELS, NB_SAMPLES, SAMPLE_RATE)?;
 
     let two_pi_f = 2.0 * std::f32::consts::PI * 440.0;
-    for ch in 0..CHANNELS as usize {
+    let channels = frame.data.as_planes_mut().expect("FLTP frames are planar");
+    for samples in channels.iter_mut() {
         for i in 0..NB_SAMPLES as usize {
             let t = t_start + i as f32 / SAMPLE_RATE as f32;
-            frame.data[[0, i, ch]] = (two_pi_f * t).sin() * 0.8;
+            samples[[0, i]] = (two_pi_f * t).sin() * 0.8;
         }
     }
     Ok(frame)

@@ -63,7 +63,7 @@ cpal = "0.18"
 wavers = "1.5"
 #rubato = "5.0"
 #dasp = { version = "0.11", features = ["all"] }
-rodio = { version = "0.22", features = ["symphonia-all", "tracing"] }
+rodio = { version = "0.23", features = ["symphonia-all", "tracing"] }
 
 [package.metadata.docs.rs]
 all-features = true
